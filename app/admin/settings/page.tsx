@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import AdminSidebar from '@/components/AdminSidebar';
 
 export default function SettingsPage() {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const settingsCategories = [
     {
       id: 1,
@@ -69,107 +72,61 @@ export default function SettingsPage() {
     },
   ];
 
+  // Comment: Close sidebar when clicking outside
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const sidebar = document.getElementById('admin-sidebar');
+      const menuButton = target.closest('button[aria-label="Toggle sidebar"]');
+      
+      // Comment: Don't close if clicking inside sidebar or menu button
+      if (sidebar && sidebar.contains(target)) {
+        return;
+      }
+      if (menuButton) {
+        return;
+      }
+      
+      setIsSidebarOpen(false);
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSidebarOpen]);
+
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex">
-      <aside className="w-64 shrink-0 flex flex-col justify-between bg-white border-r border-gray-200 h-full overflow-y-auto hidden md:flex">
-        <div className="flex flex-col gap-8 p-6">
-          <div className="flex items-center gap-3">
-            <div className="bg-black flex items-center justify-center rounded-full size-10 text-white">
-              <span className="material-symbols-outlined">content_cut</span>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold tracking-wider text-black">HAEYOOM</h1>
-              <p className="text-xs text-gray-500 font-medium tracking-widest">SEOUL • SYDNEY</p>
-            </div>
-          </div>
-          <nav className="flex flex-col gap-2">
+      <AdminSidebar isSidebarOpen={isSidebarOpen} />
+      <main className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white transition-all duration-300 ease-in-out ${
+        isSidebarOpen ? 'ml-64' : ''
+      }`}>
+        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
+          <div className="flex items-center gap-4 flex-1">
+            {/* Navigation Menu Button */}
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              aria-label="Toggle sidebar"
+            >
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            {/* Home Button */}
             <Link
               href="/admin/dashboard"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <span className="material-symbols-outlined">dashboard</span>
-              <span className="text-sm font-medium">Dashboard</span>
+              <span className="material-symbols-outlined">home</span>
             </Link>
-            <Link
-              href="/admin/sales"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">monitoring</span>
-              <span className="text-sm font-medium">Sales Overview</span>
-            </Link>
-            <Link
-              href="/admin/appointments"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">calendar_month</span>
-              <span className="text-sm font-medium">Appointments</span>
-            </Link>
-            <Link
-              href="/admin/service-history"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">history</span>
-              <span className="text-sm font-medium">Service History</span>
-            </Link>
-            <Link
-              href="/admin/staff"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">groups</span>
-              <span className="text-sm font-medium">Staff</span>
-            </Link>
-            <Link
-              href="/admin/inventory"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">inventory_2</span>
-              <span className="text-sm font-medium">Inventory</span>
-            </Link>
-            <Link
-              href="/admin/prepaid"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">card_membership</span>
-              <span className="text-sm font-medium">Prepaid Pass</span>
-            </Link>
-            <Link
-              href="/admin/settings"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black text-white shadow-lg shadow-black/20"
-            >
-              <span className="material-symbols-outlined">settings</span>
-              <span className="text-sm font-medium">Settings</span>
-            </Link>
-          </nav>
-        </div>
-        <div className="p-6 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            <div
-              className="size-10 rounded-full bg-cover bg-center grayscale"
-              style={{
-                backgroundImage:
-                  "url('https://lh3.googleusercontent.com/aida-public/AB6AXuAjhD0WmE9CSsv_JWqCz325cTf4HM2m39YT5VSu09Lc2YQqci2GEmubVTLNi3mhaSzXeI1aOETFfv9VpKUOwV_LoiTkw5FBCVBNCznsSmppHNQiAWcQrAE7cw73i0kzJkDOrZHBn-rVhTR-sBvQ9yPTejyv271gCTallJe0gM8N5_cOiuGK0ZhmDcFdRyL97zFu_5tj-DgObrIlkZqquHTlK8OeBJB297gGVKfjJWl_e8t3cnmO4nqHfGDOJjhwTSHFyyB9M083o3dh')",
-              }}
-            />
-            <div className="flex flex-col">
-              <p className="text-sm font-medium text-black">Sarah Kim</p>
-              <p className="text-xs text-gray-500">Manager</p>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="font-medium text-gray-900">Settings</span>
             </div>
           </div>
-        </div>
-      </aside>
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-[#1a1a1a] text-white z-10 shadow-sm">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400">Dashboard</span>
-            <span className="text-gray-500">/</span>
-            <span className="font-medium text-white">Settings</span>
-          </div>
           <div className="flex items-center gap-4">
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
+            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-200 text-gray-600 transition-colors">
               <span className="material-symbols-outlined text-xl">notifications</span>
-            </button>
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-white/10 text-gray-300 md:hidden transition-colors">
-              <span className="material-symbols-outlined text-xl">menu</span>
             </button>
           </div>
         </header>

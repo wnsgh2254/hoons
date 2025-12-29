@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { Booking } from '@/lib/types';
+import AdminSidebar from '@/components/AdminSidebar';
 
 type BookingWithRelations = Booking & {
   designer?: { id: number; name: string } | null;
@@ -11,9 +12,10 @@ type BookingWithRelations = Booking & {
 };
 
 // Comment: Grid configuration for full schedule view
-const GRID_START_HOUR = 9; // 09:00
-const GRID_END_HOUR = 24; // 24:00 (exclusive upper bound, last label 23:00)
-const GRID_HOUR_HEIGHT = 120; // px per hour
+const GRID_START_HOUR = 8; // 08:00
+const GRID_END_HOUR = 21; // 21:00 (exclusive upper bound, last label 20:00)
+const GRID_HOUR_HEIGHT = 80; // px per hour (increased for better spacing and to fill container)
+const GRID_30MIN_HEIGHT = 40; // px per 30 minutes (increased for better spacing and to fill container)
 
 // Comment: Simple color palette for designers
 const DESIGNER_COLORS = [
@@ -109,6 +111,57 @@ export default function AppointmentsManagementPage() {
   const dateInputRef = useRef<HTMLInputElement | null>(null);
   const dateButtonWrapperRef = useRef<HTMLDivElement | null>(null);
 
+  // Comment: Designer time off management
+  const [isTimeOffModalOpen, setIsTimeOffModalOpen] = useState(false);
+  const [timeOffDesigners, setTimeOffDesigners] = useState<any[]>([]);
+  const [timeOffRecords, setTimeOffRecords] = useState<any[]>([]);
+  const [timeOffDesignerId, setTimeOffDesignerId] = useState<number | null>(null);
+  const [timeOffStartDate, setTimeOffStartDate] = useState<string>('');
+  const [timeOffEndDate, setTimeOffEndDate] = useState<string>('');
+  const [timeOffReason, setTimeOffReason] = useState<string>('');
+  const [timeOffSubmitting, setTimeOffSubmitting] = useState(false);
+
+  // Comment: Calendar date range filter
+  const [dateRangeStart, setDateRangeStart] = useState<string>('');
+  const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
+
+  // Comment: Designer dropdown menu state
+  const [openDesignerDropdown, setOpenDesignerDropdown] = useState<number | null>(null);
+  const [allDesigners, setAllDesigners] = useState<any[]>([]);
+  const [selectedShopFilter, setSelectedShopFilter] = useState<string>('전체');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [memo, setMemo] = useState<string>('');
+
+  // Comment: Week view state (replaces modal with main timetable view)
+  const [isWeekViewMode, setIsWeekViewMode] = useState(false);
+  const [weekViewDesignerId, setWeekViewDesignerId] = useState<number | null>(null);
+  const [weekViewDesignerName, setWeekViewDesignerName] = useState<string>('');
+  const [weekViewBookings, setWeekViewBookings] = useState<BookingWithRelations[]>([]);
+  const [weekViewStartDate, setWeekViewStartDate] = useState<string>('');
+
+  // Comment: Booking restriction modal state
+  const [isRestrictionModalOpen, setIsRestrictionModalOpen] = useState(false);
+  const [restrictionDesignerId, setRestrictionDesignerId] = useState<number | null>(null);
+  const [restrictionDesignerName, setRestrictionDesignerName] = useState<string>('');
+  const [restrictionType, setRestrictionType] = useState<'date' | 'time'>('date');
+  const [restrictionDate, setRestrictionDate] = useState<string>('');
+  const [restrictionStartTime, setRestrictionStartTime] = useState<string>('');
+  const [restrictionEndTime, setRestrictionEndTime] = useState<string>('');
+  const [restrictionSubmitting, setRestrictionSubmitting] = useState(false);
+
+  // Comment: Holiday and special work day modal state
+  const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
+  const [holidayDesignerId, setHolidayDesignerId] = useState<number | null>(null);
+  const [holidayDesignerName, setHolidayDesignerName] = useState<string>('');
+  const [holidayType, setHolidayType] = useState<'holiday' | 'special'>('holiday');
+  const [holidaySelectedDates, setHolidaySelectedDates] = useState<string[]>([]);
+  const [holidayCurrentMonth, setHolidayCurrentMonth] = useState<Date>(new Date());
+  const [holidaySubmitting, setHolidaySubmitting] = useState(false);
+
+  // Comment: Booking restrictions state
+  const [bookingRestrictions, setBookingRestrictions] = useState<any[]>([]);
+
   // Comment: Refs and handlers for click-drag scrolling on schedule grid
   const scheduleRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef(false);
@@ -148,6 +201,73 @@ export default function AppointmentsManagementPage() {
 
     fetchBookings();
   }, [selectedDate]);
+
+  // Comment: Load booking restrictions for selected date or week range
+  useEffect(() => {
+    const fetchRestrictions = async () => {
+      try {
+        if (isWeekViewMode && weekViewStartDate) {
+          // Comment: Load restrictions for the entire week
+          const startDate = new Date(weekViewStartDate);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 6);
+          const startDateStr = startDate.toISOString().split('T')[0];
+          const endDateStr = endDate.toISOString().split('T')[0];
+          
+          const res = await fetch(
+            `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`
+          );
+          const data = await res.json();
+          if (res.ok) {
+            setBookingRestrictions(data.restrictions || []);
+          }
+        } else {
+          const res = await fetch(
+            `/api/booking-restrictions?date=${encodeURIComponent(selectedDate)}`
+          );
+          const data = await res.json();
+          if (res.ok) {
+            setBookingRestrictions(data.restrictions || []);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching restrictions:', err);
+      }
+    };
+
+    fetchRestrictions();
+  }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId]);
+
+  // Comment: Load week view bookings when week view mode is active
+  useEffect(() => {
+    if (!isWeekViewMode || !weekViewDesignerId || !weekViewStartDate) {
+      setWeekViewBookings([]);
+      return;
+    }
+
+    const fetchWeekBookings = async () => {
+      try {
+        const startDate = new Date(weekViewStartDate);
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 6);
+        
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+
+        const res = await fetch(
+          `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}&limit=1000`
+        );
+        const data = await res.json();
+        if (res.ok) {
+          setWeekViewBookings(data.bookings || []);
+        }
+      } catch (error) {
+        console.error('Error fetching week bookings:', error);
+      }
+    };
+
+    fetchWeekBookings();
+  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate]);
 
   // Comment: Load monthly bookings to power calendar dots (all shops)
   useEffect(() => {
@@ -244,6 +364,95 @@ export default function AppointmentsManagementPage() {
     loadShops();
   }, [isNewBookingOpen]);
 
+  // Comment: Load designers and time off records when Time Off modal opens
+  useEffect(() => {
+    if (!isTimeOffModalOpen) return;
+
+    const loadTimeOffData = async () => {
+      try {
+        const [designersRes, recordsRes] = await Promise.all([
+          fetch('/api/staff?role=designer'),
+          fetch('/api/designer-time-off'),
+        ]);
+        const designersData = await designersRes.json();
+        const recordsData = await recordsRes.json();
+        if (designersRes.ok && designersData.staff) {
+          setTimeOffDesigners(designersData.staff);
+        }
+        if (recordsRes.ok && recordsData.timeOffs) {
+          setTimeOffRecords(recordsData.timeOffs);
+        }
+      } catch (err) {
+        console.error('Error loading time off data:', err);
+      }
+    };
+
+    loadTimeOffData();
+  }, [isTimeOffModalOpen]);
+
+  // Comment: Load all designers for the schedule grid - always load on mount
+  useEffect(() => {
+    const loadAllDesigners = async () => {
+      try {
+        const res = await fetch('/api/designers');
+        const data = await res.json();
+        
+        if (res.ok) {
+          // Comment: API returns { designers: [...] } format with id and name
+          const designers = data.designers || [];
+          if (designers.length > 0) {
+            setAllDesigners(designers);
+          } else {
+            console.warn('No designers found in API response');
+          }
+        } else {
+          console.error('Failed to load designers:', data.error || data);
+        }
+      } catch (err) {
+        console.error('Error loading designers:', err);
+      }
+    };
+    loadAllDesigners();
+    // Comment: Reload designers periodically to ensure they're always up to date
+    const interval = setInterval(loadAllDesigners, 60000); // Every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  // Comment: Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDesignerDropdown !== null) {
+        setOpenDesignerDropdown(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openDesignerDropdown]);
+
+  // Comment: Close sidebar when clicking outside
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const sidebar = document.getElementById('admin-sidebar');
+      const menuButton = target.closest('button[aria-label="Toggle sidebar"]');
+      
+      // Comment: Don't close if clicking inside sidebar or menu button
+      if (sidebar && sidebar.contains(target)) {
+        return;
+      }
+      if (menuButton) {
+        return;
+      }
+      
+      setIsSidebarOpen(false);
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSidebarOpen]);
+
   // Comment: Compute current time line position for Sydney time (only when viewing today)
   useEffect(() => {
     const todaySydney = getSydneyToday();
@@ -303,24 +512,36 @@ export default function AppointmentsManagementPage() {
     return map;
   }, [bookings]);
 
-  // Comment: Designers visible in the grid for the selected day
+  // Comment: Designers visible in the grid - always show all designers from DB, sorted by role
   const visibleDesigners = useMemo(() => {
-    const entries = Object.entries(bookingsByDesigner);
-
-    // If no availability is configured yet, show all designers that have bookings
-    if (!availableDesignerIds.length) {
-      return entries.map(([name]) => name);
+    // Always show all designers from the database, sorted by role: Director, Manager, Designer
+    if (allDesigners.length > 0) {
+      const roleOrder: Record<string, number> = {
+        'Director': 1,
+        'Manager': 2,
+        'Designer': 3,
+      };
+      
+      const sorted = [...allDesigners].sort((a, b) => {
+        const roleA = (a.role || '').trim();
+        const roleB = (b.role || '').trim();
+        const orderA = roleOrder[roleA] || 999;
+        const orderB = roleOrder[roleB] || 999;
+        
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        
+        // Comment: If same role, sort by name
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      
+      return sorted.map((d) => d.name).filter(Boolean);
     }
-
-    return entries
-      .filter(([, list]) => {
-        const any = list[0];
-        const id = (any as any)?.designer_id ?? (any as any)?.designer?.id;
-        if (!id) return false;
-        return availableDesignerIds.includes(Number(id));
-      })
-      .map(([name]) => name);
-  }, [bookingsByDesigner, availableDesignerIds]);
+    
+    // Fallback: if designers not loaded yet, return empty array (will show once loaded)
+    return [];
+  }, [allDesigners]);
 
   // Comment: Stable color assignment per designer
   const designerColorMap = useMemo(() => {
@@ -421,96 +642,12 @@ export default function AppointmentsManagementPage() {
 
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex">
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0 flex flex-col justify-between bg-white border-r border-gray-200 h-full overflow-y-auto hidden md:flex">
-        <div className="flex flex-col gap-8 p-6">
-          <div className="flex items-center gap-3">
-            <div className="bg-black flex items-center justify-center rounded-full size-10 text-white">
-              <span className="material-symbols-outlined">content_cut</span>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold tracking-wider text-black">HAEYOOM</h1>
-              <p className="text-xs text-gray-500 font-medium tracking-widest">SEOUL • SYDNEY</p>
-            </div>
-          </div>
-          <nav className="flex flex-col gap-2">
-            <Link
-              href="/admin/dashboard"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">dashboard</span>
-              <span className="text-sm font-medium">Dashboard</span>
-            </Link>
-            <Link
-              href="/admin/sales"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">monitoring</span>
-              <span className="text-sm font-medium">Sales Overview</span>
-            </Link>
-            <Link
-              href="/admin/appointments"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black text-white shadow-lg shadow-black/20"
-            >
-              <span className="material-symbols-outlined">calendar_month</span>
-              <span className="text-sm font-medium">Appointments</span>
-            </Link>
-            <Link
-              href="/admin/service-history"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">history</span>
-              <span className="text-sm font-medium">Service History</span>
-            </Link>
-            <Link
-              href="/admin/staff"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">groups</span>
-              <span className="text-sm font-medium">Staff</span>
-            </Link>
-            <Link
-              href="/admin/inventory"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">inventory_2</span>
-              <span className="text-sm font-medium">Inventory</span>
-            </Link>
-            <Link
-              href="/admin/prepaid"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">card_membership</span>
-              <span className="text-sm font-medium">Prepaid Pass</span>
-            </Link>
-            <Link
-              href="/admin/settings"
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined">settings</span>
-              <span className="text-sm font-medium">Settings</span>
-            </Link>
-          </nav>
-        </div>
-        <div className="p-6 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            <div
-              className="size-10 rounded-full bg-cover bg-center grayscale"
-              style={{
-                backgroundImage:
-                  "url('https://lh3.googleusercontent.com/aida-public/AB6AXuAjhD0WmE9CSsv_JWqCz325cTf4HM2m39YT5VSu09Lc2YQqci2GEmubVTLNi3mhaSzXeI1aOETFfv9VpKUOwV_LoiTkw5FBCVBNCznsSmppHNQiAWcQrAE7cw73i0kzJkDOrZHBn-rVhTR-sBvQ9yPTejyv271gCTallJe0gM8N5_cOiuGK0ZhmDcFdRyL97zFu_5tj-DgObrIlkZqquHTlK8OeBJB297gGVKfjJWl_e8t3cnmO4nqHfGDOJjhwTSHFyyB9M083o3dh')",
-              }}
-            />
-            <div className="flex flex-col">
-              <p className="text-sm font-medium text-black">Sarah Kim</p>
-              <p className="text-xs text-gray-500">Manager</p>
-            </div>
-          </div>
-        </div>
-      </aside>
+      <AdminSidebar isSidebarOpen={isSidebarOpen} />
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
+      <main className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white transition-all duration-300 ease-in-out ${
+        isSidebarOpen ? 'ml-64' : ''
+      }`}>
         {/* Success toast for new bookings */}
         {bookingSuccessMessage && (
           <div className="pointer-events-none fixed right-4 top-4 z-50">
@@ -520,99 +657,97 @@ export default function AppointmentsManagementPage() {
             </div>
           </div>
         )}
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-white border-b border-gray-100 z-10">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400">Dashboard</span>
-            <span className="text-gray-300">/</span>
-            <span className="font-medium text-black">Appointments Management</span>
+        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
+          <div className="flex items-center gap-4 flex-1">
+            {/* Navigation Menu Button */}
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              aria-label="Toggle sidebar"
+            >
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            {/* Home Button */}
+            <Link
+              href="/admin/dashboard"
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined">home</span>
+            </Link>
+            {/* Shop Filter Dropdown */}
+            <select
+              value={selectedShopFilter}
+              onChange={(e) => setSelectedShopFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-400 focus:border-transparent bg-gray-100 text-gray-900"
+            >
+              <option value="전체">전체</option>
+            </select>
+            {/* Today Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedDate(getSydneyToday())}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-200 text-gray-900"
+            >
+              오늘
+            </button>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="relative hidden md:block">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-[20px]">
-                search
+          <div className="flex items-center justify-center flex-1">
+            {/* Date Navigation - Centered */}
+            <div className="flex items-center gap-2">
+              {dateRangeStart && dateRangeEnd ? (
+                <span className="text-sm text-gray-900">
+                  {dateRangeStart} ~ {dateRangeEnd}
               </span>
-              <input
-                className="pl-10 pr-4 py-2 bg-gray-50 border-none rounded-full text-sm focus:ring-1 focus:ring-black w-64 placeholder-gray-400"
-                placeholder="Search bookings..."
-                type="text"
-              />
+              ) : (
+                <span className="text-sm text-gray-900">{selectedDate}</span>
+              )}
             </div>
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
-              <span className="material-symbols-outlined text-xl">notifications</span>
-            </button>
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-500 md:hidden transition-colors">
-              <span className="material-symbols-outlined text-xl">menu</span>
-            </button>
           </div>
+          <div className="flex-1" />
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
-          <div className="max-w-7xl mx-auto flex flex-col gap-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">Appointments</h2>
-                <p className="text-gray-500 text-sm">Manage schedule, bookings and stylist availability.</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
+          <div className="max-w-full mx-auto flex flex-col gap-6 h-full">
+
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+              {/* Left: Large Calendar */}
+              <div className="lg:col-span-3 flex flex-col gap-6 min-h-0">
+                <div className="bg-white border border-gray-200 rounded-xl p-6 shrink-0">
+                  <div className="flex items-center justify-between mb-4">
                 <button
                   type="button"
                   onClick={() => {
-                    setIsNewBookingOpen(true);
-                    setNewBookingShopId(null);
-                    setNewBookingDesignerId(null);
-                    setNewBookingServiceId(null);
-                    setNewBookingDate(selectedDate);
-                    setNewBookingTime('10:00 AM');
+                        const date = new Date(selectedDate);
+                        date.setMonth(date.getMonth() - 1);
+                        setSelectedDate(date.toISOString().split('T')[0]);
                   }}
-                  className="flex items-center gap-2 bg-linear-to-r from-black to-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg hover:brightness-110"
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[20px]">add</span>
-                  New Booking
+                      <span className="material-symbols-outlined text-lg">chevron_left</span>
                 </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
-              {/* Full Schedule replaces calendar */}
-              <div className="lg:col-span-8 flex flex-col gap-4">
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span className="font-semibold">Schedule</span>
-                    <span className="text-xs text-gray-400">({selectedDayLabel})</span>
-                  </div>
-                  <div className="flex items-center gap-2" ref={dateButtonWrapperRef}>
-                    {/* Hidden native input keeps value in sync but UI uses custom popover */}
-                    <input
-                      ref={dateInputRef}
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-                      className="hidden"
-                    />
-                    <div className="relative">
+                    <span className="text-lg font-semibold text-gray-800">{monthLabel}</span>
                       <button
                         type="button"
-                        onClick={handleOpenDatePicker}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        const date = new Date(selectedDate);
+                        date.setMonth(date.getMonth() + 1);
+                        setSelectedDate(date.toISOString().split('T')[0]);
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       >
-                        <span className="material-symbols-outlined text-sm">calendar_month</span>
-                        <span className="hidden sm:inline">Change date</span>
+                      <span className="material-symbols-outlined text-lg">chevron_right</span>
                       </button>
-
-                      {isDatePopoverOpen && (
-                        <div className="absolute right-0 mt-2 w-64 rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-gray-700">{monthLabel}</span>
                           </div>
-                          <div className="grid grid-cols-7 gap-1 text-[11px] text-gray-400 mb-1">
-                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+                  <div className="grid grid-cols-7 gap-2 text-sm text-gray-500 mb-2 font-medium">
+                    {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
                               <span key={d} className="text-center">
                                 {d}
                               </span>
                             ))}
                           </div>
-                          <div className="grid grid-cols-7 gap-1 text-xs">
+                  <div className="grid grid-cols-7 gap-2">
                             {(() => {
                               const [year, month] = monthKey.split('-').map((v) => Number(v));
                               const daysInMonth = new Date(year, month, 0).getDate();
@@ -623,20 +758,19 @@ export default function AppointmentsManagementPage() {
                               ];
                               return cells.map((day, idx) => {
                                 if (!day) {
-                                  return <div key={idx} className="h-7" />;
+                          return <div key={idx} className="h-12" />;
                                 }
                                 const isSelected = day === selectedDayNumber;
                                 const hasBookings = !!dayCounts[day];
+                        const cellDate = buildDateFromDay(selectedDate, day);
                                 return (
                                   <button
                                     key={idx}
                                     type="button"
                                     onClick={() => {
-                                      const newDate = buildDateFromDay(selectedDate, day);
-                                      setSelectedDate(newDate);
-                                      setIsDatePopoverOpen(false);
+                              setSelectedDate(cellDate);
                                     }}
-                                    className={`h-7 w-7 mx-auto rounded-full flex flex-col items-center justify-center text-[11px] transition-all
+                            className={`h-12 w-full rounded-lg flex flex-col items-center justify-center text-sm transition-all font-medium
                                       ${
                                         isSelected
                                           ? 'bg-black text-white shadow-md'
@@ -645,7 +779,7 @@ export default function AppointmentsManagementPage() {
                                   >
                                     <span>{day}</span>
                                     {hasBookings && (
-                                      <span className="mt-0.5 h-0.5 w-3 rounded-full bg-emerald-500" />
+                              <span className="mt-1 h-1 w-4 rounded-full bg-emerald-500" />
                                     )}
                                   </button>
                                 );
@@ -653,62 +787,282 @@ export default function AppointmentsManagementPage() {
                             })()}
                           </div>
                         </div>
-                      )}
+
+                {/* Memo below calendar */}
+                <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+                  <div className="p-5 border-b border-gray-100 shrink-0">
+                    <h3 className="font-bold text-black">전달사항 (Memo)</h3>
+                  </div>
+                  <div className="flex-1 p-5 min-h-0">
+                    <textarea
+                      value={memo}
+                      onChange={(e) => setMemo(e.target.value)}
+                      placeholder="전달사항을 입력하세요..."
+                      className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 text-sm"
+                    />
                     </div>
                   </div>
                 </div>
 
+              {/* Center: Full Schedule */}
+              <div className="lg:col-span-9 flex flex-col gap-4 min-h-0">
+                {/* Week view designer name banner */}
+                {isWeekViewMode && weekViewDesignerId && weekViewDesignerName && (
+                  <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-sm">
+                    <span className="text-sm font-bold text-gray-900">{weekViewDesignerName}</span>
+                    <button
+                      onClick={() => {
+                        setIsWeekViewMode(false);
+                        setWeekViewDesignerId(null);
+                        setWeekViewDesignerName('');
+                        setWeekViewBookings([]);
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      일반 보기
+                    </button>
+                  </div>
+                )}
                 <div
                   ref={scheduleRef}
-                  className="flex-1 overflow-auto schedule-scroll bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm cursor-grab"
-                  onMouseDown={handleScheduleMouseDown}
-                  onMouseMove={handleScheduleMouseMove}
-                  onMouseLeave={endScheduleDrag}
-                  onMouseUp={endScheduleDrag}
+                  className="flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
                 >
-                  <div className="min-w-[1024px] pb-10">
-                    {/* Sticky Header: show designers that have bookings on this day */}
+                  <div className="h-full overflow-auto relative" id="schedule-scroll-container">
+                    {/* Vertical column dividers for entire scrollable area - positioned outside grid to extend full height */}
+                    {/* Note: These dividers are rendered here (lines 921-939) to ensure they extend the full scrollable height.
+                         They are positioned absolutely relative to the scroll container, not the grid, so they remain visible
+                         even when scrolling horizontally. This fixes the issue where dividers were cut off after certain columns. */}
+                    {!isWeekViewMode && visibleDesigners.length > 0 && (
+                      <div 
+                        className="absolute pointer-events-none z-0" 
+                        style={{ 
+                          left: '80px', // Time column width
+                          right: 0,
+                          top: 0,
+                          height: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
+                        }}
+                      >
+                        {visibleDesigners.map((_, colIndex) => {
+                          const columnWidth = 100 / visibleDesigners.length;
+                          return (
+                            <div
+                              key={`full-divider-${colIndex}`}
+                              className="absolute border-r border-[#e2e8f0]"
+                              style={{
+                                left: `${(colIndex + 1) * columnWidth}%`,
+                                width: '1px',
+                                top: 0,
+                                bottom: 0,
+                                height: '100%',
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Sticky Header: show time and designers/days */}
                     <div className="sticky top-0 z-10 flex border-b border-[#e2e8f0] bg-[#f8f9fc] shadow-sm">
-                      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-[#f8f9fc]" />
-                      <div className="grid grid-cols-4 flex-1">
-                        {visibleDesigners.slice(0, 4).map((name, index) => {
+                      {/* Time column header */}
+                      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-[#f8f9fc] flex flex-col items-center justify-center p-2">
+                        <span className="text-xs font-medium text-gray-600">시간</span>
+                      </div>
+                      {isWeekViewMode && weekViewDesignerId ? (
+                        // Comment: Week view header - 7 days
+                        <div className="grid flex-1 relative" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
+                          {/* Vertical column dividers for week view header */}
+                          {Array.from({ length: 7 }).map((_, colIndex) => {
+                            const columnWidth = 100 / 7;
+                            return (
+                              <div
+                                key={`week-header-divider-${colIndex}`}
+                                className="absolute border-r border-[#e2e8f0] pointer-events-none z-0"
+                                style={{
+                                  left: `${(colIndex + 1) * columnWidth}%`,
+                                  width: '1px',
+                                  top: 0,
+                                  bottom: 0,
+                                  height: '100%',
+                                }}
+                              />
+                            );
+                          })}
+                          {Array.from({ length: 7 }).map((_, dayIndex) => {
+                            const currentDate = new Date(weekViewStartDate);
+                            currentDate.setDate(currentDate.getDate() + dayIndex);
+                            const dateStr = currentDate.toISOString().split('T')[0];
+                            const dayName = ['일', '월', '화', '수', '목', '금', '토'][currentDate.getDay()];
+                            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                            const day = String(currentDate.getDate()).padStart(2, '0');
+                            return (
+                              <div
+                                key={dayIndex}
+                                className="relative px-2 py-2 bg-white/50 backdrop-blur-sm z-10"
+                              >
+                                <div className="text-center">
+                                  <p className="text-xs font-bold text-[#0d121b]">{dayName}</p>
+                                  <p className="text-[10px] text-[#64748b]">{month}-{day}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        // Comment: Normal view header - designers
+                        <div className="grid flex-1 relative" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
+                          {/* Vertical column dividers for header - full height, positioned correctly */}
+                          {visibleDesigners.map((_, colIndex) => {
+                            // Comment: Calculate position based on grid column width
+                            const columnWidth = 100 / visibleDesigners.length;
+                            return (
+                              <div
+                                key={`header-divider-${colIndex}`}
+                                className="absolute border-r border-[#e2e8f0] pointer-events-none z-0"
+                                style={{
+                                  left: `${(colIndex + 1) * columnWidth}%`,
+                                  width: '1px',
+                                  top: 0,
+                                  bottom: 0,
+                                  height: '100%',
+                                }}
+                              />
+                            );
+                          })}
+                          {visibleDesigners.map((name, index) => {
+                            const designer = allDesigners.find((d) => d.name === name);
+                            const designerId = designer?.id;
                           const color = designerColorMap[name];
                           const initials = name
                             .split(' ')
-                            .map((part) => part[0])
+                              .map((part: string) => part[0])
                             .join('')
                             .slice(0, 2)
                             .toUpperCase();
                           return (
                             <div
                               key={name}
-                              className="flex items-center gap-3 border-r border-[#e2e8f0] px-4 py-3 bg-white/50 backdrop-blur-sm last:border-r-transparent"
+                                className="relative px-2 py-2 bg-white/50 backdrop-blur-sm z-10"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenDesignerDropdown(openDesignerDropdown === designerId ? null : designerId || null);
+                                  }}
+                                  className="flex items-center gap-2 w-full text-left hover:bg-gray-100 rounded-lg p-1 -m-1 transition-colors"
                             >
                               <div
-                                className={`size-8 rounded-full flex items-center justify-center font-bold text-xs ${color?.bg ?? DESIGNER_COLORS[index % DESIGNER_COLORS.length].bg} ${color?.text ?? DESIGNER_COLORS[index % DESIGNER_COLORS.length].text}`}
+                                    className={`size-6 rounded-full flex items-center justify-center font-bold text-[10px] ${color?.bg ?? DESIGNER_COLORS[index % DESIGNER_COLORS.length].bg} ${color?.text ?? DESIGNER_COLORS[index % DESIGNER_COLORS.length].text}`}
                               >
                                 {initials}
                               </div>
-                              <div>
-                                <p className="text-sm font-bold text-[#0d121b]">{name}</p>
-                                <p className="text-xs text-[#64748b]">Stylist</p>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-[#0d121b] truncate">{name}</p>
+                                    <p className="text-[10px] text-[#64748b]">
+                                      {(() => {
+                                        const date = new Date(selectedDate);
+                                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                                        const day = String(date.getDate()).padStart(2, '0');
+                                        return `${month}-${day}`;
+                                      })()}
+                                    </p>
                               </div>
+                                </button>
+                                {/* Dropdown Menu */}
+                                {openDesignerDropdown === designerId && (
+                                  <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (designerId && name) {
+                                          // Comment: Calculate Monday of the week containing selectedDate
+                                          const date = new Date(selectedDate);
+                                          const day = date.getDay();
+                                          const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+                                          const monday = new Date(date.setDate(diff));
+                                          const mondayStr = monday.toISOString().split('T')[0];
+                                          
+                                          setWeekViewDesignerId(designerId);
+                                          setWeekViewDesignerName(name);
+                                          setWeekViewStartDate(mondayStr);
+                                          setIsWeekViewMode(true);
+                                        }
+                                        setOpenDesignerDropdown(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
+                                    >
+                                      일주일 보기
+                                    </button>
+                                    {isWeekViewMode && weekViewDesignerId === designerId && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setIsWeekViewMode(false);
+                                          setWeekViewDesignerId(null);
+                                          setWeekViewDesignerName('');
+                                          setWeekViewBookings([]);
+                                          setOpenDesignerDropdown(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                                      >
+                                        일주일 보기 종료
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (designerId && name) {
+                                          setRestrictionDesignerId(designerId);
+                                          setRestrictionDesignerName(name);
+                                          setRestrictionDate(selectedDate);
+                                          setIsRestrictionModalOpen(true);
+                                        }
+                                        setOpenDesignerDropdown(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                    >
+                                      예약금지 등록
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (designerId && name) {
+                                          setHolidayDesignerId(designerId);
+                                          setHolidayDesignerName(name);
+                                          setHolidayCurrentMonth(new Date(selectedDate));
+                                          setHolidaySelectedDates([]);
+                                          setIsHolidayModalOpen(true);
+                                        }
+                                        setOpenDesignerDropdown(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
+                                    >
+                                      임의 휴일 및 특근 설정
+                                    </button>
+                                  </div>
+                                )}
                             </div>
                           );
                         })}
                       </div>
+                      )}
                     </div>
 
-                    {/* Grid Body (still using design demo blocks for now) */}
+                    {/* Grid Body */}
                     <div
                       className="flex relative"
+                      style={{ minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}
                       onClick={() => setFocusedBookingId(null)}
                     >
+
                       {/* Current Time Line (Sydney time, only when viewing today) */}
                       {currentSydneyTime && (
                         <div
                           className="absolute w-full border-t-2 border-[#135bec] z-10 pointer-events-none flex items-center"
-                          style={{ top: currentSydneyTime.top }}
+                          style={{ top: currentSydneyTime.top + 8 }} // Add padding offset
                         >
                           <div className="absolute left-0 -translate-y-1/2 bg-[#135bec] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-r-md">
                             {currentSydneyTime.label}
@@ -717,45 +1071,124 @@ export default function AppointmentsManagementPage() {
                         </div>
                       )}
 
-                      {/* Time Column */}
-                      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-white text-xs font-medium text-[#94a3b8] flex flex-col">
-                        {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }).map((_, i) => {
-                          const hour = GRID_START_HOUR + i;
-                          const label = `${hour.toString().padStart(2, '0')}:00`;
+                      {/* Time Column - 30 minute intervals with padding */}
+                      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-white text-xs font-medium text-[#94a3b8] flex flex-col" style={{ minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}>
+                        <div className="pt-2 pb-2">
+                          {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => {
+                            const totalMinutes = GRID_START_HOUR * 60 + i * 30;
+                            const hour = Math.floor(totalMinutes / 60);
+                            const minutes = totalMinutes % 60;
+                            const isFullHour = minutes === 0;
+                            const label = isFullHour
+                              ? `${hour.toString().padStart(2, '0')}:00 ${hour >= 12 ? '오후' : '오전'}`
+                              : '';
                           return (
                             <div
-                              key={label}
-                              className="h-[120px] border-b border-[#f1f5f9] p-2 text-right relative"
+                                key={i}
+                                className="h-[40px] border-b border-[#f1f5f9] p-1 text-right relative"
                             >
-                              <span className="absolute -top-2.5 right-2 bg-white px-1">{label}</span>
+                                {isFullHour && (
+                                  <span className="absolute -top-1 right-1 bg-white px-0.5 text-[10px]">{label}</span>
+                                )}
+                                {!isFullHour && (
+                                  <span className="absolute top-1/2 -translate-y-1/2 right-1 text-[8px] text-gray-400">30</span>
+                                )}
                             </div>
                           );
                         })}
+                        </div>
                       </div>
 
-                      {/* Appointment Columns (dynamic grid per designer) */}
-                      <div className="grid grid-cols-4 flex-1 bg-white relative">
-                        {/* Hour guidelines */}
-                        <div className="absolute inset-0 pointer-events-none flex flex-col z-0">
-                          {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }).map((_, i) => (
+                      {/* Appointment Columns - Week view or normal view */}
+                      {isWeekViewMode && weekViewDesignerId ? (
+                        // Comment: Week view - 7 days columns
+                        <div className="grid flex-1 bg-white relative" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
+                          {/* Vertical column dividers for week view - positioned to extend full scrollable height */}
+                          {/* Note: These dividers are rendered at lines 1166-1179. They use absolute positioning with calculated height. */}
+                          {Array.from({ length: 7 }).map((_, colIndex) => {
+                            const columnWidth = 100 / 7;
+                            // Comment: Calculate total height based on time slots to match grid body height
+                            // This ensures dividers extend to the full height of the scrollable content
+                            const totalHeight = (GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16; // Add padding
+                            return (
+                              <div
+                                key={`week-divider-${colIndex}`}
+                                className="absolute border-r border-[#e2e8f0] pointer-events-none z-0"
+                                style={{
+                                  left: `${(colIndex + 1) * columnWidth}%`,
+                                  width: '1px',
+                                  top: 0,
+                                  height: `${totalHeight}px`,
+                                  position: 'absolute',
+                                }}
+                              />
+                            );
+                          })}
+                          
+                          {/* Hour guidelines - 30 minute intervals with padding, full width */}
+                          <div className="absolute inset-0 pointer-events-none flex flex-col z-0 pt-2 pb-2" style={{ width: '100%' }}>
+                            {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => (
                             <div
                               key={i}
-                              className="h-[120px] border-b border-[#f1f5f9] border-dashed"
+                                className="h-[40px] border-b border-[#f1f5f9] border-dashed w-full"
                             />
                           ))}
                         </div>
 
-                        {/* Show up to four designers with real bookings */}
-                        {visibleDesigners.slice(0, 4).map((designerName, colIndex) => {
-                          const designerBookings = bookingsByDesigner[designerName] || [];
-                          const color = designerColorMap[designerName] ??
-                            DESIGNER_COLORS[colIndex % DESIGNER_COLORS.length];
+                          {/* Show 7 days */}
+                          {Array.from({ length: 7 }).map((_, dayIndex) => {
+                            const currentDate = new Date(weekViewStartDate);
+                            currentDate.setDate(currentDate.getDate() + dayIndex);
+                            const dateStr = currentDate.toISOString().split('T')[0];
+                            const dayBookings = weekViewBookings.filter(
+                              (b) => b.booking_date === dateStr
+                            );
+                            
+                            // Comment: Get restrictions for this designer on this date
+                            const dayRestrictions = bookingRestrictions.filter(
+                              (r) => r.designer_id === weekViewDesignerId && r.restriction_date === dateStr
+                            );
+                            
+                            const color = DESIGNER_COLORS[0]; // Use first color for week view
+
                           return (
                             <div
-                              key={designerName}
-                              className="border-r border-[#e2e8f0] relative h-full"
-                            >
-                              {designerBookings.map((b) => {
+                                key={dayIndex}
+                                className="relative h-full"
+                              >
+                                {/* Comment: Render restriction blocks (greyout) */}
+                                {dayRestrictions.map((restriction) => {
+                                  if (restriction.restriction_type === 'date') {
+                                    // Comment: Full day restriction
+                                    return (
+                                      <div
+                                        key={`restriction-${restriction.id}`}
+                                        className="absolute inset-0 bg-gray-300/40 pointer-events-none z-5"
+                                      />
+                                    );
+                                  } else if (restriction.restriction_type === 'time' && restriction.start_time && restriction.end_time) {
+                                    // Comment: Time range restriction
+                                    const [startHour, startMin] = restriction.start_time.split(':').map(Number);
+                                    const [endHour, endMin] = restriction.end_time.split(':').map(Number);
+                                    const startMinutes = (startHour - GRID_START_HOUR) * 60 + startMin;
+                                    const endMinutes = (endHour - GRID_START_HOUR) * 60 + endMin;
+                                    if (startMinutes < 0 || endMinutes < 0) return null;
+                                    
+                                    const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
+                                    const height = ((endMinutes - startMinutes) / 30) * GRID_30MIN_HEIGHT;
+                                    
+                                    return (
+                                      <div
+                                        key={`restriction-${restriction.id}`}
+                                        className="absolute left-0 right-0 bg-gray-300/40 pointer-events-none z-5"
+                                        style={{ top, height }}
+                                      />
+                                    );
+                                  }
+                                  return null;
+                                })}
+                                
+                                {dayBookings.map((b) => {
                                 if (!b.booking_time) return null;
                                 const [hourStr, minuteStr] = b.booking_time.split(':');
                                 const hour = Number(hourStr);
@@ -769,9 +1202,8 @@ export default function AppointmentsManagementPage() {
                                   b.service?.duration_minutes && b.service.duration_minutes > 0
                                     ? b.service.duration_minutes
                                     : 60;
-                                const top = (startMinutes / 60) * GRID_HOUR_HEIGHT;
-                                const height =
-                                  Math.max((durationMinutes / 60) * GRID_HOUR_HEIGHT, 60);
+                                  const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
+                                  const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
 
                                 const serviceName = b.service?.name || 'Service';
                                 const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
@@ -799,7 +1231,7 @@ export default function AppointmentsManagementPage() {
                                         <p className="text-xs font-bold text-[#0d121b] mb-0.5">
                                           {serviceName}
                                         </p>
-                                        <p className="text-[11px] text-[#64748b]">{designerName}</p>
+                                          <p className="text-[11px] text-[#64748b]">{weekViewDesignerName}</p>
                                       </div>
                                       <div className="flex items-center justify-between mt-1">
                                         <span className="text-[10px] font-mono text-[#94a3b8]">
@@ -817,155 +1249,141 @@ export default function AppointmentsManagementPage() {
                           );
                         })}
                       </div>
-                    </div>
-
-                    <div className="h-10 bg-transparent" />
-                  </div>
-                </div>
+                      ) : (
+                        // Comment: Normal view - designer columns
+                        <div className="grid flex-1 bg-white relative" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
+                          {/* Note: Column dividers are now rendered outside the grid container (at lines 923-940) 
+                              to ensure they extend the full scrollable height, even when scrolling horizontally.
+                              This fixes the issue where dividers were cut off after certain columns like "윈터". */}
+                          
+                          {/* Hour guidelines - 30 minute intervals with padding, full width */}
+                          <div className="absolute inset-0 pointer-events-none flex flex-col z-0 pt-2 pb-2" style={{ width: '100%' }}>
+                            {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => (
+                              <div
+                                key={i}
+                                className="h-[40px] border-b border-[#f1f5f9] border-dashed w-full"
+                              />
+                            ))}
               </div>
 
-              {/* Right column: upcoming list */}
-              <div className="lg:col-span-4 flex flex-col gap-6">
-                <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-                  <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-                    <h3 className="font-bold text-black">Upcoming ({selectedDayLabel})</h3>
-                    <span className="text-xs bg-black text-white px-2 py-0.5 rounded-full">
-                      {nonCancelledCount}
-                    </span>
-                  </div>
-                  <div className="overflow-y-auto p-4 flex flex-col gap-3 h-[500px] lg:h-auto">
-                    {loading ? (
-                      <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
-                        Loading bookings...
-                      </div>
-                    ) : upcomingBookings.length === 0 ? (
-                      <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
-                        No upcoming bookings for this day.
-                      </div>
-                    ) : (
-                      upcomingBookings.map((b) => {
+                          {/* Show all designers */}
+                          {visibleDesigners.map((designerName, colIndex) => {
+                          const designer = allDesigners.find((d) => d.name === designerName);
+                          const designerId = designer?.id;
+                          const designerBookings = bookingsByDesigner[designerName] || [];
+                          const color = designerColorMap[designerName] ??
+                            DESIGNER_COLORS[colIndex % DESIGNER_COLORS.length];
+                          
+                          // Comment: Get restrictions for this designer on selected date
+                          const designerRestrictions = bookingRestrictions.filter(
+                            (r) => r.designer_id === designerId && r.restriction_date === selectedDate
+                          );
+
+                          return (
+                            <div
+                              key={designerName}
+                              className="relative h-full"
+                            >
+                              {/* Comment: Render restriction blocks (greyout) */}
+                              {designerRestrictions.map((restriction) => {
+                                if (restriction.restriction_type === 'date') {
+                                  // Comment: Full day restriction
+                                  return (
+                                    <div
+                                      key={`restriction-${restriction.id}`}
+                                      className="absolute inset-0 bg-gray-300/40 pointer-events-none z-5"
+                                    />
+                                  );
+                                } else if (restriction.restriction_type === 'time' && restriction.start_time && restriction.end_time) {
+                                  // Comment: Time range restriction
+                                  const [startHour, startMin] = restriction.start_time.split(':').map(Number);
+                                  const [endHour, endMin] = restriction.end_time.split(':').map(Number);
+                                  const startMinutes = (startHour - GRID_START_HOUR) * 60 + startMin;
+                                  const endMinutes = (endHour - GRID_START_HOUR) * 60 + endMin;
+                                  if (startMinutes < 0 || endMinutes < 0) return null;
+                                  
+                                  const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
+                                  const height = ((endMinutes - startMinutes) / 30) * GRID_30MIN_HEIGHT;
+                                  
+                                  return (
+                                    <div
+                                      key={`restriction-${restriction.id}`}
+                                      className="absolute left-0 right-0 bg-gray-300/40 pointer-events-none z-5"
+                                      style={{ top, height }}
+                                    />
+                                  );
+                                }
+                                return null;
+                              })}
+                              
+                              {designerBookings.map((b) => {
+                                if (!b.booking_time) return null;
                         const [hourStr, minuteStr] = b.booking_time.split(':');
                         const hour = Number(hourStr);
                         const minutes = Number(minuteStr);
-                        const isPM = hour >= 12;
-                        const displayHour = hour % 12 === 0 ? 12 : hour % 12;
-                        const timeLabel = `${displayHour.toString().padStart(2, '0')}:${minuteStr}`;
+                                if (Number.isNaN(hour) || Number.isNaN(minutes)) return null;
+
+                                const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
+                                if (startMinutes < 0) return null;
+
+                                const durationMinutes =
+                                  b.service?.duration_minutes && b.service.duration_minutes > 0
+                                    ? b.service.duration_minutes
+                                    : 60;
+                                // Comment: Calculate position based on 30-minute intervals (40px each) with padding
+                                const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8; // Add padding offset
+                                const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
+
                         const serviceName = b.service?.name || 'Service';
-                        const designerName = b.designer?.name || 'Designer';
+                                const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
                         const amount =
                           (b.total_amount ?? 0) > 0
                             ? `AU$${Number(b.total_amount).toFixed(0)}`
-                            : b.status === 'cancelled'
-                            ? ''
                             : 'Free';
-
-                        const isCancelled = b.status === 'cancelled';
 
                         return (
                           <div
                             key={b.id}
-                            id={b.id ? `upcoming-${b.id}` : undefined}
-                            className={`group rounded-xl border p-4 relative transition-all cursor-pointer ${
-                              isCancelled
-                                ? 'bg-gray-50 border-gray-100 opacity-70'
-                                : b.id && b.id === focusedBookingId
-                                ? 'bg-amber-50 border-amber-300 shadow-md'
-                                : 'bg-white border-gray-100 shadow-sm hover:shadow-md hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                type="button"
+                                    className="absolute left-1 right-1 z-10"
+                                    style={{ top, height }}
+                                  >
+                                    <div
+                                      className={`h-full w-full bg-white border-l-4 ${color.border} rounded shadow-sm hover:shadow-md transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setEditingBooking(b);
-                                  setEditDate(b.booking_date);
-                                  setEditTime(bookingTimeToLabel(b.booking_time));
-                                }}
-                                className="text-gray-400 hover:text-black"
-                              >
-                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                              </button>
-                              {!isCancelled && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setBookingToDelete(b);
-                                  }}
-                                  className={`text-gray-400 hover:text-red-500 ${
-                                    cancellingId === b.id ? 'opacity-60 cursor-wait' : ''
-                                  }`}
-                                  disabled={cancellingId === b.id}
-                                >
-                                  <span className="material-symbols-outlined text-[18px]">cancel</span>
-                                </button>
-                              )}
-                            </div>
-                            <div className="flex items-start gap-3">
-                              <div className="flex flex-col items-center min-w-[3rem]">
-                                <span className="text-lg font-bold text-black">{timeLabel}</span>
-                                <span className="text-xs text-gray-400 uppercase">
-                                  {isPM ? 'PM' : 'AM'}
-                                </span>
-                              </div>
-                              <div className="w-px h-10 bg-gray-100" />
-                              <div className="flex-1">
-                                <div className="flex justify-between items-start">
+                                        if (b.id) {
+                                          setFocusedBookingId(b.id);
+                                        }
+                                      }}
+                                    >
                                   <div>
-                                    <h4 className="text-sm font-bold text-black">
-                                      {b.id ? `Booking #${b.id}` : 'Booking'}
-                                    </h4>
-                                    <p className="text-xs text-gray-500 mt-0.5">
+                                        <p className="text-xs font-bold text-[#0d121b] mb-0.5">
                                       {serviceName}
                                     </p>
+                                        <p className="text-[11px] text-[#64748b]">{designerName}</p>
                                   </div>
-                                  {isCancelled && (
-                                    <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium">
-                                      Cancelled
+                                      <div className="flex items-center justify-between mt-1">
+                                        <span className="text-[10px] font-mono text-[#94a3b8]">
+                                          {timeLabel}
                                     </span>
-                                  )}
-                                </div>
-                                <div className="mt-3 flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <div className="size-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-                                      <span className="material-symbols-outlined text-[14px]">
-                                        person
-                                      </span>
-                                    </div>
-                                    <span className="text-xs text-gray-600">
-                                      {designerName}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {amount && (
-                                      <span className="text-xs font-bold text-black">
+                                        <span className="text-[10px] font-bold text-[#0d121b] bg-gray-100 px-1.5 py-0.5 rounded">
                                         {amount}
                                       </span>
-                                    )}
-                                    {!isCancelled && (
-                                      <span
-                                        className={`size-2 rounded-full ${
-                                          b.status === 'confirmed'
-                                            ? 'bg-green-500'
-                                            : b.status === 'pending'
-                                            ? 'bg-yellow-500'
-                                            : 'bg-gray-300'
-                                        }`}
-                                      />
-                                    )}
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                                );
+                              })}
                           </div>
                         );
-                      })
+                        })}
+                        </div>
                     )}
                   </div>
-                  {/* Full schedule is now always visible on the page, so this footer button is no longer needed */}
                 </div>
               </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1494,6 +1912,523 @@ export default function AppointmentsManagementPage() {
                 }`}
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Designer Time Off Management Modal */}
+      {isTimeOffModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-black">Manage Designer Time Off</h2>
+              <button
+                type="button"
+                onClick={() => setIsTimeOffModalOpen(false)}
+                className="text-gray-400 hover:text-black transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+    </div>
+            <div className="p-6 space-y-6">
+              {/* Add Time Off Form */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h3 className="font-semibold text-black">Add Time Off</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Designer <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={timeOffDesignerId || ''}
+                      onChange={(e) => setTimeOffDesignerId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+                    >
+                      <option value="">Select designer</option>
+                      {timeOffDesigners.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={timeOffStartDate}
+                      onChange={(e) => setTimeOffStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={timeOffEndDate}
+                      onChange={(e) => setTimeOffEndDate(e.target.value)}
+                      min={timeOffStartDate}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                    <input
+                      type="text"
+                      value={timeOffReason}
+                      onChange={(e) => setTimeOffReason(e.target.value)}
+                      placeholder="Optional"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!timeOffDesignerId || !timeOffStartDate || !timeOffEndDate) {
+                      alert('Please fill in all required fields');
+                      return;
+                    }
+                    setTimeOffSubmitting(true);
+                    try {
+                      const res = await fetch('/api/designer-time-off', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          designer_id: timeOffDesignerId,
+                          start_date: timeOffStartDate,
+                          end_date: timeOffEndDate,
+                          reason: timeOffReason || null,
+                        }),
+                      });
+                      if (res.ok) {
+                        setTimeOffStartDate('');
+                        setTimeOffEndDate('');
+                        setTimeOffReason('');
+                        setTimeOffDesignerId(null);
+                        // Reload time off records
+                        const recordsRes = await fetch('/api/designer-time-off');
+                        const recordsData = await recordsRes.json();
+                        if (recordsRes.ok) {
+                          setTimeOffRecords(recordsData.timeOffs || []);
+                        }
+                      } else {
+                        const data = await res.json();
+                        alert(data.error || 'Failed to add time off');
+                      }
+                    } catch (error) {
+                      console.error('Error adding time off:', error);
+                      alert('Failed to add time off');
+                    } finally {
+                      setTimeOffSubmitting(false);
+                    }
+                  }}
+                  disabled={timeOffSubmitting}
+                  className="w-full px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-60 transition-colors"
+                >
+                  {timeOffSubmitting ? 'Adding...' : 'Add Time Off'}
+                </button>
+              </div>
+
+              {/* Time Off Records List */}
+              <div>
+                <h3 className="font-semibold text-black mb-3">Existing Time Off Records</h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {timeOffRecords.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4">No time off records</p>
+                  ) : (
+                    timeOffRecords.map((record) => (
+                      <div
+                        key={record.id}
+                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium text-sm text-black">
+                            {record.designer?.name || 'Unknown'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(record.start_date).toLocaleDateString()} -{' '}
+                            {new Date(record.end_date).toLocaleDateString()}
+                            {record.reason && ` • ${record.reason}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (confirm('Delete this time off record?')) {
+                              try {
+                                const res = await fetch(`/api/designer-time-off/${record.id}`, {
+                                  method: 'DELETE',
+                                });
+                                if (res.ok) {
+                                  setTimeOffRecords(timeOffRecords.filter((r) => r.id !== record.id));
+                                }
+                              } catch (error) {
+                                console.error('Error deleting time off:', error);
+                              }
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-700 text-sm"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Booking Restriction Modal */}
+      {isRestrictionModalOpen && restrictionDesignerId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">예약금지 등록</h2>
+              <button
+                onClick={() => {
+                  setIsRestrictionModalOpen(false);
+                  setRestrictionDesignerId(null);
+                  setRestrictionDesignerName('');
+                  setRestrictionDate('');
+                  setRestrictionStartTime('');
+                  setRestrictionEndTime('');
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  디자이너
+                </label>
+                <input
+                  type="text"
+                  value={restrictionDesignerName}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  제한 유형
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      value="date"
+                      checked={restrictionType === 'date'}
+                      onChange={(e) => setRestrictionType(e.target.value as 'date' | 'time')}
+                    />
+                    <span className="text-sm">전체 날짜</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      value="time"
+                      checked={restrictionType === 'time'}
+                      onChange={(e) => setRestrictionType(e.target.value as 'date' | 'time')}
+                    />
+                    <span className="text-sm">특정 시간</span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  날짜
+                </label>
+                <input
+                  type="date"
+                  value={restrictionDate}
+                  onChange={(e) => setRestrictionDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                />
+              </div>
+              {restrictionType === 'time' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      시작 시간
+                    </label>
+                    <input
+                      type="time"
+                      value={restrictionStartTime}
+                      onChange={(e) => setRestrictionStartTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      종료 시간
+                    </label>
+                    <input
+                      type="time"
+                      value={restrictionEndTime}
+                      onChange={(e) => setRestrictionEndTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                    />
+                  </div>
+                </>
+              )}
+              <button
+                onClick={async () => {
+                  if (!restrictionDate || (restrictionType === 'time' && (!restrictionStartTime || !restrictionEndTime))) {
+                    alert('모든 필드를 입력해주세요.');
+                    return;
+                  }
+                  setRestrictionSubmitting(true);
+                  try {
+                    const res = await fetch('/api/booking-restrictions', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        designer_id: restrictionDesignerId,
+                        restriction_type: restrictionType,
+                        restriction_date: restrictionDate,
+                        start_time: restrictionType === 'time' ? restrictionStartTime : null,
+                        end_time: restrictionType === 'time' ? restrictionEndTime : null,
+                      }),
+                    });
+                    if (res.ok) {
+                      alert('예약금지가 등록되었습니다.');
+                      // Comment: Reload restrictions
+                      const restrictionsRes = await fetch(
+                        `/api/booking-restrictions?date=${encodeURIComponent(restrictionDate)}`
+                      );
+                      const restrictionsData = await restrictionsRes.json();
+                      if (restrictionsRes.ok) {
+                        setBookingRestrictions(restrictionsData.restrictions || []);
+                      }
+                      setIsRestrictionModalOpen(false);
+                      setRestrictionDesignerId(null);
+                      setRestrictionDesignerName('');
+                      setRestrictionDate('');
+                      setRestrictionStartTime('');
+                      setRestrictionEndTime('');
+                    } else {
+                      const data = await res.json();
+                      alert(data.error || '예약금지 등록에 실패했습니다.');
+                    }
+                  } catch (error) {
+                    console.error('Error creating restriction:', error);
+                    alert('예약금지 등록에 실패했습니다.');
+                  } finally {
+                    setRestrictionSubmitting(false);
+                  }
+                }}
+                disabled={restrictionSubmitting}
+                className="w-full px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-60 transition-colors"
+              >
+                {restrictionSubmitting ? '등록 중...' : '등록'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Holiday and Special Work Day Modal */}
+      {isHolidayModalOpen && holidayDesignerId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">임의 휴일 및 특근 설정</h2>
+              <button
+                onClick={() => {
+                  setIsHolidayModalOpen(false);
+                  setHolidayDesignerId(null);
+                  setHolidayDesignerName('');
+                  setHolidaySelectedDates([]);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  디자이너
+                </label>
+                <select
+                  value={holidayDesignerName}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                >
+                  <option>{holidayDesignerName}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  유형
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      value="holiday"
+                      checked={holidayType === 'holiday'}
+                      onChange={(e) => setHolidayType(e.target.value as 'holiday' | 'special')}
+                    />
+                    <span className="text-sm">임의 휴일</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      value="special"
+                      checked={holidayType === 'special'}
+                      onChange={(e) => setHolidayType(e.target.value as 'holiday' | 'special')}
+                    />
+                    <span className="text-sm">특별 근무일</span>
+                  </label>
+                </div>
+              </div>
+              {/* Calendar component */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    onClick={() => {
+                      const prevMonth = new Date(holidayCurrentMonth);
+                      prevMonth.setMonth(prevMonth.getMonth() - 1);
+                      setHolidayCurrentMonth(prevMonth);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg"
+                  >
+                    <span className="material-symbols-outlined text-lg">chevron_left</span>
+                  </button>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {holidayCurrentMonth.getFullYear()}년 {holidayCurrentMonth.getMonth() + 1}월
+                  </h3>
+                  <button
+                    onClick={() => {
+                      const nextMonth = new Date(holidayCurrentMonth);
+                      nextMonth.setMonth(nextMonth.getMonth() + 1);
+                      setHolidayCurrentMonth(nextMonth);
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg"
+                  >
+                    <span className="material-symbols-outlined text-lg">chevron_right</span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
+                    <div key={day} className="text-center text-xs font-medium text-gray-600 py-1">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {(() => {
+                    const year = holidayCurrentMonth.getFullYear();
+                    const month = holidayCurrentMonth.getMonth();
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+                    const startDate = new Date(firstDay);
+                    startDate.setDate(startDate.getDate() - firstDay.getDay());
+                    const days: Date[] = [];
+                    for (let i = 0; i < 42; i++) {
+                      const date = new Date(startDate);
+                      date.setDate(startDate.getDate() + i);
+                      days.push(date);
+                    }
+                    return days.map((date, index) => {
+                      const dateStr = date.toISOString().split('T')[0];
+                      const isCurrentMonth = date.getMonth() === month;
+                      const isSelected = holidaySelectedDates.includes(dateStr);
+                      const isToday = dateStr === new Date().toISOString().split('T')[0];
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            if (!isCurrentMonth) return;
+                            setHolidaySelectedDates((prev) =>
+                              prev.includes(dateStr)
+                                ? prev.filter((d) => d !== dateStr)
+                                : [...prev, dateStr]
+                            );
+                          }}
+                          disabled={!isCurrentMonth}
+                          className={`
+                            aspect-square text-xs rounded-lg transition-colors
+                            ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'}
+                            ${isSelected ? 'bg-red-500 text-white' : 'hover:bg-gray-100'}
+                            ${isToday && !isSelected ? 'border-2 border-blue-500' : ''}
+                          `}
+                        >
+                          {date.getDate()}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+                <div className="mt-4 flex flex-col gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                    <span>정기 휴일</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full border-2 border-red-500"></div>
+                    <span>임의 휴일</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span>특별 근무일</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-4">
+                  *날짜를 선택하면 등록/수정이 가능합니다.
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (holidaySelectedDates.length === 0) {
+                    alert('날짜를 선택해주세요.');
+                    return;
+                  }
+                  setHolidaySubmitting(true);
+                  try {
+                    // Comment: Create time off records for selected dates
+                    const promises = holidaySelectedDates.map((date) =>
+                      fetch('/api/designer-time-off', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          designer_id: holidayDesignerId,
+                          start_date: date,
+                          end_date: date,
+                          reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
+                        }),
+                      })
+                    );
+                    await Promise.all(promises);
+                    alert('설정이 완료되었습니다.');
+                    setIsHolidayModalOpen(false);
+                    setHolidayDesignerId(null);
+                    setHolidayDesignerName('');
+                    setHolidaySelectedDates([]);
+                  } catch (error) {
+                    console.error('Error setting holidays:', error);
+                    alert('설정에 실패했습니다.');
+                  } finally {
+                    setHolidaySubmitting(false);
+                  }
+                }}
+                disabled={holidaySubmitting}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              >
+                {holidaySubmitting ? '설정 중...' : '닫기'}
               </button>
             </div>
           </div>

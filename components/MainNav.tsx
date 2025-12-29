@@ -9,6 +9,12 @@ export function MainNav() {
   const pathname = usePathname();
   const isHome = pathname === '/';
   const isBooking = pathname.startsWith('/booking');
+  const isAdmin = pathname.startsWith('/admin');
+
+  // Comment: Don't show navigation on admin pages
+  if (isAdmin) {
+    return null;
+  }
 
   const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
 

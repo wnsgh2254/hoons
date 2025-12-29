@@ -1,24 +1,34 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
-export default function AdminSidebar() {
+type AdminSidebarProps = {
+  isSidebarOpen?: boolean;
+};
+
+export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProps) {
   const pathname = usePathname();
 
   const isActive = (path: string) => pathname === path;
 
   return (
-    <aside className="w-64 shrink-0 flex flex-col justify-between bg-white border-r border-gray-200 h-full overflow-y-auto hidden md:flex">
+    <aside 
+      id="admin-sidebar"
+      className={`fixed left-0 top-0 h-full w-64 bg-white border-r border-gray-200 z-50 flex flex-col justify-between overflow-y-auto transition-transform duration-300 ease-in-out ${
+        isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
       <div className="flex flex-col gap-8 p-6">
         <div className="flex items-center gap-3">
-          <div className="bg-black flex items-center justify-center rounded-full size-10 text-white">
-            <span className="material-symbols-outlined">content_cut</span>
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-lg font-bold tracking-wider text-black">HAEYOOM</h1>
-            <p className="text-xs text-gray-500 font-medium tracking-widest">SYDNEY</p>
-          </div>
+          <Image
+            src="/images/image3.png"
+            alt="HAEYOOM Logo"
+            width={130}
+            height={28}
+            className="h-7 w-auto object-contain"
+          />
         </div>
         <nav className="flex flex-col gap-2">
           <Link

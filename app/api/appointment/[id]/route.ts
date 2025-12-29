@@ -30,6 +30,17 @@ export async function PATCH(
     if (typeof body.deposit_amount === 'number' || typeof body.deposit_amount === 'string') {
       updates.deposit_amount = Number(body.deposit_amount);
     }
+    if (body.service_id === null) {
+      updates.service_id = null;
+    } else if (typeof body.service_id === 'number' || typeof body.service_id === 'string') {
+      updates.service_id = Number(body.service_id);
+    }
+    if (typeof body.custom_service_name === 'string') {
+      updates.custom_service_name = body.custom_service_name;
+    }
+    if (typeof body.custom_service_duration === 'number' || typeof body.custom_service_duration === 'string') {
+      updates.custom_service_duration = Number(body.custom_service_duration);
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: '업데이트할 필드가 없습니다.' }, { status: 400 });

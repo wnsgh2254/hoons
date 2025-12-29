@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDesignersByShop } from '@/lib/data';
+import { supabase } from '@/lib/supabase';
 
+// Comment: GET - Fetch all designers (name and id only)
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const shopIdParam = searchParams.get('shopId');
+    // Comment: Get all active designers, select id, name, and role for sorting
+    const { data, error } = await supabase
+      .from('designers')
+      .select('id, name, role')
+      .eq('is_active', true);
 
-    if (!shopIdParam) {
-      return NextResponse.json({ error: 'shopId 는 필수입니다.' }, { status: 400 });
+    if (error) {
+      console.error('Error fetching designers:', error);
+      return NextResponse.json(
+        { error: error.message || '디자이너 목록을 불러오지 못했습니다.' },
+        { status: 500 }
+      );
     }
 
-    const shopId = Number(shopIdParam);
-    if (Number.isNaN(shopId)) {
-      return NextResponse.json({ error: 'shopId 가 올바르지 않습니다.' }, { status: 400 });
-    }
-
-    const designers = await getDesignersByShop(shopId);
-    return NextResponse.json({ designers }, { status: 200 });
-  } catch (error) {
+    return NextResponse.json({ designers: data || [] }, { status: 200 });
+  } catch (error: any) {
     console.error('Error in designers GET route:', error);
-    return NextResponse.json({ error: '디자이너 목록을 불러오지 못했습니다.' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || '디자이너 목록을 불러오지 못했습니다.' },
+      { status: 500 }
+    );
   }
 }
-
-

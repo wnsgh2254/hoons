@@ -14,6 +14,8 @@ export default function ServiceHistoryPage() {
   const [shops, setShops] = useState<any[]>([]);
   const [editingService, setEditingService] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Filters
   const [startDate, setStartDate] = useState('');
@@ -100,22 +102,61 @@ export default function ServiceHistoryPage() {
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
+  // Comment: Close sidebar when clicking outside
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const sidebar = document.getElementById('admin-sidebar');
+      const menuButton = target.closest('button[aria-label="Toggle sidebar"]');
+      
+      // Comment: Don't close if clicking inside sidebar or menu button
+      if (sidebar && sidebar.contains(target)) {
+        return;
+      }
+      if (menuButton) {
+        return;
+      }
+      
+      setIsSidebarOpen(false);
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSidebarOpen]);
+
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex">
-      <AdminSidebar />
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-[#1a1a1a] text-white z-10 shadow-sm">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400">Dashboard</span>
-            <span className="text-gray-500">/</span>
-            <span className="font-medium text-white">Service History</span>
+      <AdminSidebar isSidebarOpen={isSidebarOpen} />
+      <main className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white transition-all duration-300 ease-in-out ${
+        isSidebarOpen ? 'ml-64' : ''
+      }`}>
+        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
+          <div className="flex items-center gap-4 flex-1">
+            {/* Navigation Menu Button */}
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              aria-label="Toggle sidebar"
+            >
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            {/* Home Button */}
+            <Link
+              href="/admin/dashboard"
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined">home</span>
+            </Link>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="font-medium text-gray-900">Service History</span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-white/10 text-gray-300 transition-colors">
+            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-200 text-gray-600 transition-colors">
               <span className="material-symbols-outlined text-xl">notifications</span>
-            </button>
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-white/10 text-gray-300 md:hidden transition-colors">
-              <span className="material-symbols-outlined text-xl">menu</span>
             </button>
           </div>
         </header>
@@ -225,11 +266,11 @@ export default function ServiceHistoryPage() {
                           </td>
                           <td className="px-6 py-4">
                             <span className="text-gray-600">
-                              {service.service?.name || '—'}
+                              {service.custom_service_name || service.service?.name || '—'}
                             </span>
-                            {service.service?.duration_minutes && (
+                            {(service.custom_service_duration || service.service?.duration_minutes) && (
                               <span className="text-xs text-gray-500 block">
-                                {service.service.duration_minutes} min
+                                {service.custom_service_duration || service.service?.duration_minutes} min
                               </span>
                             )}
                           </td>
@@ -358,6 +399,16 @@ export default function ServiceHistoryPage() {
         </div>
       </main>
 
+      {/* Success Message Toast */}
+      {successMessage && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
+            <span className="material-symbols-outlined text-xl">check_circle</span>
+            <span className="font-medium">{successMessage}</span>
+          </div>
+        </div>
+      )}
+
       {/* Edit Service Modal */}
       {editingService && (
         <EditServiceModal
@@ -365,7 +416,12 @@ export default function ServiceHistoryPage() {
           onClose={() => setEditingService(null)}
           onSuccess={() => {
             setEditingService(null);
+            setSuccessMessage('Service record updated successfully');
             fetchServiceHistory(currentPage);
+            // Comment: Hide success message after 3 seconds
+            setTimeout(() => {
+              setSuccessMessage(null);
+            }, 3000);
           }}
         />
       )}
@@ -390,8 +446,52 @@ function EditServiceModal({
   const [status, setStatus] = useState(service.status || 'pending');
   const [totalAmount, setTotalAmount] = useState<string>(String(service.total_amount || 0));
   const [depositAmount, setDepositAmount] = useState<string>(String(service.deposit_amount || 0));
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(
+    service.service_id ? String(service.service_id) : 'other'
+  );
+  const [customServiceName, setCustomServiceName] = useState<string>(
+    service.custom_service_name || (service.service_id ? '' : (service.service?.name || ''))
+  );
+  const [customServiceDuration, setCustomServiceDuration] = useState<string>(
+    service.service_id ? '' : String(service.custom_service_duration || service.service?.duration_minutes || '')
+  );
+  const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const isOtherSelected = selectedServiceId === 'other';
+
+  // Comment: Fetch services list
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const res = await fetch('/api/services');
+        const data = await res.json();
+        if (res.ok && data.services) {
+          setServices(data.services);
+        }
+      } catch (error) {
+        console.error('Error fetching services:', error);
+      }
+    };
+    fetchServices();
+  }, []);
+
+  // Comment: Update total amount when service is selected
+  useEffect(() => {
+    if (selectedServiceId && selectedServiceId !== 'other' && services.length > 0) {
+      const selectedService = services.find((svc) => String(svc.id) === selectedServiceId);
+      if (selectedService) {
+        setTotalAmount(String(selectedService.price || 0));
+        // Comment: Update deposit amount to 20% of total (if needed)
+        const newDeposit = Math.round((selectedService.price || 0) * 0.2);
+        setDepositAmount(String(newDeposit));
+        // Comment: Clear custom service fields when selecting a regular service
+        setCustomServiceName('');
+        setCustomServiceDuration('');
+      }
+    }
+  }, [selectedServiceId, services]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -410,6 +510,9 @@ function EditServiceModal({
           status,
           total_amount: Number(totalAmount) || 0,
           deposit_amount: Number(depositAmount) || 0,
+          service_id: isOtherSelected ? null : (selectedServiceId ? Number(selectedServiceId) : undefined),
+          custom_service_name: isOtherSelected ? customServiceName : undefined,
+          custom_service_duration: isOtherSelected && customServiceDuration ? Number(customServiceDuration) : undefined,
         }),
       });
 
@@ -470,6 +573,62 @@ function EditServiceModal({
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Service <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedServiceId}
+              onChange={(e) => {
+                setSelectedServiceId(e.target.value);
+                if (e.target.value !== 'other') {
+                  setCustomServiceName('');
+                  setCustomServiceDuration('');
+                }
+              }}
+              required
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+            >
+              <option value="">Select a service</option>
+              {services.map((svc) => (
+                <option key={svc.id} value={svc.id}>
+                  {svc.name} - ₩{Number(svc.price).toLocaleString('ko-KR')} ({svc.duration_minutes} min)
+                </option>
+              ))}
+              <option value="other">Other</option>
+            </select>
+          </div>
+          {isOtherSelected && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Service Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={customServiceName}
+                  onChange={(e) => setCustomServiceName(e.target.value)}
+                  required={isOtherSelected}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                  placeholder="Enter service name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration (minutes) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={customServiceDuration}
+                  onChange={(e) => setCustomServiceDuration(e.target.value)}
+                  required={isOtherSelected}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                  placeholder="Enter duration in minutes"
+                />
+              </div>
+            </>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select

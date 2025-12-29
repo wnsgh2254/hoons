@@ -24,7 +24,10 @@ export default function RevenueTrendsChart({
   const transformedPoints = useMemo(() => {
     if (timeRange === 'Today') {
       // Comment: Group by hour for today (09:00 ~ 18:00 only)
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
       const hourMap = new Map<number, number>();
 
       trendPoints.forEach((point) => {
@@ -98,11 +101,54 @@ export default function RevenueTrendsChart({
         revenue,
       }));
     } else {
-      // Comment: Month - use daily data as-is
-      return trendPoints.map((p) => ({
-        date: p.date,
-        revenue: p.revenue || 0,
-      }));
+      // Comment: Month - filter to current month only
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0~11
+      
+      // Comment: First, filter trendPoints to only include current month data
+      const currentMonthPoints = trendPoints.filter((p) => {
+        try {
+          const pointDateStr = p.date.slice(0, 10); // Get YYYY-MM-DD part
+          const pointDate = new Date(pointDateStr + 'T00:00:00'); // Ensure consistent parsing
+          
+          if (Number.isNaN(pointDate.getTime())) {
+            return false;
+          }
+          
+          // Comment: Check if date is in current year and month
+          return (
+            pointDate.getFullYear() === currentYear &&
+            pointDate.getMonth() === currentMonth
+          );
+        } catch {
+          return false;
+        }
+      });
+      
+      // Comment: Get all days in current month
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const dates: string[] = [];
+      
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        dates.push(`${currentYear}-${pad2(currentMonth + 1)}-${pad2(day)}`);
+      }
+
+      
+      // Comment: Aggregate revenue by day for current month only
+      return dates.map((dateStr) => {
+        const revenue =
+          currentMonthPoints
+            .filter((p) => {
+              // Comment: Exact date match (YYYY-MM-DD format)
+              const pointDateStr = p.date.slice(0, 10);
+              return pointDateStr === dateStr;
+            })
+            .reduce((sum, p) => sum + (p.revenue || 0), 0) || 0;
+        return { date: dateStr, revenue };
+      });
     }
   }, [trendPoints, timeRange]);
 
@@ -122,7 +168,7 @@ export default function RevenueTrendsChart({
   const isYear = timeRange === 'Year';
   const isToday = timeRange === 'Today';
   const isWeek = timeRange === 'Week';
-  const barWidth = isYear ? '28px' : isToday ? '20px' : isWeek ? '36px' : '32px';
+  const barWidth = isYear ? '28px' : isToday ? '20px' : isWeek ? '48px' : '32px';
 
   if (loading) {
     return (
@@ -140,6 +186,17 @@ export default function RevenueTrendsChart({
     );
   }
 
+  const justifyContent = isToday || isWeek || isYear
+  ? 'center'
+  : 'flex-start';
+
+const gap =
+  isWeek ? '30px'
+  : isYear ? '25px'
+  : isToday ? '40px'
+  : '4px'; // Month
+
+
   return (
     <div className="w-full">
       <div className="flex gap-3">
@@ -153,22 +210,23 @@ export default function RevenueTrendsChart({
             ))}
           </div>
         </div>
+        
 
         {/* Comment: Chart area */}
-        <div className="flex-1 min-w-0 overflow-x-auto pb-2">
+        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-visible pb-2">
           <div
             className="h-64 flex items-end relative overflow-visible"
             style={{
               paddingTop: '40px',
               paddingBottom: '8px',
-              justifyContent: transformedPoints.length <= 12 ? 'space-between' : 'flex-start',
-              gap: '1px',
+              justifyContent,
+              gap,
               minWidth: '100%',
             }}
           >
             {transformedPoints.map((item, index) => {
               const chartHeightPx = 256;
-              const topPadding = 40;
+              const topPadding = 55;
               const bottomPadding = 8;
               const availableHeight = chartHeightPx - topPadding - bottomPadding;
               const minBarHeightPx = 4;
@@ -177,7 +235,20 @@ export default function RevenueTrendsChart({
               const heightPx = minBarHeightPx + ratio * (maxBarHeightPx - minBarHeightPx);
               const height = `${heightPx}px`;
 
-              const highlight = index === transformedPoints.length - 1;
+              // Comment: Highlight today's date for Month view, otherwise highlight last item
+              let highlight = false;
+              if (timeRange === 'Month') {
+                // Comment: Get today's date in YYYY-MM-DD format (Sydney timezone)
+                const now = new Date();
+                // Comment: Convert to Sydney timezone (UTC+10 or UTC+11 depending on DST)
+                const sydneyTime = new Date(now.toLocaleString('en-US', { timeZone: 'Australia/Sydney' }));
+                const pad2 = (n: number) => String(n).padStart(2, '0');
+                const todayStr = `${sydneyTime.getFullYear()}-${pad2(sydneyTime.getMonth() + 1)}-${pad2(sydneyTime.getDate())}`;
+                const itemDateStr = item.date.slice(0, 10); // Get YYYY-MM-DD part
+                highlight = itemDateStr === todayStr;
+              } else {
+                highlight = index === transformedPoints.length - 1;
+              }
               const label = `₩${(item.revenue || 0).toLocaleString('ko-KR')}`;
 
               // Comment: Format axis label
