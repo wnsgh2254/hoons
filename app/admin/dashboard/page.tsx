@@ -42,6 +42,13 @@ export default function AdminDashboardPage() {
               <span className="text-sm font-medium">Appointments</span>
             </Link>
             <Link
+              href="/admin/service-history"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+            >
+              <span className="material-symbols-outlined">history</span>
+              <span className="text-sm font-medium">Service History</span>
+            </Link>
+            <Link
               href="/admin/staff"
               className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
             >
@@ -54,6 +61,13 @@ export default function AdminDashboardPage() {
             >
               <span className="material-symbols-outlined">inventory_2</span>
               <span className="text-sm font-medium">Inventory</span>
+            </Link>
+            <Link
+              href="/admin/prepaid"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+            >
+              <span className="material-symbols-outlined">card_membership</span>
+              <span className="text-sm font-medium">Prepaid Pass</span>
             </Link>
             <Link
               href="/admin/settings"

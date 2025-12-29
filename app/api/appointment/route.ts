@@ -166,9 +166,13 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const shopId = searchParams.get('shop_id');
+    const designerId = searchParams.get('designer_id');
     const date = searchParams.get('date');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+
+    const page = Number(searchParams.get('page')) || 1;
+    const limit = Number(searchParams.get('limit')) || 20;
 
     let query = supabase
       .from('bookings')
@@ -178,11 +182,18 @@ export async function GET(request: NextRequest) {
         designer:designer_id ( id, name ),
         service:service_id ( id, name, duration_minutes ),
         shop:shop_id ( id, name )
-      `
-      );
+      `,
+        { count: 'exact' }
+      )
+      .order('booking_date', { ascending: false })
+      .order('booking_time', { ascending: false });
 
     if (shopId) {
       query = query.eq('shop_id', shopId);
+    }
+
+    if (designerId) {
+      query = query.eq('designer_id', designerId);
     }
 
     if (startDate && endDate) {
@@ -191,7 +202,12 @@ export async function GET(request: NextRequest) {
       query = query.eq('booking_date', date);
     }
 
-    const { data, error } = await query;
+    // Apply pagination
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    query = query.range(from, to);
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Error fetching bookings:', error);
@@ -201,7 +217,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ bookings: data }, { status: 200 });
+    return NextResponse.json(
+      {
+        bookings: data || [],
+        total: count || 0,
+        page,
+        limit,
+        totalPages: Math.ceil((count || 0) / limit),
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error in appointment route:', error);
     return NextResponse.json(

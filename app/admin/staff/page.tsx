@@ -7,7 +7,6 @@ import type { Designer } from '@/lib/types';
 export default function StaffManagementPage() {
   const [filter, setFilter] = useState('All Staff');
   const [staffMembers, setStaffMembers] = useState<Designer[]>([]);
-  const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalStaff: 0, activeStaff: 0, estimatedPayroll: 0, totalHours: 0 });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,7 +34,7 @@ export default function StaffManagementPage() {
   const currentMonth = getCurrentMonth();
   const currentMonthName = getMonthName(currentMonth);
 
-  // Fetch staff data from API
+  // Fetch staff data from API (single call with stats included)
   useEffect(() => {
     const fetchStaffData = async () => {
       try {
@@ -43,37 +42,20 @@ export default function StaffManagementPage() {
         const role = filter === 'All Staff' ? '' : filter;
         const params = new URLSearchParams();
         if (role) params.append('role', role);
-        
-        const [staffRes, statsRes, workLogsRes] = await Promise.all([
-          fetch(`/api/staff?${params.toString()}`),
-          fetch('/api/staff?type=stats'),
-          fetch('/api/staff?type=worklogs'),
-        ]);
+        params.append('include_stats', 'true');
 
-        const staffData = await staffRes.json();
-        const statsData = await statsRes.json();
-        const workLogsData = await workLogsRes.json();
+        const res = await fetch(`/api/staff?${params.toString()}`);
+        const data = await res.json();
 
-        if (staffData.staff) setStaffMembers(staffData.staff);
-        if (staffData.shops) setShops(staffData.shops);
-        if (statsData.stats) {
+        if (data.staff) setStaffMembers(data.staff);
+        if (data.shops) setShops(data.shops);
+        if (data.stats) {
           setStats({
-            totalStaff: statsData.stats.totalStaff || 0,
-            activeStaff: statsData.stats.activeStaff || 0,
+            totalStaff: data.stats.totalStaff || 0,
+            activeStaff: data.stats.activeStaff || 0,
             estimatedPayroll: 0,
             totalHours: 0,
           });
-        }
-        if (workLogsData.workLogs) {
-          const transformedLogs = workLogsData.workLogs.map((log: any) => ({
-            staff: log.designer?.name || log.staff?.name || 'Unknown',
-            date: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            checkIn: log.check_in ? new Date(`2000-01-01T${log.check_in}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
-            checkOut: log.check_out ? new Date(`2000-01-01T${log.check_out}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
-            total: log.total_hours ? `${Math.floor(log.total_hours)}h ${Math.round((log.total_hours % 1) * 60)}m` : 'N/A',
-            status: log.status === 'verified' ? 'Verified' : 'Pending',
-          }));
-          setWorkLogs(transformedLogs);
         }
       } catch (error) {
         console.error('Error fetching staff data:', error);
@@ -184,6 +166,13 @@ export default function StaffManagementPage() {
               <span className="text-sm font-medium">Appointments</span>
             </Link>
             <Link
+              href="/admin/service-history"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+            >
+              <span className="material-symbols-outlined">history</span>
+              <span className="text-sm font-medium">Service History</span>
+            </Link>
+            <Link
               href="/admin/staff"
               className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black text-white shadow-lg shadow-black/20"
             >
@@ -196,6 +185,13 @@ export default function StaffManagementPage() {
             >
               <span className="material-symbols-outlined">inventory_2</span>
               <span className="text-sm font-medium">Inventory</span>
+            </Link>
+            <Link
+              href="/admin/prepaid"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+            >
+              <span className="material-symbols-outlined">card_membership</span>
+              <span className="text-sm font-medium">Prepaid Pass</span>
             </Link>
             <Link
               href="/admin/settings"
@@ -660,8 +656,8 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
         is_active: true,
       };
 
-      const response = await fetch(`/api/staff/${designer.id}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/staff?id=${designer.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });

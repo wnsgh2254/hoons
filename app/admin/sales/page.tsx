@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import RevenueTrendsChart from '@/components/RevenueTrendsChart';
 
 type TimeRange = 'Today' | 'Week' | 'Month' | 'Year';
 
@@ -40,7 +41,10 @@ function getDateRangeForTimeRange(timeRange: TimeRange) {
 }
 
 export default function SalesOverviewPage() {
-  const [timeRange, setTimeRange] = useState<TimeRange>('Today');
+  // Comment: Separate state for Revenue Trends (only affects chart)
+  const [trendRange, setTrendRange] = useState<TimeRange>('Month');
+  // Comment: Keep timeRange for other sections (cards, payment methods, etc.) - default to Month
+  const [timeRange, setTimeRange] = useState<TimeRange>('Month');
   const [productRows, setProductRows] = useState<
     {
       itemId: number;
@@ -81,6 +85,11 @@ export default function SalesOverviewPage() {
   } | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // Comment: Prepaid pass management state
+  const [prepaidSearchQuery, setPrepaidSearchQuery] = useState('');
+  const [prepaidMembers, setPrepaidMembers] = useState<any[]>([]);
+  const [loadingPrepaid, setLoadingPrepaid] = useState(false);
 
   // Comment: Refetch product sales whenever time range changes
   useEffect(() => {
@@ -142,6 +151,27 @@ export default function SalesOverviewPage() {
 
     fetchProductSales();
     fetchSummary();
+
+    // Comment: Load prepaid pass members for status display
+    const fetchPrepaidMembers = async () => {
+      try {
+        setLoadingPrepaid(true);
+        const res = await fetch('/api/prepaid');
+        const data = await res.json();
+        if (res.ok) {
+          setPrepaidMembers(data.members || []);
+        } else {
+          setPrepaidMembers([]);
+        }
+      } catch (error) {
+        console.error('Error fetching prepaid members:', error);
+        setPrepaidMembers([]);
+      } finally {
+        setLoadingPrepaid(false);
+      }
+    };
+
+    fetchPrepaidMembers();
   }, [timeRange]);
 
   const timeRangeLabel = useMemo(() => {
@@ -187,6 +217,13 @@ export default function SalesOverviewPage() {
               <span className="text-sm font-medium">Appointments</span>
             </Link>
             <Link
+              href="/admin/service-history"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+            >
+              <span className="material-symbols-outlined">history</span>
+              <span className="text-sm font-medium">Service History</span>
+            </Link>
+            <Link
               href="/admin/staff"
               className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
             >
@@ -199,6 +236,13 @@ export default function SalesOverviewPage() {
             >
               <span className="material-symbols-outlined">inventory_2</span>
               <span className="text-sm font-medium">Inventory</span>
+            </Link>
+            <Link
+              href="/admin/prepaid"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-black transition-colors"
+            >
+              <span className="material-symbols-outlined">card_membership</span>
+              <span className="text-sm font-medium">Prepaid Pass</span>
             </Link>
             <Link
               href="/admin/settings"
@@ -339,56 +383,35 @@ export default function SalesOverviewPage() {
               </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between mb-8">
+              <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-bold text-black">Revenue Trends</h3>
-                  <button className="text-gray-400 hover:text-black transition-colors">
-                    <span className="material-symbols-outlined">more_horiz</span>
-                  </button>
-                </div>
-                <div className="h-64 w-full flex items-end justify-between gap-2 md:gap-4 px-2">
-                  {loadingSummary || !summary || summary.trendPoints.length === 0 ? (
-                    <div className="w-full flex items-center justify-center text-sm text-gray-500">
-                      {loadingSummary ? 'Loading revenue trends...' : 'No revenue data for this period.'}
+                  <div className="flex items-center gap-2">
+                    <div className="bg-gray-100 rounded-lg p-1 flex border border-gray-200">
+                      {['Today', 'Week', 'Month', 'Year'].map((range) => (
+                        <button
+                          key={range}
+                          onClick={() => setTrendRange(range as TimeRange)}
+                          className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                            trendRange === range
+                              ? 'bg-black text-white shadow-sm'
+                              : 'text-gray-500 font-medium hover:text-black hover:bg-gray-200'
+                          }`}
+                        >
+                          {range}
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    summary.trendPoints.map((item, index) => {
-                      const maxRevenue = Math.max(
-                        ...summary.trendPoints.map((p) => p.revenue || 0)
-                      );
-                      const height =
-                        maxRevenue > 0 ? `${(item.revenue / maxRevenue) * 80 + 10}%` : '10%';
-                      const highlight = index === summary.trendPoints.length - 1;
-                      const label = `₩${item.revenue.toLocaleString('ko-KR')}`;
-                      const dayLabel = item.date.slice(5).replace('-', '/');
-                      return (
-                        <div key={item.date} className="w-full flex flex-col justify-end items-center gap-2 group">
-                          <div
-                            className={`w-full rounded-t-sm relative transition-all ${
-                              highlight
-                                ? 'bg-linear-to-t from-gray-800 to-black shadow-[0_4px_10px_rgba(0,0,0,0.3)] group-hover:from-gray-600 group-hover:to-gray-800'
-                                : 'bg-gray-200 group-hover:bg-gray-400'
-                            }`}
-                            style={{ height }}
-                          >
-                            <div
-                              className={`absolute -top-8 left-1/2 -translate-x-1/2 text-xs px-2 py-1 rounded pointer-events-none transition-opacity ${
-                                highlight
-                                  ? 'opacity-100 bg-black text-white font-bold shadow-lg border border-gray-700'
-                                  : 'opacity-0 group-hover:opacity-100 bg-black text-white'
-                              }`}
-                            >
-                              {label}
-                            </div>
-                          </div>
-                          <span className={`text-xs ${highlight ? 'text-black font-bold' : 'text-gray-500'}`}>
-                            {dayLabel}
-                          </span>
-                        </div>
-                      );
-                    })
-                  )}
+                    <button className="text-gray-400 hover:text-black transition-colors">
+                      <span className="material-symbols-outlined">more_horiz</span>
+                    </button>
+                  </div>
                 </div>
+                <RevenueTrendsChart
+                  trendPoints={summary?.trendPoints || []}
+                  timeRange={trendRange}
+                  loading={loadingSummary}
+                />
               </div>
               <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
                 <div className="flex items-center justify-between mb-4">
@@ -456,46 +479,87 @@ export default function SalesOverviewPage() {
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-bold text-black mb-6">Top Stylists</h3>
-                {loadingSummary || !summary ? (
-                  <div className="text-sm text-gray-500">Loading top stylists...</div>
-                ) : summary.topStylists.length === 0 ? (
-                  <div className="text-sm text-gray-500">No stylist revenue data in this period.</div>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-black">Prepaid Pass Status</h3>
+                  <Link
+                    href="/admin/prepaid"
+                    className="text-xs font-medium text-gray-500 hover:text-black transition-colors flex items-center gap-1"
+                  >
+                    Manage
+                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  </Link>
+                </div>
+                <div className="mb-4">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-[18px]">
+                      search
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Search members..."
+                      value={prepaidSearchQuery}
+                      onChange={(e) => setPrepaidSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                {loadingPrepaid ? (
+                  <div className="text-sm text-gray-500 py-8 text-center">Loading prepaid members...</div>
+                ) : prepaidMembers.length === 0 ? (
+                  <div className="text-sm text-gray-500 py-8 text-center">
+                    {prepaidSearchQuery ? 'No members found.' : 'No prepaid pass members yet.'}
+                  </div>
                 ) : (
-                  <div className="flex flex-col gap-6">
-                    {summary.topStylists.map((stylist) => (
-                      <div key={stylist.designerId} className="flex items-center gap-4">
-                        <div className="size-10 rounded-full bg-gray-900 text-white flex items-center justify-center shadow-sm border border-gray-200">
-                          <span className="text-xs font-bold">
-                            {stylist.name.slice(0, 2).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="flex-1 flex flex-col gap-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium text-black">{stylist.name}</span>
-                            <span className="text-sm font-bold text-black">
-                              ₩{stylist.revenue.toLocaleString('ko-KR')}
-                            </span>
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    {prepaidMembers
+                      .filter((member) => {
+                        if (!prepaidSearchQuery) return true;
+                        const query = prepaidSearchQuery.toLowerCase();
+                        return (
+                          member.name?.toLowerCase().includes(query) ||
+                          member.phone?.includes(query) ||
+                          member.email?.toLowerCase().includes(query)
+                        );
+                      })
+                      .map((member) => (
+                        <div
+                          key={member.id}
+                          className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-gray-300 transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-medium text-black">
+                                  {member.name || 'Unknown'}
+                                </p>
+                                {member.is_active && (
+                                  <span className="bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+                              {member.phone && (
+                                <p className="text-xs text-gray-500 mb-0.5">{member.phone}</p>
+                              )}
+                              {member.email && (
+                                <p className="text-xs text-gray-500">{member.email}</p>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              {member.points !== undefined && (
+                                <p className="text-sm font-bold text-black">
+                                  {member.points} points
+                                </p>
+                              )}
+                              {member.expires_at && (
+                                <p className="text-xs text-gray-500">
+                                  Expires: {new Date(member.expires_at).toLocaleDateString('ko-KR')}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${
-                                stylist.percentageOfTop >= 80
-                                  ? 'bg-black'
-                                  : stylist.percentageOfTop >= 60
-                                    ? 'bg-gray-600'
-                                    : 'bg-gray-400'
-                              }`}
-                              style={{ width: `${Math.min(stylist.percentageOfTop, 100)}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-[11px] text-gray-500">
-                            {stylist.bookingsCount} bookings ·{' '}
-                            {stylist.percentageOfTop.toFixed(1)}% of stylist revenue
-                          </span>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 )}
               </div>

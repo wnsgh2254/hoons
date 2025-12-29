@@ -1,55 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllStaff, getStaffStats, getWorkLogs, getDesignerSalesForPeriod, getShops } from '@/lib/data';
+import {
+  getAllStaff,
+  getStaffStats,
+  getDesignerSalesForPeriod,
+  getShops,
+  getDesignerById,
+  updateDesigner,
+  deleteDesigner,
+} from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 
+// Comment: GET - Fetch staff list with stats, or single staff by id, or just stats
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
     const shopId = searchParams.get('shop_id');
     const role = searchParams.get('role');
-    const type = searchParams.get('type'); // 'list' | 'stats' | 'worklogs'
+    const includeStats = searchParams.get('include_stats') === 'true';
 
-    if (type === 'stats') {
-      const stats = await getStaffStats(shopId ? Number(shopId) : undefined);
-      return NextResponse.json({ stats }, { status: 200 });
+    // Comment: Single staff member by id
+    if (id) {
+      const designer = await getDesignerById(Number(id));
+      return NextResponse.json({ designer }, { status: 200 });
     }
 
-    if (type === 'worklogs') {
-      const designerId = searchParams.get('designer_id') || searchParams.get('staff_id');
-      const startDate = searchParams.get('start_date');
-      const endDate = searchParams.get('end_date');
-
-      const period = startDate && endDate ? { start: startDate, end: endDate } : undefined;
-      try {
-        const workLogs = await getWorkLogs(designerId ? Number(designerId) : undefined, period);
-        return NextResponse.json({ workLogs }, { status: 200 });
-      } catch (error: any) {
-        // If work_logs table doesn't exist, return empty array
-        if (error.message?.includes('work_logs') || error.message?.includes('schema cache')) {
-          console.warn('work_logs table not found, returning empty array');
-          return NextResponse.json({ workLogs: [] }, { status: 200 });
-        }
-        throw error;
-      }
-    }
-
-    // Default: return staff list with sales data
+    // Comment: Get staff list
     const staff = await getAllStaff(shopId ? Number(shopId) : undefined, role || undefined);
-    
-    // Get shops data for venue names
+
+    // Comment: Get shops data for venue names
     const shops = await getShops();
     const shopsMap = new Map(shops.map((s: { id: number; name: string }) => [s.id, s.name]));
-    
-    // Get current month in Sydney timezone
+
+    // Comment: Get current month in Sydney timezone
     const sydneyTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' }));
     const year = sydneyTime.getFullYear();
     const month = String(sydneyTime.getMonth() + 1).padStart(2, '0');
     const currentMonth = `${year}-${month}`;
-    
-    // Get sales data from designer_sales table for current month
+
+    // Comment: Get sales data from designer_sales table for current month
     const staffIds = staff.map((s: any) => s.id);
     let salesData: any[] = [];
-    
+
     if (staffIds.length > 0) {
       try {
         salesData = await getDesignerSalesForPeriod(staffIds, currentMonth);
@@ -59,11 +51,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Combine staff with sales data and shop info
+    // Comment: Combine staff with sales data and shop info
     const staffWithSales = staff.map((member: any) => {
       const sales = salesData.find((s: any) => s.designer_id === member.id);
       const shopName = member.shop_id ? shopsMap.get(member.shop_id) : null;
-      
+
       if (member.wage_type === 'percent') {
         // Commission staff: use sales from designer_sales table
         return {
@@ -83,43 +75,41 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ staff: staffWithSales, shops }, { status: 200 });
-  } catch (error) {
+    // Comment: Include stats if requested
+    const response: any = { staff: staffWithSales, shops };
+    if (includeStats) {
+      const stats = await getStaffStats(shopId ? Number(shopId) : undefined);
+      response.stats = stats;
+    }
+
+    return NextResponse.json(response, { status: 200 });
+  } catch (error: any) {
     console.error('Error in staff GET route:', error);
+    const status = error.message?.includes('찾을 수 없') ? 404 : error.message?.includes('유효하지 않은') ? 400 : 500;
     return NextResponse.json(
-      { error: '직원 목록을 불러오지 못했습니다.' },
-      { status: 500 }
+      { error: error.message || '직원 목록을 불러오지 못했습니다.' },
+      { status }
     );
   }
 }
 
+// Comment: POST - Create a new staff member
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name, role, shop_id, wage_type, percent_rate, hourly_rate, is_active } = body;
 
-    console.log('Received POST request:', body); // Debug log
-
     // Validate required fields
     if (!name || !name.trim()) {
-      return NextResponse.json(
-        { error: 'Name is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
     if (!role || !role.trim()) {
-      return NextResponse.json(
-        { error: 'Role is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Role is required' }, { status: 400 });
     }
 
     if (!wage_type) {
-      return NextResponse.json(
-        { error: 'Wage type is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Wage type is required' }, { status: 400 });
     }
 
     // Validate wage type specific fields
@@ -148,26 +138,72 @@ export async function POST(request: NextRequest) {
       is_active: is_active !== undefined ? is_active : true,
     };
 
-    console.log('Inserting designer:', insertData); // Debug log
-
-    const { data, error } = await supabase
-      .from('designers')
-      .insert(insertData)
-      .select()
-      .single();
+    const { data, error } = await supabase.from('designers').insert(insertData).select().single();
 
     if (error) {
-      console.error('Supabase error:', error); // Debug log
       throw new Error(error.message);
     }
 
-    console.log('Designer inserted successfully:', data); // Debug log
     return NextResponse.json({ designer: data }, { status: 201 });
   } catch (error: any) {
     console.error('Error in staff POST route:', error);
     return NextResponse.json(
       { error: error.message || '직원을 추가하지 못했습니다.' },
-      { status: 500 }
+      { status: 400 }
+    );
+  }
+}
+
+// Comment: PATCH - Update a staff member (id in query parameter)
+export async function PATCH(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID가 필요합니다.' }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { name, role, shop_id, wage_type, percent_rate, hourly_rate, is_active } = body;
+
+    const designer = await updateDesigner(Number(id), {
+      name,
+      role,
+      shop_id,
+      wage_type,
+      percent_rate,
+      hourly_rate,
+      is_active,
+    });
+
+    return NextResponse.json({ designer }, { status: 200 });
+  } catch (error: any) {
+    console.error('Error in staff PATCH route:', error);
+    return NextResponse.json(
+      { error: error.message || '직원을 업데이트하지 못했습니다.' },
+      { status: 400 }
+    );
+  }
+}
+
+// Comment: DELETE - Delete a staff member (id in query parameter)
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID가 필요합니다.' }, { status: 400 });
+    }
+
+    await deleteDesigner(Number(id));
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error: any) {
+    console.error('Error in staff DELETE route:', error);
+    return NextResponse.json(
+      { error: error.message || '직원을 삭제하지 못했습니다.' },
+      { status: 400 }
     );
   }
 }

@@ -23,6 +23,18 @@ export async function GET(request: NextRequest) {
       toDate = end.toISOString();
     }
 
+    // Comment: Load bookings in date range (service-history source)
+    const { data: bookingsInRange, error: bookingsRangeError } = await supabase
+      .from('bookings')
+      .select('id, designer_id, service_id, total_amount, booking_date, booking_time, status')
+      .gte('booking_date', fromDate.split('T')[0])
+      .lte('booking_date', toDate.split('T')[0])
+      .eq('status', 'confirmed'); // Only count confirmed bookings
+
+    if (bookingsRangeError) {
+      console.error('Error fetching bookings for summary:', bookingsRangeError);
+    }
+
     // Comment: Load payments in range
     const { data: payments, error: paymentsError } = await supabase
       .from('payments')
@@ -36,20 +48,46 @@ export async function GET(request: NextRequest) {
     }
 
     const paymentsData = payments || [];
+    const bookingsData = bookingsInRange || [];
 
-    const bookingIds = Array.from(
-      new Set(
-        paymentsData
+    // Comment: Create a map of booking revenue (from bookings.total_amount or payments)
+    const bookingRevenueMap = new Map<number, number>();
+    
+    // Comment: First, use bookings.total_amount (service-history source)
+    bookingsData.forEach((b) => {
+      if (b.total_amount && toNum(b.total_amount) > 0) {
+        bookingRevenueMap.set(b.id, toNum(b.total_amount));
+      }
+    });
+
+    // Comment: Then, use payments data for bookings not in range or to supplement
+    paymentsData.forEach((p) => {
+      if (p.booking_id) {
+        const existing = bookingRevenueMap.get(p.booking_id) || 0;
+        // Comment: Use payment amount if booking doesn't have total_amount or payment is higher
+        const paymentAmount = toNum(p.amount);
+        if (paymentAmount > existing || existing === 0) {
+          bookingRevenueMap.set(p.booking_id, paymentAmount);
+        }
+      }
+    });
+
+    const bookingIds = Array.from(bookingRevenueMap.keys());
+
+    // Comment: Load related bookings for designer/service mapping (combine both sources)
+    const allBookingIds = Array.from(
+      new Set([
+        ...bookingsData.map((b) => b.id),
+        ...paymentsData
           .map((p) => p.booking_id)
-          .filter((id): id is number => id !== null && id !== undefined)
-      )
+          .filter((id): id is number => id !== null && id !== undefined),
+      ])
     );
 
-    // Comment: Load related bookings
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select('id, designer_id, service_id, total_amount, booking_date')
-      .in('id', bookingIds.length > 0 ? bookingIds : [-1]);
+      .in('id', allBookingIds.length > 0 ? allBookingIds : [-1]);
 
     if (bookingsError) {
       console.error('Error fetching bookings for summary:', bookingsError);
@@ -95,22 +133,14 @@ export async function GET(request: NextRequest) {
     const bookingsMap = new Map<number, any>();
     bookingData.forEach((b) => bookingsMap.set(b.id, b));
 
-    // Comment: Overall revenue and ticket metrics
-    const totalRevenue = paymentsData.reduce((sum, p) => sum + toNum(p.amount), 0);
-    const transactions = paymentsData.length;
+    // Comment: Overall revenue and ticket metrics (from booking revenue map)
+    const totalRevenue = Array.from(bookingRevenueMap.values()).reduce((sum, amount) => sum + amount, 0);
+    const transactions = bookingRevenueMap.size;
 
-    const distinctBookingIds = Array.from(
-      new Set(
-        paymentsData
-          .map((p) => p.booking_id)
-          .filter((id): id is number => id !== null && id !== undefined)
-      )
-    );
+    const avgTicket = transactions > 0 ? totalRevenue / transactions : 0;
 
-    const avgTicket =
-      distinctBookingIds.length > 0 ? totalRevenue / distinctBookingIds.length : 0;
-
-    // Comment: Revenue trends by date
+    // Comment: Always group by date (YYYY-MM-DD format)
+    // Comment: Frontend will handle transformation for Today/Week/Year
     const trendMap = new Map<
       string,
       {
@@ -119,12 +149,25 @@ export async function GET(request: NextRequest) {
       }
     >();
 
+    bookingsData.forEach((b) => {
+      const revenue = bookingRevenueMap.get(b.id) || 0;
+      if (revenue > 0) {
+        const key = b.booking_date as string;
+        const existing = trendMap.get(key) || { date: key, revenue: 0 };
+        existing.revenue += revenue;
+        trendMap.set(key, existing);
+      }
+    });
+
+    // Comment: Also include payments that don't have bookings
     paymentsData.forEach((p) => {
-      const d = new Date(p.created_at as string);
-      const key = d.toISOString().slice(0, 10);
-      const existing = trendMap.get(key) || { date: key, revenue: 0 };
-      existing.revenue += toNum(p.amount);
-      trendMap.set(key, existing);
+      if (!p.booking_id) {
+        const d = new Date(p.created_at as string);
+        const key = d.toISOString().slice(0, 10);
+        const existing = trendMap.get(key) || { date: key, revenue: 0 };
+        existing.revenue += toNum(p.amount);
+        trendMap.set(key, existing);
+      }
     });
 
     const trendPoints = Array.from(trendMap.values()).sort((a, b) =>
@@ -156,7 +199,7 @@ export async function GET(request: NextRequest) {
       percentage: paymentTotal > 0 ? (m.amount / paymentTotal) * 100 : 0,
     }));
 
-    // Comment: Top stylists by service revenue (exclude product-only payments)
+    // Comment: Top stylists by service revenue (from booking revenue map)
     const stylistMap = new Map<
       number,
       {
@@ -167,10 +210,8 @@ export async function GET(request: NextRequest) {
       }
     >();
 
-    paymentsData.forEach((p) => {
-      if (p.type === 'product') return;
-      if (!p.booking_id) return;
-      const booking = bookingsMap.get(p.booking_id);
+    bookingRevenueMap.forEach((revenue, bookingId) => {
+      const booking = bookingsMap.get(bookingId);
       if (!booking || !booking.designer_id) return;
       const designerId = booking.designer_id as number;
       const designer = designersMap.get(designerId);
@@ -182,7 +223,7 @@ export async function GET(request: NextRequest) {
         revenue: 0,
         bookingsCount: 0,
       };
-      existing.revenue += toNum(p.amount);
+      existing.revenue += revenue;
       existing.bookingsCount += 1;
       stylistMap.set(designerId, existing);
     });
@@ -205,7 +246,7 @@ export async function GET(request: NextRequest) {
         topStylistsTotal > 0 ? (s.revenue / topStylistsTotal) * 100 : 0,
     }));
 
-    // Comment: Revenue by service (grouped by service name)
+    // Comment: Revenue by service (from booking revenue map)
     const serviceMapAgg = new Map<
       number,
       {
@@ -216,10 +257,8 @@ export async function GET(request: NextRequest) {
       }
     >();
 
-    paymentsData.forEach((p) => {
-      if (p.type === 'product') return;
-      if (!p.booking_id) return;
-      const booking = bookingsMap.get(p.booking_id);
+    bookingRevenueMap.forEach((revenue, bookingId) => {
+      const booking = bookingsMap.get(bookingId);
       if (!booking || !booking.service_id) return;
       const serviceId = booking.service_id as number;
       const service = servicesMap.get(serviceId);
@@ -232,7 +271,7 @@ export async function GET(request: NextRequest) {
         revenue: 0,
       };
       existing.transactions += 1;
-      existing.revenue += toNum(p.amount);
+      existing.revenue += revenue;
       serviceMapAgg.set(serviceId, existing);
     });
 
@@ -262,5 +301,8 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+
+
 
 

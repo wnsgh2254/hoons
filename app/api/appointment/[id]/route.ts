@@ -24,6 +24,12 @@ export async function PATCH(
     if (typeof body.status === 'string') {
       updates.status = body.status;
     }
+    if (typeof body.total_amount === 'number' || typeof body.total_amount === 'string') {
+      updates.total_amount = Number(body.total_amount);
+    }
+    if (typeof body.deposit_amount === 'number' || typeof body.deposit_amount === 'string') {
+      updates.deposit_amount = Number(body.deposit_amount);
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: '업데이트할 필드가 없습니다.' }, { status: 400 });
