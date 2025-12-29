@@ -462,8 +462,8 @@ export default function SalesOverviewPage() {
               </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+                <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-black">Prepaid Pass Status</h3>
                   <Link
                     href="/admin/prepaid"
@@ -487,65 +487,67 @@ export default function SalesOverviewPage() {
                     />
                   </div>
                 </div>
-                {loadingPrepaid ? (
-                  <div className="text-sm text-gray-500 py-8 text-center">Loading prepaid members...</div>
-                ) : prepaidMembers.length === 0 ? (
-                  <div className="text-sm text-gray-500 py-8 text-center">
-                    {prepaidSearchQuery ? 'No members found.' : 'No prepaid pass members yet.'}
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                    {prepaidMembers
-                      .filter((member) => {
-                        if (!prepaidSearchQuery) return true;
-                        const query = prepaidSearchQuery.toLowerCase();
-                        return (
-                          member.name?.toLowerCase().includes(query) ||
-                          member.phone?.includes(query) ||
-                          member.email?.toLowerCase().includes(query)
-                        );
-                      })
-                      .map((member) => (
-                        <div
-                          key={member.id}
-                          className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-gray-300 transition-colors"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm font-medium text-black">
-                                  {member.name || 'Unknown'}
-                                </p>
-                                {member.is_active && (
-                                  <span className="bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                    Active
-                                  </span>
+                <div className="flex-1 min-h-0">
+                  {loadingPrepaid ? (
+                    <div className="text-sm text-gray-500 py-8 text-center">Loading prepaid members...</div>
+                  ) : prepaidMembers.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-8 text-center">
+                      {prepaidSearchQuery ? 'No members found.' : 'No prepaid pass members yet.'}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 h-full max-h-[28rem] overflow-y-auto pr-1">
+                      {prepaidMembers
+                        .filter((member) => {
+                          if (!prepaidSearchQuery) return true;
+                          const query = prepaidSearchQuery.toLowerCase();
+                          return (
+                            member.name?.toLowerCase().includes(query) ||
+                            member.phone?.includes(query) ||
+                            member.email?.toLowerCase().includes(query)
+                          );
+                        })
+                        .map((member) => (
+                          <div
+                            key={member.id}
+                            className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:border-gray-300 transition-colors"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="text-sm font-medium text-black">
+                                    {member.name || 'Unknown'}
+                                  </p>
+                                  {member.is_active && (
+                                    <span className="bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+                                {member.phone && (
+                                  <p className="text-xs text-gray-500 mb-0.5">{member.phone}</p>
+                                )}
+                                {member.email && (
+                                  <p className="text-xs text-gray-500">{member.email}</p>
                                 )}
                               </div>
-                              {member.phone && (
-                                <p className="text-xs text-gray-500 mb-0.5">{member.phone}</p>
-                              )}
-                              {member.email && (
-                                <p className="text-xs text-gray-500">{member.email}</p>
-                              )}
-                            </div>
-                            <div className="text-right">
-                              {member.points !== undefined && (
-                                <p className="text-sm font-bold text-black">
-                                  {member.points} points
-                                </p>
-                              )}
-                              {member.expires_at && (
-                                <p className="text-xs text-gray-500">
-                                  Expires: {new Date(member.expires_at).toLocaleDateString('ko-KR')}
-                                </p>
-                              )}
+                              <div className="text-right">
+                                {member.points !== undefined && (
+                                  <p className="text-sm font-bold text-black">
+                                    {member.points} points
+                                  </p>
+                                )}
+                                {member.expires_at && (
+                                  <p className="text-xs text-gray-500">
+                                    Expires: {new Date(member.expires_at).toLocaleDateString('ko-KR')}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col gap-4">
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">

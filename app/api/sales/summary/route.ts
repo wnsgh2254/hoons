@@ -77,10 +77,13 @@ export async function GET(request: NextRequest) {
     // Comment: Load related bookings for designer/service mapping (combine both sources)
     const allBookingIds = Array.from(
       new Set([
-        ...bookingsData.map((b) => b.id),
+        ...bookingsData.map((b: any) => b.id),
         ...paymentsData
-          .map((p) => p.booking_id)
-          .filter((id): id is number => id !== null && id !== undefined),
+          .map((p: any) => p.booking_id)
+          .filter(
+            (id: number | null | undefined): id is number =>
+              id !== null && id !== undefined
+          ),
       ])
     );
 
@@ -99,16 +102,22 @@ export async function GET(request: NextRequest) {
     const designerIds = Array.from(
       new Set(
         bookingData
-          .map((b) => b.designer_id)
-          .filter((id): id is number => id !== null && id !== undefined)
+          .map((b: any) => b.designer_id)
+          .filter(
+            (id: number | null | undefined): id is number =>
+              id !== null && id !== undefined
+          )
       )
     );
 
     const serviceIds = Array.from(
       new Set(
         bookingData
-          .map((b) => b.service_id)
-          .filter((id): id is number => id !== null && id !== undefined)
+          .map((b: any) => b.service_id)
+          .filter(
+            (id: number | null | undefined): id is number =>
+              id !== null && id !== undefined
+          )
       )
     );
 
