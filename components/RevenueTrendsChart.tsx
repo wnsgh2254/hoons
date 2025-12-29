@@ -23,7 +23,7 @@ export default function RevenueTrendsChart({
   // Comment: Transform data based on timeRange
   const transformedPoints = useMemo(() => {
     if (timeRange === 'Today') {
-      // Comment: Group by hour for today (24 hours)
+      // Comment: Group by hour for today (09:00 ~ 18:00 only)
       const todayStr = new Date().toISOString().slice(0, 10);
       const hourMap = new Map<number, number>();
 
@@ -45,11 +45,16 @@ export default function RevenueTrendsChart({
         }
       });
 
-      // Comment: Create 24 hours (00:00 to 23:00)
-      return Array.from({ length: 24 }, (_, i) => ({
-        date: `${String(i).padStart(2, '0')}:00`,
-        revenue: hourMap.get(i) || 0,
-      }));
+      // Comment: Create hours from 09:00 to 18:00
+      const startHour = 9;
+      const endHour = 18;
+      return Array.from({ length: endHour - startHour + 1 }, (_, idx) => {
+        const hour = startHour + idx;
+        return {
+          date: `${String(hour).padStart(2, '0')}:00`,
+          revenue: hourMap.get(hour) || 0,
+        };
+      });
     } else if (timeRange === 'Week') {
       // Comment: Last 7 days (excluding today) - sliding window
       const today = new Date();
@@ -157,7 +162,7 @@ export default function RevenueTrendsChart({
               paddingTop: '40px',
               paddingBottom: '8px',
               justifyContent: transformedPoints.length <= 12 ? 'space-between' : 'flex-start',
-              gap: '4px',
+              gap: '1px',
               minWidth: '100%',
             }}
           >

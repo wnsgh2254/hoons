@@ -29,9 +29,9 @@ export async function POST(request: NextRequest) {
       }
 
       const findDesignerId = (name: string) =>
-        designers?.find((d) => d.name === name)?.id ?? null;
+        designers?.find((d: { id: number; name: string }) => d.name === name)?.id ?? null;
       const findService = (name: string) =>
-        services?.find((s) => s.name === name) ?? null;
+        services?.find((s: { id: number; name: string; price?: number }) => s.name === name) ?? null;
 
       const baseDate = '2025-12-22';
 
