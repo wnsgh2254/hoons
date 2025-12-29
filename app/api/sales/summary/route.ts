@@ -54,14 +54,14 @@ export async function GET(request: NextRequest) {
     const bookingRevenueMap = new Map<number, number>();
     
     // Comment: First, use bookings.total_amount (service-history source)
-    bookingsData.forEach((b) => {
+    bookingsData.forEach((b: any) => {
       if (b.total_amount && toNum(b.total_amount) > 0) {
         bookingRevenueMap.set(b.id, toNum(b.total_amount));
       }
     });
 
     // Comment: Then, use payments data for bookings not in range or to supplement
-    paymentsData.forEach((p) => {
+    paymentsData.forEach((p: any) => {
       if (p.booking_id) {
         const existing = bookingRevenueMap.get(p.booking_id) || 0;
         // Comment: Use payment amount if booking doesn't have total_amount or payment is higher
@@ -125,13 +125,13 @@ export async function GET(request: NextRequest) {
     ]);
 
     const designersMap = new Map<number, { id: number; name: string }>();
-    (designers || []).forEach((d) => designersMap.set(d.id, d));
+    (designers || []).forEach((d: any) => designersMap.set(d.id, d));
 
     const servicesMap = new Map<number, { id: number; name: string; price: number }>();
-    (services || []).forEach((s) => servicesMap.set(s.id, s));
+    (services || []).forEach((s: any) => servicesMap.set(s.id, s));
 
     const bookingsMap = new Map<number, any>();
-    bookingData.forEach((b) => bookingsMap.set(b.id, b));
+    bookingData.forEach((b: any) => bookingsMap.set(b.id, b));
 
     // Comment: Overall revenue and ticket metrics (from booking revenue map)
     const totalRevenue = Array.from(bookingRevenueMap.values()).reduce((sum, amount) => sum + amount, 0);
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
       }
     >();
 
-    bookingsData.forEach((b) => {
+    bookingsData.forEach((b: any) => {
       const revenue = bookingRevenueMap.get(b.id) || 0;
       if (revenue > 0) {
         const key = b.booking_date as string;
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Comment: Also include payments that don't have bookings
-    paymentsData.forEach((p) => {
+    paymentsData.forEach((p: any) => {
       if (!p.booking_id) {
         const d = new Date(p.created_at as string);
         const key = d.toISOString().slice(0, 10);
@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
       }
     >();
 
-    paymentsData.forEach((p) => {
+    paymentsData.forEach((p: any) => {
       const key = p.method as string;
       const existing = paymentMethodMap.get(key) || { method: key, amount: 0 };
       existing.amount += toNum(p.amount);

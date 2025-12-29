@@ -320,10 +320,6 @@ export default function SalesOverviewPage() {
                   <div className="bg-gray-50 p-2 rounded-lg text-gray-400 group-hover:text-black transition-colors">
                     <span className="material-symbols-outlined">attach_money</span>
                   </div>
-                  <span className="bg-gray-100 text-black text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">trending_up</span>
-                    {summary ? '—' : '0%'}
-                  </span>
                 </div>
                 <p className="text-gray-500 text-sm font-medium mb-1">Total Revenue</p>
                 <h3 className="text-2xl font-bold text-black">
@@ -337,10 +333,6 @@ export default function SalesOverviewPage() {
                   <div className="bg-gray-50 p-2 rounded-lg text-gray-400 group-hover:text-black transition-colors">
                     <span className="material-symbols-outlined">receipt_long</span>
                   </div>
-                  <span className="bg-gray-100 text-black text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">trending_up</span>
-                    {summary ? '—' : '0%'}
-                  </span>
                 </div>
                 <p className="text-gray-500 text-sm font-medium mb-1">Transactions</p>
                 <h3 className="text-2xl font-bold text-black">
@@ -352,10 +344,6 @@ export default function SalesOverviewPage() {
                   <div className="bg-gray-50 p-2 rounded-lg text-gray-400 group-hover:text-black transition-colors">
                     <span className="material-symbols-outlined">savings</span>
                   </div>
-                  <span className="bg-gray-100 text-black text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">trending_up</span>
-                    {summary ? '—' : '0%'}
-                  </span>
                 </div>
                 <p className="text-gray-500 text-sm font-medium mb-1">Net Profit</p>
                 <h3 className="text-2xl font-bold text-black">
@@ -369,10 +357,6 @@ export default function SalesOverviewPage() {
                   <div className="bg-gray-50 p-2 rounded-lg text-gray-400 group-hover:text-black transition-colors">
                     <span className="material-symbols-outlined">shopping_bag</span>
                   </div>
-                  <span className="bg-gray-50 text-gray-500 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">trending_down</span>
-                    1.2%
-                  </span>
                 </div>
                 <p className="text-gray-500 text-sm font-medium mb-1">Avg Ticket</p>
                 <h3 className="text-2xl font-bold text-black">
