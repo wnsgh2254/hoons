@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import type { Booking } from '@/lib/types';
-import AdminSidebar from '@/components/AdminSidebar';
+import AdminTopNav from '@/components/AdminTopNav';
 
 type BookingWithRelations = Booking & {
   designer?: { id: number; name: string } | null;
@@ -92,6 +92,7 @@ export default function AppointmentsManagementPage() {
   const [newBookingLoadingShops, setNewBookingLoadingShops] = useState(false);
   const [newBookingLoadingOptions, setNewBookingLoadingOptions] = useState(false);
   const [availableDesignerIds, setAvailableDesignerIds] = useState<number[]>([]);
+  const [loadingDesignerAvailability, setLoadingDesignerAvailability] = useState(false);
 
   // Comment: Editing existing booking from Upcoming list
   const [editingBooking, setEditingBooking] = useState<BookingWithRelations | null>(null);
@@ -130,8 +131,10 @@ export default function AppointmentsManagementPage() {
   const [allDesigners, setAllDesigners] = useState<any[]>([]);
   const [selectedShopFilter, setSelectedShopFilter] = useState<string>('전체');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [memo, setMemo] = useState<string>('');
+  const [memoLoading, setMemoLoading] = useState(false);
+  const [memoSaving, setMemoSaving] = useState(false);
+  const [memoSuccessMessage, setMemoSuccessMessage] = useState<string | null>(null);
 
   // Comment: Week view state (replaces modal with main timetable view)
   const [isWeekViewMode, setIsWeekViewMode] = useState(false);
@@ -149,6 +152,8 @@ export default function AppointmentsManagementPage() {
   const [restrictionStartTime, setRestrictionStartTime] = useState<string>('');
   const [restrictionEndTime, setRestrictionEndTime] = useState<string>('');
   const [restrictionSubmitting, setRestrictionSubmitting] = useState(false);
+  const [existingRestriction, setExistingRestriction] = useState<any | null>(null);
+  const [loadingExistingRestriction, setLoadingExistingRestriction] = useState(false);
 
   // Comment: Holiday and special work day modal state
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
@@ -158,6 +163,9 @@ export default function AppointmentsManagementPage() {
   const [holidaySelectedDates, setHolidaySelectedDates] = useState<string[]>([]);
   const [holidayCurrentMonth, setHolidayCurrentMonth] = useState<Date>(new Date());
   const [holidaySubmitting, setHolidaySubmitting] = useState(false);
+  const [holidayRegularSchedule, setHolidayRegularSchedule] = useState<any[]>([]);
+  const [holidayScheduleLoading, setHolidayScheduleLoading] = useState(false);
+  const [holidayExistingTimeOffs, setHolidayExistingTimeOffs] = useState<any[]>([]);
 
   // Comment: Booking restrictions state
   const [bookingRestrictions, setBookingRestrictions] = useState<any[]>([]);
@@ -238,6 +246,106 @@ export default function AppointmentsManagementPage() {
     fetchRestrictions();
   }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId]);
 
+  // Comment: Check for existing restriction when modal opens
+  useEffect(() => {
+    if (isRestrictionModalOpen && restrictionDesignerId && restrictionDate) {
+      const checkExistingRestriction = async () => {
+        setLoadingExistingRestriction(true);
+        try {
+          const res = await fetch(
+            `/api/booking-restrictions?designer_id=${restrictionDesignerId}&date=${encodeURIComponent(restrictionDate)}`
+          );
+          const data = await res.json();
+          if (res.ok && data.restrictions && data.restrictions.length > 0) {
+            // Comment: Find matching restriction based on current type
+            const matching = data.restrictions.find((r: any) => {
+              if (restrictionType === 'date') {
+                return r.restriction_type === 'date';
+              } else {
+                return r.restriction_type === 'time';
+              }
+            });
+            setExistingRestriction(matching || data.restrictions[0]);
+            if (matching && matching.restriction_type === 'time') {
+              setRestrictionStartTime(matching.start_time?.substring(0, 5) || '');
+              setRestrictionEndTime(matching.end_time?.substring(0, 5) || '');
+              setRestrictionType('time');
+            } else if (matching) {
+              setRestrictionType('date');
+              setRestrictionStartTime('');
+              setRestrictionEndTime('');
+            }
+          } else {
+            setExistingRestriction(null);
+          }
+        } catch (error) {
+          console.error('Error fetching existing restriction:', error);
+          setExistingRestriction(null);
+        } finally {
+          setLoadingExistingRestriction(false);
+        }
+      };
+
+      checkExistingRestriction();
+    } else if (!isRestrictionModalOpen) {
+      // Comment: Reset when modal closes
+      setExistingRestriction(null);
+    }
+  }, [isRestrictionModalOpen, restrictionDesignerId, restrictionDate, restrictionType]);
+
+  // Comment: Load regular schedule and existing time offs for holiday modal
+  useEffect(() => {
+    if (isHolidayModalOpen && holidayDesignerId) {
+      const fetchData = async () => {
+        setHolidayScheduleLoading(true);
+        try {
+          // Comment: Fetch regular schedule
+          const scheduleRes = await fetch(`/api/designer-schedules?designer_id=${holidayDesignerId}`);
+          const scheduleData = await scheduleRes.json();
+          if (scheduleRes.ok) {
+            setHolidayRegularSchedule(scheduleData.schedules || []);
+          }
+
+          // Comment: Fetch existing time offs (임의 휴일, 특별 근무일)
+          const timeOffRes = await fetch(`/api/designer-time-off?designer_id=${holidayDesignerId}`);
+          const timeOffData = await timeOffRes.json();
+          if (timeOffRes.ok) {
+            const existingTimeOffs = (timeOffData.timeOffs || []).filter(
+              (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일'
+            );
+            setHolidayExistingTimeOffs(existingTimeOffs);
+            
+            // Comment: Extract dates from existing time offs and set to selected dates
+            const dates: string[] = [];
+            existingTimeOffs.forEach((to: any) => {
+              const start = new Date(to.start_date);
+              const end = new Date(to.end_date);
+              const current = new Date(start);
+              while (current <= end) {
+                dates.push(current.toISOString().split('T')[0]);
+                current.setDate(current.getDate() + 1);
+              }
+            });
+            setHolidaySelectedDates(dates);
+          }
+        } catch (error) {
+          console.error('Error fetching holiday data:', error);
+          setHolidayRegularSchedule([]);
+          setHolidayExistingTimeOffs([]);
+        } finally {
+          setHolidayScheduleLoading(false);
+        }
+      };
+
+      fetchData();
+    } else if (!isHolidayModalOpen) {
+      setHolidayRegularSchedule([]);
+      setHolidayScheduleLoading(false);
+      setHolidayExistingTimeOffs([]);
+      setHolidaySelectedDates([]);
+    }
+  }, [isHolidayModalOpen, holidayDesignerId]);
+
   // Comment: Load week view bookings when week view mode is active
   useEffect(() => {
     if (!isWeekViewMode || !weekViewDesignerId || !weekViewStartDate) {
@@ -308,9 +416,33 @@ export default function AppointmentsManagementPage() {
     fetchMonth();
   }, [monthKey]);
 
+  // Comment: Load admin memo on mount
+  useEffect(() => {
+    const fetchMemo = async () => {
+      setMemoLoading(true);
+      try {
+        const res = await fetch('/api/admin-memo');
+        const data = await res.json();
+        if (res.ok) {
+          setMemo(data.content || '');
+        } else {
+          console.error('Failed to load admin memo:', data.error);
+        }
+      } catch (err) {
+        console.error('Error loading admin memo:', err);
+      } finally {
+        setMemoLoading(false);
+      }
+    };
+
+    fetchMemo();
+  }, []);
+
   // Comment: Load designer availability for the selected date (per weekday)
+  // This includes designers with regular schedule OR special work day (특별 근무일)
   useEffect(() => {
     const fetchAvailability = async () => {
+      setLoadingDesignerAvailability(true);
       try {
         const res = await fetch(
           `/api/designer-schedules?date=${encodeURIComponent(selectedDate)}`
@@ -321,10 +453,15 @@ export default function AppointmentsManagementPage() {
           setAvailableDesignerIds([]);
           return;
         }
+        // Comment: Special work days have priority - designers with special work day are included
+        // even if they don't have regular schedule for that weekday
         setAvailableDesignerIds(data.designerIds || []);
+        console.log(`[appointments] Available designers for ${selectedDate}:`, data.designerIds);
       } catch (err) {
         console.error('Error loading designer availability:', err);
         setAvailableDesignerIds([]);
+      } finally {
+        setLoadingDesignerAvailability(false);
       }
     };
 
@@ -429,29 +566,6 @@ export default function AppointmentsManagementPage() {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openDesignerDropdown]);
 
-  // Comment: Close sidebar when clicking outside
-  useEffect(() => {
-    if (!isSidebarOpen) return;
-    
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      const sidebar = document.getElementById('admin-sidebar');
-      const menuButton = target.closest('button[aria-label="Toggle sidebar"]');
-      
-      // Comment: Don't close if clicking inside sidebar or menu button
-      if (sidebar && sidebar.contains(target)) {
-        return;
-      }
-      if (menuButton) {
-        return;
-      }
-      
-      setIsSidebarOpen(false);
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isSidebarOpen]);
 
   // Comment: Compute current time line position for Sydney time (only when viewing today)
   useEffect(() => {
@@ -512,9 +626,9 @@ export default function AppointmentsManagementPage() {
     return map;
   }, [bookings]);
 
-  // Comment: Designers visible in the grid - always show all designers from DB, sorted by role
+  // Comment: Designers visible in the grid - filter by availability for selected date
   const visibleDesigners = useMemo(() => {
-    // Always show all designers from the database, sorted by role: Director, Manager, Designer
+    // Filter designers based on availability for the selected date
     if (allDesigners.length > 0) {
       const roleOrder: Record<string, number> = {
         'Director': 1,
@@ -522,7 +636,14 @@ export default function AppointmentsManagementPage() {
         'Designer': 3,
       };
       
-      const sorted = [...allDesigners].sort((a, b) => {
+      // Comment: Filter designers that are available on the selected date
+      // If availableDesignerIds is empty (still loading), show all designers
+      // Otherwise, only show designers whose IDs are in availableDesignerIds
+      const filtered = availableDesignerIds.length > 0
+        ? allDesigners.filter((d) => availableDesignerIds.includes(d.id))
+        : allDesigners;
+      
+      const sorted = [...filtered].sort((a, b) => {
         const roleA = (a.role || '').trim();
         const roleB = (b.role || '').trim();
         const orderA = roleOrder[roleA] || 999;
@@ -541,7 +662,7 @@ export default function AppointmentsManagementPage() {
     
     // Fallback: if designers not loaded yet, return empty array (will show once loaded)
     return [];
-  }, [allDesigners]);
+  }, [allDesigners, availableDesignerIds]);
 
   // Comment: Stable color assignment per designer
   const designerColorMap = useMemo(() => {
@@ -641,40 +762,29 @@ export default function AppointmentsManagementPage() {
   };
 
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex">
-      <AdminSidebar isSidebarOpen={isSidebarOpen} />
-
-      {/* Main content */}
-      <main className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white transition-all duration-300 ease-in-out ${
-        isSidebarOpen ? 'ml-64' : ''
-      }`}>
-        {/* Success toast for new bookings */}
-        {bookingSuccessMessage && (
-          <div className="pointer-events-none fixed right-4 top-4 z-50">
-            <div className="pointer-events-auto rounded-xl bg-black text-white shadow-lg px-4 py-3 text-xs flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm">check_circle</span>
-              <span>{bookingSuccessMessage}</span>
-            </div>
+    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
+      <AdminTopNav />
+      {/* Success toast for new bookings */}
+      {bookingSuccessMessage && (
+        <div className="pointer-events-none fixed right-4 top-20 z-50">
+          <div className="pointer-events-auto rounded-xl bg-black text-white shadow-lg px-4 py-3 text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+            <span>{bookingSuccessMessage}</span>
           </div>
-        )}
+        </div>
+      )}
+      {/* Success toast for memo */}
+      {memoSuccessMessage && (
+        <div className="pointer-events-none fixed right-4 top-20 z-50">
+          <div className="pointer-events-auto rounded-xl bg-black text-white shadow-lg px-4 py-3 text-xs flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+            <span>{memoSuccessMessage}</span>
+          </div>
+        </div>
+      )}
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
           <div className="flex items-center gap-4 flex-1">
-            {/* Navigation Menu Button */}
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-              aria-label="Toggle sidebar"
-            >
-              <span className="material-symbols-outlined">menu</span>
-            </button>
-            {/* Home Button */}
-            <Link
-              href="/admin/dashboard"
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <span className="material-symbols-outlined">home</span>
-            </Link>
             {/* Shop Filter Dropdown */}
             <select
               value={selectedShopFilter}
@@ -790,19 +900,63 @@ export default function AppointmentsManagementPage() {
 
                 {/* Memo below calendar */}
                 <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden min-h-0">
-                  <div className="p-5 border-b border-gray-100 shrink-0">
+                  <div className="p-5 border-b border-gray-100 shrink-0 flex items-center justify-between">
                     <h3 className="font-bold text-black">전달사항 (Memo)</h3>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setMemoSaving(true);
+                        try {
+                          const res = await fetch('/api/admin-memo', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: memo }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) {
+                            throw new Error(data.error || 'Failed to save memo');
+                          }
+                          // Success message
+                          setMemoSuccessMessage('전달사항이 저장되었습니다.');
+                          setTimeout(() => {
+                            setMemoSuccessMessage(null);
+                          }, 3000);
+                        } catch (err) {
+                          console.error('Error saving memo:', err);
+                          alert('전달사항 저장에 실패했습니다.');
+                        } finally {
+                          setMemoSaving(false);
+                        }
+                      }}
+                      disabled={memoSaving || memoLoading}
+                      className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                      {memoSaving ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>저장 중...</span>
+                        </>
+                      ) : (
+                        '저장하기'
+                      )}
+                    </button>
                   </div>
-                  <div className="flex-1 p-5 min-h-0">
-                    <textarea
-                      value={memo}
-                      onChange={(e) => setMemo(e.target.value)}
-                      placeholder="전달사항을 입력하세요..."
-                      className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 text-sm"
-                    />
-                    </div>
+                  <div className="flex-1 p-5 min-h-0 flex flex-col">
+                    {memoLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                      </div>
+                    ) : (
+                      <textarea
+                        value={memo}
+                        onChange={(e) => setMemo(e.target.value)}
+                        placeholder="전달사항을 입력하세요..."
+                        className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 text-sm"
+                      />
+                    )}
                   </div>
                 </div>
+              </div>
 
               {/* Center: Full Schedule */}
               <div className="lg:col-span-9 flex flex-col gap-4 min-h-0">
@@ -827,6 +981,15 @@ export default function AppointmentsManagementPage() {
                   ref={scheduleRef}
                   className="flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
                 >
+                  {/* Loading overlay */}
+                  {loadingDesignerAvailability && (
+                    <div className="absolute inset-0 bg-gray-500/30 backdrop-blur-sm z-50 flex items-center justify-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                        <span className="text-sm font-medium text-gray-700">로딩 중...</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="h-full overflow-auto relative" id="schedule-scroll-container">
                     {/* Vertical column dividers for entire scrollable area - positioned outside grid to extend full height */}
                     {/* Note: These dividers are rendered here (lines 921-939) to ensure they extend the full scrollable height.
@@ -1377,18 +1540,16 @@ export default function AppointmentsManagementPage() {
                           </div>
                         );
                         })}
-                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
-              </div>
-
             </div>
           </div>
         </div>
+        </div>
       </main>
-
       {/* New Booking Modal */}
       {isNewBookingOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -1931,7 +2092,7 @@ export default function AppointmentsManagementPage() {
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
-    </div>
+            </div>
             <div className="p-6 space-y-6">
               {/* Add Time Off Form */}
               <div className="border border-gray-200 rounded-lg p-4 space-y-4">
@@ -2103,6 +2264,7 @@ export default function AppointmentsManagementPage() {
                   setRestrictionDate('');
                   setRestrictionStartTime('');
                   setRestrictionEndTime('');
+                  setExistingRestriction(null);
                 }}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
@@ -2153,10 +2315,118 @@ export default function AppointmentsManagementPage() {
                 <input
                   type="date"
                   value={restrictionDate}
-                  onChange={(e) => setRestrictionDate(e.target.value)}
+                  onChange={async (e) => {
+                    const newDate = e.target.value;
+                    setRestrictionDate(newDate);
+                    
+                    // Comment: Check for existing restriction when date changes
+                    if (newDate && restrictionDesignerId) {
+                      setLoadingExistingRestriction(true);
+                      try {
+                        const res = await fetch(
+                          `/api/booking-restrictions?designer_id=${restrictionDesignerId}&date=${encodeURIComponent(newDate)}`
+                        );
+                        const data = await res.json();
+                        if (res.ok && data.restrictions && data.restrictions.length > 0) {
+                          // Comment: Find matching restriction based on type
+                          const matching = data.restrictions.find((r: any) => {
+                            if (restrictionType === 'date') {
+                              return r.restriction_type === 'date';
+                            } else {
+                              return r.restriction_type === 'time';
+                            }
+                          });
+                          setExistingRestriction(matching || data.restrictions[0]);
+                          if (matching && matching.restriction_type === 'time') {
+                            setRestrictionStartTime(matching.start_time?.substring(0, 5) || '');
+                            setRestrictionEndTime(matching.end_time?.substring(0, 5) || '');
+                            setRestrictionType('time');
+                          } else if (matching) {
+                            setRestrictionType('date');
+                            setRestrictionStartTime('');
+                            setRestrictionEndTime('');
+                          }
+                        } else {
+                          setExistingRestriction(null);
+                          setRestrictionStartTime('');
+                          setRestrictionEndTime('');
+                        }
+                      } catch (error) {
+                        console.error('Error fetching existing restriction:', error);
+                        setExistingRestriction(null);
+                      } finally {
+                        setLoadingExistingRestriction(false);
+                      }
+                    } else {
+                      setExistingRestriction(null);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 focus:border-transparent"
                 />
               </div>
+              
+              {/* Comment: Show existing restriction info */}
+              {loadingExistingRestriction && (
+                <div className="text-sm text-gray-500 text-center py-2">확인 중...</div>
+              )}
+              {existingRestriction && !loadingExistingRestriction && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-yellow-600 text-lg">info</span>
+                    <span className="text-sm font-medium text-yellow-900">이미 예약금지가 설정되어 있습니다.</span>
+                  </div>
+                  <div className="text-xs text-yellow-800 space-y-1">
+                    <div>
+                      <span className="font-medium">유형:</span>{' '}
+                      {existingRestriction.restriction_type === 'date' ? '전체 날짜' : '특정 시간'}
+                    </div>
+                    {existingRestriction.restriction_type === 'time' && (
+                      <div>
+                        <span className="font-medium">시간:</span>{' '}
+                        {existingRestriction.start_time?.substring(0, 5)} - {existingRestriction.end_time?.substring(0, 5)}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('예약금지를 취소하시겠습니까?')) {
+                        return;
+                      }
+                      setRestrictionSubmitting(true);
+                      try {
+                        const res = await fetch(`/api/booking-restrictions?id=${existingRestriction.id}`, {
+                          method: 'DELETE',
+                        });
+                        if (res.ok) {
+                          alert('예약금지가 취소되었습니다.');
+                          setExistingRestriction(null);
+                          // Comment: Reload restrictions
+                          const restrictionsRes = await fetch(
+                            `/api/booking-restrictions?date=${encodeURIComponent(restrictionDate)}`
+                          );
+                          const restrictionsData = await restrictionsRes.json();
+                          if (restrictionsRes.ok) {
+                            setBookingRestrictions(restrictionsData.restrictions || []);
+                          }
+                        } else {
+                          const data = await res.json();
+                          alert(data.error || '예약금지 취소에 실패했습니다.');
+                        }
+                      } catch (error) {
+                        console.error('Error deleting restriction:', error);
+                        alert('예약금지 취소에 실패했습니다.');
+                      } finally {
+                        setRestrictionSubmitting(false);
+                      }
+                    }}
+                    disabled={restrictionSubmitting}
+                    className="w-full px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-60 transition-colors"
+                  >
+                    {restrictionSubmitting ? '취소 중...' : '예약금지 취소'}
+                  </button>
+                </div>
+              )}
+              
               {restrictionType === 'time' && (
                 <>
                   <div>
@@ -2183,57 +2453,60 @@ export default function AppointmentsManagementPage() {
                   </div>
                 </>
               )}
-              <button
-                onClick={async () => {
-                  if (!restrictionDate || (restrictionType === 'time' && (!restrictionStartTime || !restrictionEndTime))) {
-                    alert('모든 필드를 입력해주세요.');
-                    return;
-                  }
-                  setRestrictionSubmitting(true);
-                  try {
-                    const res = await fetch('/api/booking-restrictions', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        designer_id: restrictionDesignerId,
-                        restriction_type: restrictionType,
-                        restriction_date: restrictionDate,
-                        start_time: restrictionType === 'time' ? restrictionStartTime : null,
-                        end_time: restrictionType === 'time' ? restrictionEndTime : null,
-                      }),
-                    });
-                    if (res.ok) {
-                      alert('예약금지가 등록되었습니다.');
-                      // Comment: Reload restrictions
-                      const restrictionsRes = await fetch(
-                        `/api/booking-restrictions?date=${encodeURIComponent(restrictionDate)}`
-                      );
-                      const restrictionsData = await restrictionsRes.json();
-                      if (restrictionsRes.ok) {
-                        setBookingRestrictions(restrictionsData.restrictions || []);
-                      }
-                      setIsRestrictionModalOpen(false);
-                      setRestrictionDesignerId(null);
-                      setRestrictionDesignerName('');
-                      setRestrictionDate('');
-                      setRestrictionStartTime('');
-                      setRestrictionEndTime('');
-                    } else {
-                      const data = await res.json();
-                      alert(data.error || '예약금지 등록에 실패했습니다.');
+              {!existingRestriction && (
+                <button
+                  onClick={async () => {
+                    if (!restrictionDate || (restrictionType === 'time' && (!restrictionStartTime || !restrictionEndTime))) {
+                      alert('모든 필드를 입력해주세요.');
+                      return;
                     }
-                  } catch (error) {
-                    console.error('Error creating restriction:', error);
-                    alert('예약금지 등록에 실패했습니다.');
-                  } finally {
-                    setRestrictionSubmitting(false);
-                  }
-                }}
-                disabled={restrictionSubmitting}
-                className="w-full px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-60 transition-colors"
-              >
-                {restrictionSubmitting ? '등록 중...' : '등록'}
-              </button>
+                    setRestrictionSubmitting(true);
+                    try {
+                      const res = await fetch('/api/booking-restrictions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          designer_id: restrictionDesignerId,
+                          restriction_type: restrictionType,
+                          restriction_date: restrictionDate,
+                          start_time: restrictionType === 'time' ? restrictionStartTime : null,
+                          end_time: restrictionType === 'time' ? restrictionEndTime : null,
+                        }),
+                      });
+                      if (res.ok) {
+                        alert('예약금지가 등록되었습니다.');
+                        // Comment: Reload restrictions
+                        const restrictionsRes = await fetch(
+                          `/api/booking-restrictions?date=${encodeURIComponent(restrictionDate)}`
+                        );
+                        const restrictionsData = await restrictionsRes.json();
+                        if (restrictionsRes.ok) {
+                          setBookingRestrictions(restrictionsData.restrictions || []);
+                        }
+                        setIsRestrictionModalOpen(false);
+                        setRestrictionDesignerId(null);
+                        setRestrictionDesignerName('');
+                        setRestrictionDate('');
+                        setRestrictionStartTime('');
+                        setRestrictionEndTime('');
+                        setExistingRestriction(null);
+                      } else {
+                        const data = await res.json();
+                        alert(data.error || '예약금지 등록에 실패했습니다.');
+                      }
+                    } catch (error) {
+                      console.error('Error creating restriction:', error);
+                      alert('예약금지 등록에 실패했습니다.');
+                    } finally {
+                      setRestrictionSubmitting(false);
+                    }
+                  }}
+                  disabled={restrictionSubmitting}
+                  className="w-full px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-60 transition-colors"
+                >
+                  {restrictionSubmitting ? '등록 중...' : '등록'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2348,6 +2621,77 @@ export default function AppointmentsManagementPage() {
                       const isCurrentMonth = date.getMonth() === month;
                       const isSelected = holidaySelectedDates.includes(dateStr);
                       const isToday = dateStr === new Date().toISOString().split('T')[0];
+                      
+                      // Comment: During loading, show all dates as normal (white background)
+                      if (holidayScheduleLoading) {
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => {
+                              if (!isCurrentMonth) return;
+                              setHolidaySelectedDates((prev) =>
+                                prev.includes(dateStr)
+                                  ? prev.filter((d) => d !== dateStr)
+                                  : [...prev, dateStr]
+                              );
+                            }}
+                            disabled={!isCurrentMonth}
+                            className={`
+                              aspect-square text-xs rounded-lg transition-colors
+                              ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'}
+                              ${isSelected 
+                                ? holidayType === 'holiday' 
+                                  ? 'border-2 border-red-500 bg-white text-gray-900' 
+                                  : 'bg-blue-500 text-white'
+                                : 'hover:bg-gray-100'}
+                              ${isToday && !isSelected ? 'border-2 border-blue-500' : ''}
+                            `}
+                          >
+                            {date.getDate()}
+                          </button>
+                        );
+                      }
+                      
+                      // Comment: Check if this date is a regular holiday (no schedule for this weekday)
+                      const weekday = date.getDay(); // 0 = Sunday, 6 = Saturday
+                      const hasRegularSchedule = holidayRegularSchedule.some(
+                        (s: any) => s.weekday === weekday && !s.effective_to
+                      );
+                      const isRegularHoliday = isCurrentMonth && !hasRegularSchedule;
+                      
+                      // Comment: Check if this date has existing time off (임의 휴일 or 특별 근무일)
+                      const existingTimeOff = holidayExistingTimeOffs.find((to: any) => {
+                        const start = new Date(to.start_date);
+                        const end = new Date(to.end_date);
+                        const current = new Date(dateStr);
+                        return current >= start && current <= end;
+                      });
+                      const isExistingHoliday = existingTimeOff?.reason === '임의 휴일';
+                      const isExistingSpecial = existingTimeOff?.reason === '특별 근무일';
+                      
+                      // Comment: Check if this date is newly selected
+                      const isNewlySelectedHoliday = isSelected && holidayType === 'holiday';
+                      const isNewlySelectedSpecial = isSelected && holidayType === 'special';
+                      
+                      // Comment: Determine display style - priority: special work day > holiday > regular holiday
+                      let displayClass = '';
+                      if (isExistingSpecial || isNewlySelectedSpecial) {
+                        // Comment: Special work day (blue) - even if it's a regular holiday
+                        displayClass = 'bg-blue-500 text-white';
+                      } else if (isExistingHoliday || isNewlySelectedHoliday) {
+                        // Comment: 임의 휴일 (red border) - even if it's a regular holiday
+                        displayClass = 'border-2 border-red-500 bg-white text-gray-900';
+                      } else if (isRegularHoliday) {
+                        // Comment: Regular holiday only (red fill)
+                        displayClass = 'bg-red-500 text-white';
+                      } else {
+                        // Comment: Normal day
+                        displayClass = 'hover:bg-gray-100';
+                      }
+                      
+                      // Comment: Today indicator (only if not special/holiday/regular holiday)
+                      const showTodayBorder = isToday && !isSelected && !isRegularHoliday && !isExistingHoliday && !isExistingSpecial;
+                      
                       return (
                         <button
                           key={index}
@@ -2363,8 +2707,8 @@ export default function AppointmentsManagementPage() {
                           className={`
                             aspect-square text-xs rounded-lg transition-colors
                             ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'}
-                            ${isSelected ? 'bg-red-500 text-white' : 'hover:bg-gray-100'}
-                            ${isToday && !isSelected ? 'border-2 border-blue-500' : ''}
+                            ${displayClass}
+                            ${showTodayBorder ? 'border-2 border-blue-500' : ''}
                           `}
                         >
                           {date.getDate()}
@@ -2399,6 +2743,10 @@ export default function AppointmentsManagementPage() {
                   }
                   setHolidaySubmitting(true);
                   try {
+                    // Comment: Get designer's shop_id
+                    const designer = allDesigners.find((d) => d.id === holidayDesignerId);
+                    const designerShopId = designer?.shop_id;
+                    
                     // Comment: Create time off records for selected dates
                     const promises = holidaySelectedDates.map((date) =>
                       fetch('/api/designer-time-off', {
@@ -2406,6 +2754,7 @@ export default function AppointmentsManagementPage() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           designer_id: holidayDesignerId,
+                          shop_id: designerShopId || null,
                           start_date: date,
                           end_date: date,
                           reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
@@ -2414,6 +2763,18 @@ export default function AppointmentsManagementPage() {
                     );
                     await Promise.all(promises);
                     alert('설정이 완료되었습니다.');
+                    
+                    // Comment: Reload available designers if the selected date is in the current view
+                    if (selectedDate && holidaySelectedDates.includes(selectedDate)) {
+                      const res = await fetch(
+                        `/api/designer-schedules?date=${encodeURIComponent(selectedDate)}`
+                      );
+                      const data = await res.json();
+                      if (res.ok) {
+                        setAvailableDesignerIds(data.designerIds || []);
+                      }
+                    }
+                    
                     setIsHolidayModalOpen(false);
                     setHolidayDesignerId(null);
                     setHolidayDesignerName('');
@@ -2425,10 +2786,10 @@ export default function AppointmentsManagementPage() {
                     setHolidaySubmitting(false);
                   }
                 }}
-                disabled={holidaySubmitting}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                disabled={holidaySubmitting || holidaySelectedDates.length === 0}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
-                {holidaySubmitting ? '설정 중...' : '닫기'}
+                {holidaySubmitting ? '설정 중...' : '저장하기'}
               </button>
             </div>
           </div>

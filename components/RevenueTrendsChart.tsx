@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 
-type TimeRange = 'Today' | 'Week' | 'Month' | 'Year';
+type TimeRange = 'Today' | 'Week' | 'Month' | 'Year' | 'Custom';
 
 interface TrendPoint {
   date: string;
@@ -13,12 +13,16 @@ interface RevenueTrendsChartProps {
   trendPoints: TrendPoint[];
   timeRange: TimeRange;
   loading?: boolean;
+  customStartDate?: string;
+  customEndDate?: string;
 }
 
 export default function RevenueTrendsChart({
   trendPoints,
   timeRange,
   loading = false,
+  customStartDate,
+  customEndDate,
 }: RevenueTrendsChartProps) {
   // Comment: Transform data based on timeRange
   const transformedPoints = useMemo(() => {
@@ -100,7 +104,47 @@ export default function RevenueTrendsChart({
         date: `${year}-${String(idx + 1).padStart(2, '0')}`,
         revenue,
       }));
-    } else {
+    } else if (timeRange === 'Custom' && customStartDate && customEndDate) {
+      // Comment: Custom date range - show all days between start and end
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      
+      const dates: string[] = [];
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      
+      // Comment: Generate all dates in the range
+      const currentDate = new Date(start);
+      while (currentDate <= end) {
+        const dateStr = `${currentDate.getFullYear()}-${pad2(currentDate.getMonth() + 1)}-${pad2(currentDate.getDate())}`;
+        dates.push(dateStr);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Comment: Filter trendPoints to only include dates in the custom range
+      const customRangePoints = trendPoints.filter((p) => {
+        try {
+          const pointDateStr = p.date.slice(0, 10);
+          const pointDate = new Date(pointDateStr + 'T00:00:00');
+          return pointDate >= start && pointDate <= end;
+        } catch {
+          return false;
+        }
+      });
+      
+      // Comment: Aggregate revenue by day for custom range
+      return dates.map((dateStr) => {
+        const revenue =
+          customRangePoints
+            .filter((p) => {
+              const pointDateStr = p.date.slice(0, 10);
+              return pointDateStr === dateStr;
+            })
+            .reduce((sum, p) => sum + (p.revenue || 0), 0) || 0;
+        return { date: dateStr, revenue };
+      });
+    } else if (timeRange === 'Month') {
       // Comment: Month - filter to current month only
       const now = new Date();
       const currentYear = now.getFullYear();
@@ -149,8 +193,31 @@ export default function RevenueTrendsChart({
             .reduce((sum, p) => sum + (p.revenue || 0), 0) || 0;
         return { date: dateStr, revenue };
       });
+    } else {
+      // Comment: Fallback to Month if Custom is selected but dates are not set
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const dates: string[] = [];
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        dates.push(`${currentYear}-${pad2(currentMonth + 1)}-${pad2(day)}`);
+      }
+      
+      return dates.map((dateStr) => {
+        const revenue =
+          trendPoints
+            .filter((p) => {
+              const pointDateStr = p.date.slice(0, 10);
+              return pointDateStr === dateStr;
+            })
+            .reduce((sum, p) => sum + (p.revenue || 0), 0) || 0;
+        return { date: dateStr, revenue };
+      });
     }
-  }, [trendPoints, timeRange]);
+  }, [trendPoints, timeRange, customStartDate, customEndDate]);
 
   const maxRevenue = Math.max(
     ...transformedPoints.map((p) => p.revenue || 0),
@@ -168,7 +235,21 @@ export default function RevenueTrendsChart({
   const isYear = timeRange === 'Year';
   const isToday = timeRange === 'Today';
   const isWeek = timeRange === 'Week';
-  const barWidth = isYear ? '28px' : isToday ? '20px' : isWeek ? '48px' : '32px';
+  const isCustom = timeRange === 'Custom';
+  // Comment: For Custom range, adjust bar width based on number of days
+  let barWidth = isYear ? '28px' : isToday ? '20px' : isWeek ? '48px' : '32px';
+  if (isCustom && transformedPoints.length > 0) {
+    // Comment: Adjust bar width based on number of days (smaller for longer ranges)
+    if (transformedPoints.length > 60) {
+      barWidth = '20px';
+    } else if (transformedPoints.length > 30) {
+      barWidth = '20px';
+    } else if (transformedPoints.length > 14) {
+      barWidth = '35px';
+    } else {
+      barWidth = '24px';
+    }
+  }
 
   if (loading) {
     return (
@@ -186,7 +267,7 @@ export default function RevenueTrendsChart({
     );
   }
 
-  const justifyContent = isToday || isWeek || isYear
+  const justifyContent = isToday || isWeek || isYear || (isCustom && transformedPoints.length <= 14)
   ? 'center'
   : 'flex-start';
 
@@ -194,6 +275,9 @@ const gap =
   isWeek ? '30px'
   : isYear ? '25px'
   : isToday ? '40px'
+  : isCustom && transformedPoints.length > 30 ? '2px'
+  : isCustom && transformedPoints.length > 14 ? '4px'
+  : isCustom ? '8px'
   : '4px'; // Month
 
 
@@ -205,7 +289,7 @@ const gap =
           <div className="h-64 flex flex-col justify-between pr-2">
             {yTicks.map((v, idx) => (
               <div key={idx} className="text-[10px] text-gray-400 font-medium text-right">
-                ₩{v.toLocaleString('ko-KR')}
+                ${v.toLocaleString('en-US')}
               </div>
             ))}
           </div>
@@ -246,21 +330,42 @@ const gap =
                 const todayStr = `${sydneyTime.getFullYear()}-${pad2(sydneyTime.getMonth() + 1)}-${pad2(sydneyTime.getDate())}`;
                 const itemDateStr = item.date.slice(0, 10); // Get YYYY-MM-DD part
                 highlight = itemDateStr === todayStr;
+              } else if (timeRange === 'Custom') {
+                // Comment: For Custom range, highlight the last date (end date)
+                highlight = index === transformedPoints.length - 1;
               } else {
                 highlight = index === transformedPoints.length - 1;
               }
-              const label = `₩${(item.revenue || 0).toLocaleString('ko-KR')}`;
+              const label = `$${(item.revenue || 0).toLocaleString('en-US')}`;
 
               // Comment: Format axis label
               let axisLabel = '';
+              let showLabel = true;
               if (timeRange === 'Today') {
                 axisLabel = item.date; // Already in "HH:00" format
               } else if (timeRange === 'Year') {
                 // Comment: "YYYY-MM" -> "1월", "2월", etc.
                 const month = parseInt(item.date.slice(5, 7), 10);
                 axisLabel = `${month}월`;
+              } else if (timeRange === 'Custom' && transformedPoints.length > 30) {
+                // Comment: For long custom ranges, show only month/day for readability
+                const dateObj = new Date(item.date);
+                if (!Number.isNaN(dateObj.getTime())) {
+                  // Comment: Show every 7th day label for very long ranges, but always reserve space
+                  if (index % 7 === 0 || index === transformedPoints.length - 1) {
+                    axisLabel = `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(
+                      dateObj.getDate()
+                    ).padStart(2, '0')}`;
+                    showLabel = true;
+                  } else {
+                    axisLabel = ' '; // Use space to maintain consistent height
+                    showLabel = false;
+                  }
+                } else {
+                  axisLabel = item.date.slice(5, 10).replace('-', '/');
+                }
               } else {
-                // Comment: Week/Month - show date as "MM/DD"
+                // Comment: Week/Month/Custom (short range) - show date as "MM/DD"
                 const dateObj = new Date(item.date);
                 if (!Number.isNaN(dateObj.getTime())) {
                   axisLabel = `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(
@@ -296,12 +401,12 @@ const gap =
                       {label}
                     </div>
                   </div>
-                  {/* Comment: X-axis label - always visible */}
+                  {/* Comment: X-axis label - always visible, maintain consistent height */}
                   <span
                     className={`text-[10px] leading-tight text-center mt-1 ${
-                      highlight ? 'text-black font-bold' : 'text-gray-500'
+                      highlight ? 'text-black font-bold' : showLabel ? 'text-gray-500' : 'text-transparent'
                     }`}
-                    style={{ width: barWidth }}
+                    style={{ width: barWidth, minHeight: '16px', display: 'block' }}
                   >
                     {axisLabel}
                   </span>

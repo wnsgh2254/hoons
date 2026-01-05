@@ -96,3 +96,40 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Comment: DELETE - Delete a booking restriction by ID
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'id 파라미터는 필수입니다.' },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabase
+      .from('booking_restrictions')
+      .delete()
+      .eq('id', Number(id));
+
+    if (error) {
+      console.error('Error deleting booking restriction:', error);
+      return NextResponse.json(
+        { error: '예약금지 삭제에 실패했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error('Error in booking-restrictions DELETE route:', error);
+    return NextResponse.json(
+      { error: '서버 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+

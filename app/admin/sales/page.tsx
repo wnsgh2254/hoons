@@ -3,12 +3,16 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import RevenueTrendsChart from '@/components/RevenueTrendsChart';
-import AdminSidebar from '@/components/AdminSidebar';
+import AdminTopNav from '@/components/AdminTopNav';
 
-type TimeRange = 'Today' | 'Week' | 'Month' | 'Year';
+type TimeRange = 'Today' | 'Week' | 'Month' | 'Year' | 'Custom';
 
 // Comment: Helper to build date range (UTC ISO) based on selected time range
-function getDateRangeForTimeRange(timeRange: TimeRange) {
+function getDateRangeForTimeRange(
+  timeRange: TimeRange,
+  customStartDate?: string,
+  customEndDate?: string
+) {
   const now = new Date();
   const end = new Date(now);
   const start = new Date(now);
@@ -33,6 +37,18 @@ function getDateRangeForTimeRange(timeRange: TimeRange) {
     start.setHours(0, 0, 0, 0);
     end.setMonth(11, 31);
     end.setHours(23, 59, 59, 999);
+  } else if (timeRange === 'Custom') {
+    if (customStartDate && customEndDate) {
+      start.setTime(new Date(customStartDate).getTime());
+      start.setHours(0, 0, 0, 0);
+      end.setTime(new Date(customEndDate).getTime());
+      end.setHours(23, 59, 59, 999);
+    } else {
+      // Comment: Default to last 7 days if custom dates not set
+      end.setHours(23, 59, 59, 999);
+      start.setDate(now.getDate() - 7);
+      start.setHours(0, 0, 0, 0);
+    }
   }
 
   return {
@@ -44,7 +60,11 @@ function getDateRangeForTimeRange(timeRange: TimeRange) {
 export default function SalesOverviewPage() {
   // Comment: Single timeRange state for all sections (chart, cards, payment methods, etc.)
   const [timeRange, setTimeRange] = useState<TimeRange>('Month');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Comment: Custom date range states
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  // Comment: Track if custom range has been applied
+  const [customRangeApplied, setCustomRangeApplied] = useState(false);
   const [productRows, setProductRows] = useState<
     {
       itemId: number;
@@ -91,33 +111,18 @@ export default function SalesOverviewPage() {
   const [prepaidMembers, setPrepaidMembers] = useState<any[]>([]);
   const [loadingPrepaid, setLoadingPrepaid] = useState(false);
 
-  // Comment: Close sidebar when clicking outside
-  useEffect(() => {
-    if (!isSidebarOpen) return;
-    
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      const sidebar = document.getElementById('admin-sidebar');
-      const menuButton = target.closest('button[aria-label="Toggle sidebar"]');
-      
-      // Comment: Don't close if clicking inside sidebar or menu button
-      if (sidebar && sidebar.contains(target)) {
-        return;
-      }
-      if (menuButton) {
-        return;
-      }
-      
-      setIsSidebarOpen(false);
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isSidebarOpen]);
-
   // Comment: Refetch product sales whenever time range changes
   useEffect(() => {
-    const { from, to } = getDateRangeForTimeRange(timeRange);
+    // Comment: Skip API calls if Custom is selected but not applied yet
+    if (timeRange === 'Custom' && !customRangeApplied) {
+      return;
+    }
+    // Comment: Skip API calls if Custom is selected but dates are not fully set
+    if (timeRange === 'Custom' && (!customStartDate || !customEndDate)) {
+      return;
+    }
+
+    const { from, to } = getDateRangeForTimeRange(timeRange, customStartDate, customEndDate);
 
     const fetchProductSales = async () => {
       try {
@@ -196,49 +201,51 @@ export default function SalesOverviewPage() {
     };
 
     fetchPrepaidMembers();
-  }, [timeRange]);
+  }, [timeRange, customStartDate, customEndDate, customRangeApplied]);
 
   const timeRangeLabel = useMemo(() => {
     if (timeRange === 'Today') return '오늘';
     if (timeRange === 'Week') return '이번 주';
     if (timeRange === 'Month') return '이번 달';
-    return '올해';
-  }, [timeRange]);
+    if (timeRange === 'Year') return '올해';
+    if (timeRange === 'Custom' && customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+      return `${start.toLocaleDateString('ko-KR')} - ${end.toLocaleDateString('ko-KR')}`;
+    }
+    return '기간 선택';
+  }, [timeRange, customStartDate, customEndDate]);
+
+  // Comment: Handle time range selection
+  const handleTimeRangeChange = (range: TimeRange) => {
+    setTimeRange(range);
+    // Comment: Reset custom range applied flag when switching away from Custom
+    if (range !== 'Custom') {
+      setCustomRangeApplied(false);
+    }
+    // Comment: No default dates - user must select dates manually
+  };
+
+  // Comment: Apply custom date range
+  const handleApplyCustomRange = () => {
+    if (!customStartDate || !customEndDate) {
+      alert('시작 날짜와 종료 날짜를 모두 선택해주세요.');
+      return;
+    }
+    const start = new Date(customStartDate);
+    const end = new Date(customEndDate);
+    if (start > end) {
+      alert('시작 날짜는 종료 날짜보다 이전이어야 합니다.');
+      return;
+    }
+    // Comment: Mark custom range as applied to trigger data loading
+    setCustomRangeApplied(true);
+  };
 
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex">
-      <AdminSidebar isSidebarOpen={isSidebarOpen} />
-      <main className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white transition-all duration-300 ease-in-out ${
-        isSidebarOpen ? 'ml-64' : ''
-      }`}>
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
-          <div className="flex items-center gap-4 flex-1">
-            {/* Navigation Menu Button */}
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-              aria-label="Toggle sidebar"
-            >
-              <span className="material-symbols-outlined">menu</span>
-            </button>
-            {/* Home Button */}
-            <Link
-              href="/admin/dashboard"
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <span className="material-symbols-outlined">home</span>
-            </Link>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-medium text-gray-900">Sales Overview</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-200 text-gray-600 transition-colors">
-              <span className="material-symbols-outlined text-xl">notifications</span>
-            </button>
-          </div>
-        </header>
+    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
+      <AdminTopNav />
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
           <div className="max-w-7xl mx-auto flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -248,24 +255,79 @@ export default function SalesOverviewPage() {
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="bg-gray-100 rounded-lg p-1 flex border border-gray-200">
-                  {['Today', 'Week', 'Month', 'Year'].map((range) => (
+                  {['Today', 'Week', 'Month', 'Year', 'Custom'].map((range) => (
                     <button
                       key={range}
-                      onClick={() => setTimeRange(range as TimeRange)}
+                      onClick={() => handleTimeRangeChange(range as TimeRange)}
                       className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                         timeRange === range
                           ? 'bg-black text-white shadow-sm'
                           : 'text-gray-500 font-medium hover:text-black hover:bg-gray-200'
                       }`}
                     >
-                      {range}
+                      {range === 'Custom' ? 'Custom' : range}
                     </button>
                   ))}
                 </div>
-                <button className="flex items-center gap-2 bg-white hover:bg-gray-50 text-black border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm">
-                  <span className="material-symbols-outlined text-lg">download</span>
-                  Export
-                </button>
+                {timeRange === 'Custom' && (
+                  <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-gray-500 font-medium">Start Date</label>
+                      <input
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => {
+                          setCustomStartDate(e.target.value);
+                          setCustomRangeApplied(false);
+                        }}
+                        onClick={(e) => {
+                          // Comment: Open date picker when clicking anywhere on the input
+                          if (e.currentTarget.showPicker) {
+                            e.currentTarget.showPicker();
+                          }
+                        }}
+                        className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-black cursor-pointer"
+                      />
+                    </div>
+                    <span className="text-gray-400 text-xs mt-5">~</span>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-gray-500 font-medium">End Date</label>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => {
+                          setCustomEndDate(e.target.value);
+                          setCustomRangeApplied(false);
+                        }}
+                        onClick={(e) => {
+                          // Comment: Open date picker when clicking anywhere on the input
+                          if (e.currentTarget.showPicker) {
+                            e.currentTarget.showPicker();
+                          }
+                        }}
+                        min={customStartDate}
+                        className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-black cursor-pointer"
+                      />
+                    </div>
+                    <button
+                      onClick={handleApplyCustomRange}
+                      className="px-3 py-1 bg-black text-white text-xs font-semibold rounded hover:bg-gray-800 transition-colors"
+                    >
+                      적용
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTimeRange('Month');
+                        setCustomRangeApplied(false);
+                        setCustomStartDate('');
+                        setCustomEndDate('');
+                      }}
+                      className="px-2 py-1 text-gray-500 hover:text-black text-xs transition-colors"
+                    >
+                      취소
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -279,7 +341,7 @@ export default function SalesOverviewPage() {
                 <h3 className="text-2xl font-bold text-black">
                   {loadingSummary || !summary
                     ? '...'
-                    : `₩${summary.totalRevenue.toLocaleString('ko-KR')}`}
+                    : `$${summary.totalRevenue.toLocaleString('en-US')}`}
                 </h3>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
@@ -303,7 +365,7 @@ export default function SalesOverviewPage() {
                 <h3 className="text-2xl font-bold text-black">
                   {loadingSummary || !summary
                     ? '...'
-                    : `₩${summary.totalRevenue.toLocaleString('ko-KR')}`}
+                    : `$${summary.totalRevenue.toLocaleString('en-US')}`}
                 </h3>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
@@ -316,7 +378,7 @@ export default function SalesOverviewPage() {
                 <h3 className="text-2xl font-bold text-black">
                   {loadingSummary || !summary
                     ? '...'
-                    : `₩${Math.round(summary.avgTicket).toLocaleString('ko-KR')}`}
+                    : `$${Math.round(summary.avgTicket).toLocaleString('en-US')}`}
                 </h3>
               </div>
             </div>
@@ -332,6 +394,8 @@ export default function SalesOverviewPage() {
                   trendPoints={summary?.trendPoints || []}
                   timeRange={timeRange}
                   loading={loadingSummary}
+                  customStartDate={timeRange === 'Custom' ? customStartDate : undefined}
+                  customEndDate={timeRange === 'Custom' ? customEndDate : undefined}
                 />
               </div>
               <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
@@ -354,7 +418,7 @@ export default function SalesOverviewPage() {
                       <span className="text-xl font-bold text-black">
                         {loadingSummary || !summary
                           ? '...'
-                          : `₩${summary.totalRevenue.toLocaleString('ko-KR')}`}
+                          : `$${summary.totalRevenue.toLocaleString('en-US')}`}
                       </span>
                     </div>
                   </div>
@@ -398,7 +462,7 @@ export default function SalesOverviewPage() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6 items-stretch">
               <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-black">Prepaid Pass Status</h3>
@@ -424,7 +488,7 @@ export default function SalesOverviewPage() {
                     />
                   </div>
                 </div>
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 overflow-y-auto pr-1 min-h-0">
                   {loadingPrepaid ? (
                     <div className="text-sm text-gray-500 py-8 text-center">Loading prepaid members...</div>
                   ) : prepaidMembers.length === 0 ? (
@@ -432,7 +496,7 @@ export default function SalesOverviewPage() {
                       {prepaidSearchQuery ? 'No members found.' : 'No prepaid pass members yet.'}
                     </div>
                   ) : (
-                    <div className="space-y-3 h-full overflow-y-auto pr-1">
+                    <div className="space-y-3">
                       {prepaidMembers
                         .filter((member) => {
                           if (!prepaidSearchQuery) return true;
@@ -487,43 +551,83 @@ export default function SalesOverviewPage() {
                 </div>
               </div>
               <div className="flex flex-col gap-4">
-                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                  <h3 className="text-lg font-bold text-black mb-6">Revenue by Service</h3>
-                  {loadingSummary || !summary ? (
-                    <div className="text-sm text-gray-500">Loading service revenue...</div>
-                  ) : summary.serviceCategories.length === 0 ? (
-                    <div className="text-sm text-gray-500">No service revenue data in this period.</div>
-                  ) : (
-                    <div className="space-y-4">
-                      {summary.serviceCategories.map((category, index) => (
-                        <div
-                          key={category.serviceId}
-                          className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`${
-                                index === 0 ? 'bg-black text-white' : 'bg-gray-200 text-gray-700'
-                              } p-2 rounded-lg`}
-                            >
-                              <span className="material-symbols-outlined">content_cut</span>
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col flex-1 min-h-0">
+                  <h3 className="text-lg font-bold text-black mb-6">Revenue by Designer</h3>
+                  <div className="flex-1 overflow-y-auto pr-1 min-h-0">
+                    {loadingSummary || !summary ? (
+                      <div className="text-sm text-gray-500">Loading designer revenue...</div>
+                    ) : summary.topStylists.length === 0 ? (
+                      <div className="text-sm text-gray-500">No designer revenue data in this period.</div>
+                    ) : (
+                      <div className="space-y-4">
+                        {summary.topStylists.map((stylist, index) => (
+                          <div
+                            key={stylist.designerId}
+                            className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`${
+                                  index === 0 ? 'bg-black text-white' : 'bg-gray-200 text-gray-700'
+                                } p-2 rounded-lg`}
+                              >
+                                <span className="material-symbols-outlined">person</span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-black">{stylist.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {stylist.bookingsCount} bookings
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-black">{category.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {category.transactions} transactions
-                              </p>
-                            </div>
+                            <p className="font-bold text-black">
+                              ${stylist.revenue.toLocaleString('en-US')}
+                            </p>
                           </div>
-                          <p className="font-bold text-black">
-                            ₩{category.revenue.toLocaleString('ko-KR')}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col flex-1 min-h-0">
+                  <h3 className="text-lg font-bold text-black mb-6">Revenue by Service</h3>
+                  <div className="flex-1 overflow-y-auto pr-1 min-h-0">
+                    {loadingSummary || !summary ? (
+                      <div className="text-sm text-gray-500">Loading service revenue...</div>
+                    ) : summary.serviceCategories.length === 0 ? (
+                      <div className="text-sm text-gray-500">No service revenue data in this period.</div>
+                    ) : (
+                      <div className="space-y-4">
+                        {summary.serviceCategories.map((category, index) => (
+                          <div
+                            key={category.serviceId}
+                            className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`${
+                                  index === 0 ? 'bg-black text-white' : 'bg-gray-200 text-gray-700'
+                                } p-2 rounded-lg`}
+                              >
+                                <span className="material-symbols-outlined">content_cut</span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-black">{category.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {category.transactions} transactions
+                                </p>
+                              </div>
+                            </div>
+                            <p className="font-bold text-black">
+                              ${category.revenue.toLocaleString('en-US')}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col flex-1 min-h-0">
                   <h3 className="text-lg font-bold text-black mb-2">Revenue by Products</h3>
                   <p className="text-xs text-gray-500 mb-4">
                     {productError
@@ -531,41 +635,43 @@ export default function SalesOverviewPage() {
                       : loadingProductSales
                         ? '제품 매출을 불러오는 중입니다...'
                         : productSummary && productSummary.totalAmount > 0
-                          ? `${timeRangeLabel} 기준 제품 매출 합계 ₩${productSummary.totalAmount.toLocaleString('ko-KR')} · 총 ${productSummary.totalQuantity}개 판매`
+                          ? `${timeRangeLabel} 기준 제품 매출 합계 $${productSummary.totalAmount.toLocaleString('en-US')} · 총 ${productSummary.totalQuantity}개 판매`
                           : `${timeRangeLabel} 기준 제품 매출 데이터가 없습니다.`}
                   </p>
-                  <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  <div className="flex-1 overflow-y-auto pr-1 min-h-0">
                     {loadingProductSales ? (
                       <div className="text-sm text-gray-500 py-4 text-center">Loading...</div>
                     ) : productRows.length === 0 ? (
                       <div className="text-sm text-gray-500 py-4 text-center">No product sales in this period.</div>
                     ) : (
-                      productRows.map((product) => (
-                        <div
-                          key={product.itemId}
-                          className="bg-gray-50 rounded-xl p-3 flex items-center justify-between border border-gray-100"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="bg-white border border-gray-200 rounded-lg p-2 text-gray-600">
-                              <span className="material-symbols-outlined">
-                                {product.icon || 'inventory_2'}
-                              </span>
+                      <div className="space-y-3">
+                        {productRows.map((product) => (
+                          <div
+                            key={product.itemId}
+                            className="bg-gray-50 rounded-xl p-3 flex items-center justify-between border border-gray-100"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="bg-white border border-gray-200 rounded-lg p-2 text-gray-600">
+                                <span className="material-symbols-outlined">
+                                  {product.icon || 'inventory_2'}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-black">
+                                  {product.name}
+                                </p>
+                                <p className="text-[11px] text-gray-500">
+                                  {product.category} · {product.totalQuantity}개 · 단가 $
+                                  {product.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-black">
-                                {product.name}
-                              </p>
-                              <p className="text-[11px] text-gray-500">
-                                {product.category} · {product.totalQuantity}개 · 단가 ₩
-                                {product.unitPrice.toLocaleString('ko-KR')}
-                              </p>
-                            </div>
+                            <p className="font-bold text-sm text-black">
+                              ${product.totalAmount.toLocaleString('en-US')}
+                            </p>
                           </div>
-                          <p className="font-bold text-sm text-black">
-                            ₩{product.totalAmount.toLocaleString('ko-KR')}
-                          </p>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

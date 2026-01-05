@@ -75,7 +75,7 @@ export default function DesignerManagementPage() {
           </div>
           <div className="flex flex-col gap-2 p-4">
             <Link
-              href="/admin/dashboard"
+              href="/admin/appointments"
               className="flex items-center gap-4 px-3 py-3 rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors group"
             >
               <span className="material-symbols-outlined group-hover:text-white">dashboard</span>

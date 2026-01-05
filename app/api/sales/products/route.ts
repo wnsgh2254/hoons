@@ -65,20 +65,26 @@ export async function GET(request: NextRequest) {
       if (!item) continue;
 
       const id = Number(item.id);
+      const quantity = Number(row.quantity || 0);
+      const unitPrice = Number(item.price || 0);
+      
+      // Comment: Calculate total amount as unitPrice * quantity
+      const amount = unitPrice * quantity;
+      
       if (!byProduct[id]) {
         byProduct[id] = {
           itemId: id,
           name: item.name,
           category: item.category,
           icon: item.icon ?? null,
-          unitPrice: Number(item.price || 0),
+          unitPrice: unitPrice,
           totalQuantity: 0,
           totalAmount: 0,
         };
       }
 
-      byProduct[id].totalQuantity += Number(row.quantity || 0);
-      byProduct[id].totalAmount += Number(row.line_amount || 0);
+      byProduct[id].totalQuantity += quantity;
+      byProduct[id].totalAmount += amount;
     }
 
     const list = Object.values(byProduct).sort(

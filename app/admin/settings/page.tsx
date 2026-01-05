@@ -115,7 +115,7 @@ export default function SettingsPage() {
             </button>
             {/* Home Button */}
             <Link
-              href="/admin/dashboard"
+              href="/admin/appointments"
               className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
             >
               <span className="material-symbols-outlined">home</span>

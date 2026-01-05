@@ -47,7 +47,7 @@ export function MainNav() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/admin/dashboard" className="text-xs text-gray-500 hover:text-black transition-colors">
+            <Link href="/admin/appointments" className="text-xs text-gray-500 hover:text-black transition-colors">
               Staff Login
             </Link>
             <Link href="/booking">

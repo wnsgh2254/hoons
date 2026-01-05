@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import type { Designer } from '@/lib/types';
-import AdminSidebar from '@/components/AdminSidebar';
+import AdminTopNav from '@/components/AdminTopNav';
 
 export default function StaffManagementPage() {
   const [filter, setFilter] = useState('All Staff');
@@ -16,7 +16,6 @@ export default function StaffManagementPage() {
   const [showManageServiceModal, setShowManageServiceModal] = useState(false);
   const [showViewScheduleModal, setShowViewScheduleModal] = useState(false);
   const [selectedDesigner, setSelectedDesigner] = useState<Designer | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Get current month in Sydney timezone (format: 'YYYY-MM')
   const getCurrentMonth = () => {
@@ -132,57 +131,13 @@ export default function StaffManagementPage() {
     return member.role;
   };
 
-  // Comment: Close sidebar when clicking outside
-  useEffect(() => {
-    if (!isSidebarOpen) return;
-    
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      const sidebar = document.getElementById('admin-sidebar');
-      const menuButton = target.closest('button[aria-label="Toggle sidebar"]');
-      
-      // Comment: Don't close if clicking inside sidebar or menu button
-      if (sidebar && sidebar.contains(target)) {
-        return;
-      }
-      if (menuButton) {
-        return;
-      }
-      
-      setIsSidebarOpen(false);
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isSidebarOpen]);
 
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex">
-      <AdminSidebar isSidebarOpen={isSidebarOpen} />
-      <main className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white transition-all duration-300 ease-in-out ${
-        isSidebarOpen ? 'ml-64' : ''
-      }`}>
+    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
+      <AdminTopNav />
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
           <div className="flex items-center gap-4 flex-1">
-            {/* Navigation Menu Button */}
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-              aria-label="Toggle sidebar"
-            >
-              <span className="material-symbols-outlined">menu</span>
-            </button>
-            {/* Home Button */}
-            <Link
-              href="/admin/dashboard"
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <span className="material-symbols-outlined">home</span>
-            </Link>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-medium text-gray-900">Staff Management</span>
-            </div>
             <div className="relative hidden md:block flex-1 max-w-md ml-4">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-[20px]">search</span>
               <input
@@ -787,23 +742,210 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
 
 // View Schedule Modal Component
 function ViewScheduleModal({ designer, onClose }: { designer: Designer; onClose: () => void }) {
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [workingDays, setWorkingDays] = useState<Set<number>>(new Set());
+
+  const weekdays = [
+    { day: 0, name: '일요일', label: 'Sun' },
+    { day: 1, name: '월요일', label: 'Mon' },
+    { day: 2, name: '화요일', label: 'Tue' },
+    { day: 3, name: '수요일', label: 'Wed' },
+    { day: 4, name: '목요일', label: 'Thu' },
+    { day: 5, name: '금요일', label: 'Fri' },
+    { day: 6, name: '토요일', label: 'Sat' },
+  ];
+
+  // Comment: Default working hours - same for all working days
+  const DEFAULT_START_TIME = '10:00:00';
+  const DEFAULT_END_TIME = '19:00:00';
+  const SATURDAY_START_TIME = '09:00:00';
+  const SATURDAY_END_TIME = '17:00:00';
+
+  // Comment: Load schedules for this designer
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/designer-schedules?designer_id=${designer.id}`);
+        const data = await res.json();
+        if (res.ok) {
+          setSchedules(data.schedules || []);
+          // Comment: Set working days based on existing schedules
+          const workingDaysSet = new Set<number>();
+          (data.schedules || []).forEach((s: any) => {
+            if (!s.effective_to) {
+              workingDaysSet.add(s.weekday);
+            }
+          });
+          setWorkingDays(workingDaysSet);
+        }
+      } catch (error) {
+        console.error('Error fetching schedules:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSchedules();
+  }, [designer.id]);
+
+  // Comment: Toggle working day
+  const handleToggleDay = (weekday: number) => {
+    const newWorkingDays = new Set(workingDays);
+    if (newWorkingDays.has(weekday)) {
+      newWorkingDays.delete(weekday);
+    } else {
+      newWorkingDays.add(weekday);
+    }
+    setWorkingDays(newWorkingDays);
+  };
+
+  // Comment: Save all schedules
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Comment: Get current schedules to know which ones to delete
+      const currentSchedules = schedules.filter((s) => !s.effective_to);
+      const currentWorkingDays = new Set(currentSchedules.map((s) => s.weekday));
+
+      // Comment: Delete schedules for days that are no longer working days
+      const daysToDelete = Array.from(currentWorkingDays).filter((day) => !workingDays.has(day));
+      for (const day of daysToDelete) {
+        const schedule = currentSchedules.find((s) => s.weekday === day);
+        if (schedule?.id) {
+          await fetch(`/api/designer-schedules?id=${schedule.id}`, {
+            method: 'DELETE',
+          });
+        }
+      }
+
+      // Comment: Create or update schedules for working days
+      const daysToSave = Array.from(workingDays);
+      for (const day of daysToSave) {
+        const isSaturday = day === 6;
+        const startTime = isSaturday ? SATURDAY_START_TIME : DEFAULT_START_TIME;
+        const endTime = isSaturday ? SATURDAY_END_TIME : DEFAULT_END_TIME;
+
+        const body = {
+          designer_id: designer.id,
+          shop_id: designer.shop_id,
+          weekday: day,
+          start_time: startTime,
+          end_time: endTime,
+        };
+
+        await fetch('/api/designer-schedules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      }
+
+      // Comment: Reload schedules
+      const res = await fetch(`/api/designer-schedules?designer_id=${designer.id}`);
+      const data = await res.json();
+      if (res.ok) {
+        setSchedules(data.schedules || []);
+        alert('정기 휴일 설정이 저장되었습니다.');
+      }
+    } catch (error: any) {
+      console.error('Error saving schedules:', error);
+      alert(error.message || '스케줄 저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Comment: Format time from DB format (HH:MM:SS) to display format (HH:MM)
+  const formatTime = (time: string | null) => {
+    if (!time) return '';
+    return time.substring(0, 5); // HH:MM
+  };
+
+  // Comment: Get schedule for a specific weekday
+  const getScheduleForDay = (weekday: number) => {
+    return schedules.find((s) => s.weekday === weekday && !s.effective_to);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-black">Schedule - {designer.name}</h2>
+          <h2 className="text-2xl font-bold text-black">정기 휴일 설정 - {designer.name}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
         <div className="p-6">
-          <p className="text-gray-600">Schedule view functionality will be implemented here.</p>
-          <div className="mt-4 flex justify-end">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">스케줄을 불러오는 중...</div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 mb-4">
+                출근하는 요일을 선택하세요. 출근하는 요일은 기본 근무시간(월-금: 10:00-19:00, 토: 09:00-17:00)으로 자동 설정됩니다.
+              </p>
+              <div className="space-y-2">
+                {weekdays.map(({ day, name, label }) => {
+                  const isWorking = workingDays.has(day);
+                  const schedule = getScheduleForDay(day);
+                  const isSaturday = day === 6;
+                  const defaultTime = isSaturday ? '09:00-17:00' : '10:00-19:00';
+
+                  return (
+                    <div
+                      key={day}
+                      className={`border rounded-lg p-4 transition-colors ${
+                        isWorking ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="w-20">
+                            <span className="text-sm font-semibold text-gray-900">{name}</span>
+                            <span className="text-xs text-gray-500 ml-2">({label})</span>
+                          </div>
+                          <div className="flex-1">
+                            {isWorking ? (
+                              <span className="text-sm text-gray-900 font-medium">
+                                출근 ({defaultTime})
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-500 font-medium">휴일</span>
+                            )}
+                          </div>
+                        </div>
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isWorking}
+                            onChange={() => handleToggleDay(day)}
+                            className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black font-medium"
             >
-              Close
+              취소
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
+            >
+              {saving ? '저장 중...' : '저장하기'}
             </button>
           </div>
         </div>

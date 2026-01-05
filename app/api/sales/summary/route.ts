@@ -246,7 +246,7 @@ export async function GET(request: NextRequest) {
       0
     );
 
-    const topStylists = topStylistsRaw.slice(0, 5).map((s) => ({
+    const topStylists = topStylistsRaw.slice(0, 10).map((s) => ({
       designerId: s.designerId,
       name: s.name,
       revenue: s.revenue,
@@ -255,9 +255,9 @@ export async function GET(request: NextRequest) {
         topStylistsTotal > 0 ? (s.revenue / topStylistsTotal) * 100 : 0,
     }));
 
-    // Comment: Revenue by service (from booking revenue map)
+    // Comment: Revenue by service (from booking revenue map) - group by service name instead of service_id
     const serviceMapAgg = new Map<
-      number,
+      string,
       {
         serviceId: number;
         name: string;
@@ -273,15 +273,17 @@ export async function GET(request: NextRequest) {
       const service = servicesMap.get(serviceId);
       if (!service) return;
 
-      const existing = serviceMapAgg.get(serviceId) || {
+      // Comment: Use service name as key to group services with same name
+      const serviceName = service.name.trim();
+      const existing = serviceMapAgg.get(serviceName) || {
         serviceId,
-        name: service.name,
+        name: serviceName,
         transactions: 0,
         revenue: 0,
       };
       existing.transactions += 1;
       existing.revenue += revenue;
-      serviceMapAgg.set(serviceId, existing);
+      serviceMapAgg.set(serviceName, existing);
     });
 
     const serviceCategories = Array.from(serviceMapAgg.values()).sort(

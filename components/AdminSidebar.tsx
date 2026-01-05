@@ -32,15 +32,15 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
         </div>
         <nav className="flex flex-col gap-2">
           <Link
-            href="/admin/dashboard"
+            href="/admin/appointments"
             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
-              isActive('/admin/dashboard')
+              isActive('/admin/appointments')
                 ? 'bg-black text-white shadow-lg shadow-black/20'
                 : 'text-gray-500 hover:bg-gray-50 hover:text-black'
             }`}
           >
-            <span className="material-symbols-outlined">dashboard</span>
-            <span className="text-sm font-medium">Dashboard</span>
+            <span className="material-symbols-outlined">calendar_month</span>
+            <span className="text-sm font-medium">Appointments</span>
           </Link>
           <Link
             href="/admin/sales"
@@ -118,6 +118,17 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
           >
             <span className="material-symbols-outlined">settings</span>
             <span className="text-sm font-medium">Settings</span>
+          </Link>
+          <Link
+            href="/admin/test-env"
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+              isActive('/admin/test-env')
+                ? 'bg-black text-white shadow-lg shadow-black/20'
+                : 'text-gray-500 hover:bg-gray-50 hover:text-black'
+            }`}
+          >
+            <span className="material-symbols-outlined">visibility</span>
+            <span className="text-sm font-medium">Design 2</span>
           </Link>
         </nav>
       </div>
