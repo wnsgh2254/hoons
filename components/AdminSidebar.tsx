@@ -21,7 +21,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
       }`}
     >
       <div className="flex flex-col gap-8 p-6">
-        <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-3 hover:opacity-70 transition-opacity">
           <Image
             src="/images/image3.png"
             alt="HAEYOOM Logo"
@@ -29,7 +29,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
             height={28}
             className="h-7 w-auto object-contain"
           />
-        </div>
+        </Link>
         <nav className="flex flex-col gap-2">
           <Link
             href="/admin/appointments"

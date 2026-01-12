@@ -20,6 +20,15 @@
   
   /* Spline Sans font */
   --font-family-sans: "Spline Sans", sans-serif;
+  
+  /* Archivo font for display */
+  --font-family-display: "Archivo", sans-serif;
+}
+
+/* Font Display class for Design 2 */
+.font-display {
+  font-family: 'Archivo', sans-serif;
+  font-weight: 300;
 }
 
 /* Custom gradient class */

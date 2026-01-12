@@ -20,20 +20,21 @@ export default function AdminTopNav() {
   const isActive = (path: string) => pathname === path;
 
   return (
-    <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-white border-b border-gray-200 z-10 sticky top-0">
-      {/* Logo */}
-      <Link href="/admin/appointments" className="flex items-center">
-        <Image
-          src="/images/image3.png"
-          alt="HAEYOOM Logo"
-          width={130}
-          height={28}
-          className="h-7 w-auto object-contain"
-        />
-      </Link>
+    <header className="h-16 flex items-center justify-between px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-10 sticky top-0">
+      <div className="container mx-auto flex items-center justify-between w-full">
+        {/* Logo */}
+        <Link href="/" className="flex items-center hover:opacity-70 transition-opacity">
+          <Image
+            src="/images/image3.png"
+            alt="HAEYOOM Logo"
+            width={130}
+            height={28}
+            className="h-7 w-auto object-contain"
+          />
+        </Link>
 
-      {/* Navigation Items */}
-      <nav className="flex items-center gap-2">
+        {/* Navigation Items */}
+        <nav className="flex items-center gap-2">
         {navItems.map((item) => (
           <Link
             key={item.href}
@@ -55,11 +56,12 @@ export default function AdminTopNav() {
         ))}
       </nav>
 
-      {/* Right side - notifications */}
-      <div className="flex items-center gap-4">
-        <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-600 transition-colors">
-          <span className="material-symbols-outlined text-xl">notifications</span>
-        </button>
+        {/* Right side - notifications */}
+        <div className="flex items-center gap-4">
+          <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-600 transition-colors">
+            <span className="material-symbols-outlined text-xl">notifications</span>
+          </button>
+        </div>
       </div>
     </header>
   );

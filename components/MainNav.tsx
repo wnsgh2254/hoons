@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { ArrowUpRight } from 'lucide-react';
 
 // Comment: Global top navigation bar used across landing and booking pages
 export function MainNav() {
@@ -10,6 +11,7 @@ export function MainNav() {
   const isHome = pathname === '/';
   const isBooking = pathname.startsWith('/booking');
   const isAdmin = pathname.startsWith('/admin');
+  const [isOpen, setIsOpen] = useState(false);
 
   // Comment: Don't show navigation on admin pages
   if (isAdmin) {
@@ -17,51 +19,72 @@ export function MainNav() {
   }
 
   const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
-
-  const navBgClass = isBooking
-    ? 'bg-gray-50/95 border-gray-200/80'
-    : 'bg-white/90 border-gray-100/50';
+  const toggleMenu = () => setIsOpen(!isOpen);
+  const closeMenu = () => setIsOpen(false);
 
   return (
-    <nav className={`fixed top-0 z-50 w-full ${navBgClass} backdrop-blur-xl py-5 transition-all`}>
-      <div className="container mx-auto px-6 md:px-12 flex items-center justify-between">
-        <Link href="/" className="hover:opacity-70 transition-opacity">
-          <Image
-            src="/images/image3.png"
-            alt="HAEYOOM Logo"
-            width={130}
-            height={28}
-            className="h-7 w-auto object-contain"
-          />
-        </Link>
-        <div className="hidden md:flex items-center gap-12">
-          <div className="flex gap-8 text-sm font-medium text-gray-500">
-            <Link className="hover:text-black transition-colors" href={sectionHref('#designers')}>
-              Designers
-            </Link>
-            <Link className="hover:text-black transition-colors" href={sectionHref('#services')}>
-              Menu
-            </Link>
-            <Link className="hover:text-black transition-colors" href={sectionHref('#gallery')}>
-              Journal
-            </Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/admin/appointments" className="text-xs text-gray-500 hover:text-black transition-colors">
-              Staff Login
-            </Link>
-            <Link href="/booking">
-              <button className="bg-chic-gradient text-white px-6 py-2.5 rounded-full text-xs font-bold uppercase tracking-widest hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300">
-                Book Now
+    <>
+      {/* Minimal Sticky Header - Design 2 Style */}
+      <header className="fixed top-0 left-0 w-full z-50 mix-blend-difference text-white pointer-events-none">
+        <div className="w-full px-6 md:px-12 py-6 flex items-center justify-between text-xs md:text-sm font-light tracking-widest uppercase leading-none pointer-events-auto">
+          
+          {/* Left: Brand Logo (Text) */}
+          <Link href="/" className="block z-50 group" onClick={closeMenu}>
+            <span className="font-display text-3xl font-medium tracking-tighter group-hover:opacity-70 transition-opacity">
+              HAEYOOM
+            </span>
+          </Link>
+
+          {/* Center: Navigation (Desktop) */}
+          <nav className="hidden md:flex space-x-12 absolute left-1/2 transform -translate-x-1/2">
+            <Link href={sectionHref('#services')} className="hover:underline">Menu</Link>
+            <Link href={sectionHref('#locations')} className="hover:underline">Locations</Link>
+            <Link href={sectionHref('#designers')} className="hover:underline">Designers</Link>
+          </nav>
+
+          {/* Right: Book Now / Staff Login / Mobile Menu */}
+          <div className="flex flex-col items-end gap-1">
+            <div className="md:hidden">
+              <button className="uppercase" onClick={toggleMenu}>
+                {isOpen ? 'Close' : 'Menu'}
               </button>
-            </Link>
+            </div>
+            <div className="hidden md:flex items-center gap-4">
+              <Link href="/admin/appointments" className="hover:underline text-xs">
+                Staff Login
+              </Link>
+              <Link href="/booking" className="flex items-center gap-1 hover:underline">
+                <span>Book Now</span>
+                <ArrowUpRight size={12} />
+              </Link>
+            </div>
           </div>
         </div>
-        <button className="md:hidden text-black p-2">
-          <span className="material-symbols-outlined">menu</span>
-        </button>
+      </header>
+
+      {/* Mobile Menu Overlay */}
+      <div className={`fixed inset-0 z-40 bg-[#F4F4F4] text-black transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'} md:hidden pt-24 px-4`}>
+        <nav className="flex flex-col space-y-0 border-t border-black">
+          {[
+            { name: 'Home', path: '/', hash: '' },
+            { name: 'Menu', path: '/', hash: '#services' },
+            { name: 'Locations', path: '/', hash: '#locations' },
+            { name: 'Designers', path: '/', hash: '#designers' },
+            { name: 'Staff Login', path: '/admin/appointments', hash: '' },
+            { name: 'Book Now', path: '/booking', hash: '' },
+          ].map((item) => (
+            <Link 
+              key={item.name}
+              href={`${item.path}${item.hash}`} 
+              onClick={closeMenu}
+              className="text-4xl font-display font-light uppercase tracking-tighter py-6 border-b border-black hover:bg-black hover:text-white transition-colors"
+            >
+              {item.name}
+            </Link>
+          ))}
+        </nav>
       </div>
-    </nav>
+    </>
   );
 }
 
