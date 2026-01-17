@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./styles/globals.css";
 import "../styles/animation.css";
 import { MainNav } from "../components/MainNav";
+import MainFooter from "../components/MainFooter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,6 +56,7 @@ export default function RootLayout({
       >
         <MainNav />
         {children}
+        <MainFooter />
       </body>
     </html>
   );

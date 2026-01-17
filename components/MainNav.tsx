@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
@@ -28,19 +29,29 @@ export function MainNav() {
       <header className="fixed top-0 left-0 w-full z-50 mix-blend-difference text-white pointer-events-none">
         <div className="w-full px-6 md:px-12 py-6 flex items-center justify-between text-xs md:text-sm font-light tracking-widest uppercase leading-none pointer-events-auto">
           
-          {/* Left: Brand Logo (Text) */}
-          <Link href="/" className="block z-50 group" onClick={closeMenu}>
-            <span className="font-display text-3xl font-medium tracking-tighter group-hover:opacity-70 transition-opacity">
-              HAEYOOM
-            </span>
+          {/* Left: Brand Logo */}
+          <Link href="/" className="block z-50 group" onClick={closeMenu} style={{ isolation: 'isolate' }}>
+            <Image 
+              src="/images/logo-white.png" 
+              alt="HAEYOOM" 
+              width={140} 
+              height={140}
+              className="group-hover:opacity-70 transition-opacity"
+              style={{ 
+                // mixBlendMode: 'normal',
+                height: '24px',
+                width: 'auto'
+              }}
+              priority
+            />
           </Link>
 
           {/* Center: Navigation (Desktop) */}
-          <nav className="hidden md:flex space-x-12 absolute left-1/2 transform -translate-x-1/2">
-            <Link href={sectionHref('#services')} className="hover:underline">Menu</Link>
+          <nav className="hidden md:flex absolute left-1/2 transform -translate-x-1/2" style={{ gap: '36px' }}>
+            <Link href={sectionHref('#about')} className="hover:underline">About</Link>
+            <Link href={sectionHref('#services')} className="hover:underline">Services</Link>
             <Link href={sectionHref('#locations')} className="hover:underline">Locations</Link>
-            <Link href="/designers" className="hover:underline">Designers</Link>
-            <Link href={sectionHref('#portfolio')} className="hover:underline">Portfolio</Link>
+            <Link href={sectionHref('#designers')} className="hover:underline">Designers</Link>
           </nav>
 
           {/* Right: Book Now / Staff Login / Mobile Menu */}
@@ -50,11 +61,23 @@ export function MainNav() {
                 {isOpen ? 'Close' : 'Menu'}
               </button>
             </div>
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-4" style={{ isolation: 'isolate' }}>
               <Link href="/admin/appointments" className="hover:underline text-xs">
                 Staff Login
               </Link>
-              <Link href="/booking" className="flex items-center gap-1 hover:underline">
+              <Link 
+                href="/booking" 
+                className="flex items-center gap-1 border border-black text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
+                style={{ 
+                  mixBlendMode: 'normal',
+                  paddingTop: '12px',
+                  paddingBottom: '12px',
+                  paddingLeft: '24px',
+                  paddingRight: '24px',
+                  backgroundColor: 'white',
+                  color: 'black'
+                }}
+              >
                 <span>Book Now</span>
                 <ArrowUpRight size={12} />
               </Link>
@@ -68,10 +91,10 @@ export function MainNav() {
         <nav className="flex flex-col space-y-0 border-t border-black">
           {[
             { name: 'Home', path: '/', hash: '' },
+            { name: 'About', path: '/', hash: '#about' },
             { name: 'Menu', path: '/', hash: '#services' },
             { name: 'Locations', path: '/', hash: '#locations' },
-            { name: 'Designers', path: '/designers', hash: '' },
-            { name: 'Portfolio', path: '/', hash: '#portfolio' },
+            { name: 'Designers', path: '/', hash: '#designers' },
             { name: 'Staff Login', path: '/admin/appointments', hash: '' },
             { name: 'Book Now', path: '/booking', hash: '' },
           ].map((item) => (

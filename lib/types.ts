@@ -16,6 +16,7 @@ export interface Designer {
   hourly_rate: number | null;
   is_active: boolean;
   created_at: string;
+  instagramLink: string;
 }
 
 export interface Service {

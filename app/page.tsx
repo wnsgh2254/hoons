@@ -1,7 +1,11 @@
 'use client';
 
+import React, { useState } from 'react';
+import { DESIGNERS } from './haeyoom---conceptual-hair-salon/services/mockData';
+
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
 
 // Comment: Mock data for shops
 const SHOPS = [
@@ -9,17 +13,15 @@ const SHOPS = [
     id: 'shop_meadowbank',
     name: 'HAEYOOM Meadowbank',
     address: 'SHEPHERDS BAY PLAZA, Level LG, SHOP 6.11/11A Bay Dr, Meadowbank NSW 2114',
-    phone: '02-555-0123',
-    hours: '10:00 - 20:00',
     image: 'https://i.pinimg.com/1200x/24/78/0d/24780ddba9bd63fc622543639c163940.jpg',
+    googleMapLink: 'https://maps.app.goo.gl/bBgziGMSs97zmAV38',
   },
   {
     id: 'shop_haymarket',
     name: 'HAEYOOM Haymarket',
     address: 'Shop4, 770 George St, Sydney NSW 2000',
-    phone: '02-790-0987',
-    hours: '10:00 - 19:00',
     image: 'https://i.pinimg.com/1200x/10/48/a2/1048a22becabf97a20d9cab8c2f9a2e6.jpg',
+    googleMapLink: 'https://maps.app.goo.gl/zKKP5E6WnwyoJhUn9',
   },
 ];
 
@@ -32,6 +34,12 @@ const GALLERY_ITEMS = Array.from({ length: 36 }, (_, i) => ({
 }));
 
 const Home = () => {
+  const [selectedShop, setSelectedShop] = useState<string>('all');
+
+  const filteredDesigners = selectedShop === 'all' 
+    ? DESIGNERS 
+    : DESIGNERS.filter(d => d.shopId === selectedShop);
+
   return (
     <div className="w-full bg-[#F4F4F4]">
       
@@ -39,20 +47,22 @@ const Home = () => {
       {/* Added border-b border-black */}
       <section className="relative w-full h-screen overflow-hidden border-b border-black">
         <img 
-            src="https://i.pinimg.com/1200x/54/ec/4d/54ec4d860f6bf566fdc9a6f06028bf45.jpg" 
-            className="w-full h-full object-cover grayscale" 
+            src="/images/hero.png" 
+            className="w-full h-full object-cover object-top grayscale" 
             alt="Hero" 
         />
         
-        {/* LOGO OVERLAY: Massive Text Overlay */}
-        {/* Changed text-white to text-black */}
+        {/* LOGO OVERLAY: Logo Image */}
         {/* Positioned at bottom with some spacing */}
-        <div className="absolute bottom-4 md:bottom-8 left-0 w-full px-6 md:px-12 z-20 pointer-events-none">
-            <h1 className="flex justify-between w-full font-display text-black text-[18vw] leading-[0.8] tracking-tighter">
-                {"HAEYOOM".split('').map((char, i) => (
-                    <span key={i}>{char}</span>
-                ))}
-            </h1>
+        <div className="absolute bottom-4 md:bottom-16 left-0 w-full px-6 md:px-12 z-20 pointer-events-none">
+            <Image 
+                src="/images/logo-black.png" 
+                alt="HAEYOOM" 
+                width={2400} 
+                height={2400}
+                className="w-full h-auto"
+                priority
+            />
         </div>
       </section>
 
@@ -68,14 +78,30 @@ const Home = () => {
         </div>
       </section>
 
+      {/* BIG STATEMENT TEXT */}
+      <section id="about" className="py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
+        <div className="w-full">
+             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
+                HAEYOOM originated from a pure Korean word that means "beautiful thoughts."
+             </h3>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
+                <p className="text-base md:text-lg font-light leading-relaxed max-w-lg">
+                    We create moments whee beautiful thoughts bloom, in beautiful spaces, with beautiful people. Beautiful Think-we hope it becomes a lasting echo in your heart.
+                </p>
+                <div className="text-right flex flex-col items-end gap-4">
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* PRODUCT GRID (Services) - 4 Columns on one line */}
-      <section id="services" className="bg-[#F4F4F4]">
+      <section id="services" className="bg-[#F4F4F4] pb-32">
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-black">
              {[
-                { title: 'Cut', price: '55', img: 'https://i.pinimg.com/736x/46/14/a3/4614a381370f5bdaf30c8b0853e9436d.jpg' },
-                { title: 'Perm', price: '170', img: 'https://i.pinimg.com/736x/df/7c/cb/df7ccbcffc5d71ffea4b8cbb8a529625.jpg' },
-                { title: 'Color', price: '170', img: 'https://i.pinimg.com/736x/d0/9c/f5/d09cf50e9c06f929e6bb7270b769a4fe.jpg' },
-                { title: 'Care', price: '60', img: 'https://i.pinimg.com/736x/1a/c2/6d/1ac26da7d8e22cb9872a2a2f2ce46cfc.jpg' },
+                { title: 'Cut', price: '55', img: '/images/cut.png' },
+                { title: 'Perm', price: '170', img: '/images/perm.png' },
+                { title: 'Color', price: '170', img: '/images/color.png' },
+                { title: 'Care', price: '60', img: '/images/care.png' },
              ].map((item, idx) => (
                 <div key={idx} className="group relative aspect-square border-r border-black last:border-r-0 md:last:border-r-0 odd:border-r md:odd:border-r overflow-hidden">
                     <img 
@@ -98,22 +124,6 @@ const Home = () => {
               </div>
       </section>
 
-      {/* BIG STATEMENT TEXT */}
-      <section className="py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
-        <div className="w-full">
-             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
-                Our creations are singular, never seen elsewhere and do not follow fashion.
-             </h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
-                <p className="text-base md:text-lg font-light leading-relaxed max-w-lg">
-                    Nevertheless, they are anchored in a history. Our references are linked to what inspires and drives us: an artistic movement, an architectural style, a way of life...
-                </p>
-                <div className="text-right flex flex-col items-end gap-4">
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* SPACE / LOCATIONS STRIP */}
       <section id="locations" className="border-t border-black">
           {SHOPS.map((shop, idx) => (
@@ -128,7 +138,7 @@ const Home = () => {
             </div>
                  <div className="md:col-span-4 p-8 md:p-12 flex flex-col justify-between bg-[#F4F4F4]">
               <div>
-                        <span className="block text-xs uppercase tracking-widest mb-4">Space 0{idx + 1}</span>
+                        <span className="block text-xs uppercase tracking-widest mb-4">Location 0{idx + 1}</span>
                         
                         <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6">
                             <span className="block mb-2">HAEYOOM</span>
@@ -139,37 +149,100 @@ const Home = () => {
                            {shop.address}
                         </p>
               </div>
-                     <Link href="/admin/appointments" className="self-start mt-8 border border-black px-8 py-4 text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-colors">
+                     <a 
+                        href={shop.googleMapLink} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="self-start mt-8 border border-black px-8 py-4 text-xs uppercase tracking-widest text-black hover:bg-black hover:text-white transition-colors"
+                     >
                         View on Map
-                     </Link>
+                     </a>
               </div>
             </div>
           ))}
       </section>
 
-      {/* PORTFOLIO SECTION - Instagram Feed */}
-      <section id="portfolio" className="border-t border-black bg-[#F4F4F4]">
+      {/* DESIGNERS SECTION - Will show designer profiles */}
+      <section id="designers" className="border-t border-black bg-[#F4F4F4]">
+        <div className="w-full">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
+            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
+            <div className="flex gap-4 mb-2 md:mb-4 flex-shrink-0">
+                  <button 
+                      onClick={() => setSelectedShop('all')}
+                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                  >
+                      All
+                  </button>
+                  {SHOPS.map(shop => (
+                      <button 
+                          key={shop.id}
+                          onClick={() => setSelectedShop(shop.id)}
+                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                      >
+                          {shop.name.replace('HAEYOOM ', '')}
+                      </button>
+                  ))}
+              </div>
+            {/* Comment: Designer profiles will be displayed here */}
+            {/* TODO: Add designer profiles from database */}
+          </div>
+          {/* Grid - Changed to 4 columns */}
+          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-b border-black">
+              {filteredDesigners.map((designer, index) => {
+                const totalItems = filteredDesigners.length;
+                const lastRowStartMobile = Math.floor((totalItems - 1) / 2) * 2;
+                const lastRowStartDesktop = Math.floor((totalItems - 1) / 4) * 4;
+                const isLastRowMobile = index >= lastRowStartMobile;
+                const isLastRowDesktop = index >= lastRowStartDesktop;
+                
+                return (
+                  <div 
+                    key={designer.id} 
+                    className={`group md:border-r md:[&:nth-child(4n)]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
+                  >
+                      <div className="aspect-[1/1] overflow-hidden border-b border-black relative">
+                          <img src={designer.profileImage} alt={designer.name} className="w-full h-full object-cover grayscale mix-blend-multiply group-hover:mix-blend-normal transition-all duration-500" />
+                          
+                          <div className="absolute bottom-0 left-0 bg-black text-white px-3 py-1">
+                              <span className="text-xs uppercase tracking-widest">{designer.role}</span>
+                          </div>
+                      </div>
+                      
+                      <div className="p-8">
+                          <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-3">{designer.name}</h4>
+                          {/* <p className="text-base leading-relaxed text-gray-600">{SHOPS.find(s => s.id === designer.shopId)?.name.replace('HAEYOOM ', '')}</p> */}
+                          {designer.instagramLink && (
+                            <a 
+                              href={designer.instagramLink} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hidden md:flex items-center gap-1 hover:underline mt-4 text-xs uppercase"
+                            >
+                                <span>Instagram</span>
+                                <ArrowUpRight size={12} />
+                            </a>
+                          )}
+                      </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </section>
+
+      {/* EXPLORE SECTION - Instagram Feed */}
+      <section id="explore" className="bg-[#F4F4F4]">
          <div className="w-full">
              {/* Header with equal top and bottom padding to spacing */}
-             <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Portfolio</h4>
-                <p className="font-light text-lg text-left text-gray-500">Discover our latest work and inspirations from our designers&apos; Instagram.</p>
-          </div>
+            <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
+                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
+                <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
+            </div>
 
             {/* Instagram Feed Grid - Full Width */}
             {/* Comment: This section will display Instagram feed from designers */}
-            {/* TODO: Integrate Instagram Basic Display API or Instagram Graph API to fetch real posts */}
-            {/* 
-              Instagram API Integration Options:
-              1. Instagram Basic Display API - for personal accounts
-              2. Instagram Graph API - for business accounts (requires Facebook Business account)
-              
-              Steps:
-              1. Set up Instagram App in Facebook Developers
-              2. Get Access Token
-              3. Create API route to fetch posts (e.g., /api/instagram)
-              4. Replace GALLERY_ITEMS with real Instagram posts
-            */}
+            {/* TODO: Integrate Instagram API to fetch real posts from designers */}
             <div className="grid grid-cols-2 md:grid-cols-4 border-t border-black">
                 {GALLERY_ITEMS.map((item, idx) => (
                     <div 
@@ -198,10 +271,13 @@ const Home = () => {
       {/* NEW CTA SECTION */}
       <section className="bg-[#F4F4F4] px-6 md:px-12 py-32">
          <div className="w-full border-t border-black pt-12 flex flex-col md:flex-row justify-between md:items-end gap-10">
-             <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter leading-[0.9] text-left">
+             <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter leading-[0.9] text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>
                 Ready to<br/>Transform?
              </h2>
-             <Link href="/booking" className="inline-block border border-black px-12 py-5 text-sm uppercase tracking-widest hover:bg-black hover:text-white transition-colors mb-2">
+             <Link 
+                href="/booking" 
+                className="inline-block border border-black px-12 py-5 text-sm uppercase tracking-widest text-black hover:bg-black hover:text-white transition-colors mb-2"
+             >
                 Book Appointment
           </Link>
         </div>

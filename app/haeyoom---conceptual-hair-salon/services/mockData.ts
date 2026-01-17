@@ -36,6 +36,7 @@ export const DESIGNERS: Designer[] = [
     profileImage: 'https://i.pinimg.com/736x/d8/44/7c/d8447c644a6a8cef4cd2612cc51608f6.jpg',
     description: 'Expert in structural cuts and modern texture.',
     specialties: ['Architectural Cut', 'Texture Perm'],
+    instagramLink: 'https://instagram.com',
   },
   {
     id: 'des_2',
@@ -45,6 +46,7 @@ export const DESIGNERS: Designer[] = [
     profileImage: 'https://i.pinimg.com/1200x/50/ea/43/50ea43053ac7ced97256cb97cb2f6087.jpg',
     description: 'Specializes in color correction and soft aesthetics.',
     specialties: ['Personal Color', 'Layered Cut'],
+    instagramLink: 'https://instagram.com',
   },
   {
     id: 'des_3',
@@ -54,6 +56,7 @@ export const DESIGNERS: Designer[] = [
     profileImage: 'https://i.pinimg.com/736x/1b/2d/96/1b2d96a2fe7d31acb7caf804ab3dfd30.jpg',
     description: 'Creating timeless beauty with minimal touch.',
     specialties: ['Classic Cut', 'Volume Perm'],
+    instagramLink: 'https://instagram.com',
   },
 ];
 

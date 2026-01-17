@@ -24,6 +24,7 @@ export interface Designer {
   profileImage: string;
   description: string;
   specialties: string[];
+  instagramLink?: string;
 }
 
 export interface TimeSlot {
