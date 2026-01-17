@@ -7,11 +7,10 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { href: '/admin/appointments', icon: 'calendar_month', label: 'Appointments' },
   { href: '/admin/staff', icon: 'groups', label: 'Staff' },
-  { href: '/admin/service-history', icon: 'history', label: 'Service History' },
   { href: '/admin/inventory', icon: 'inventory_2', label: 'Inventory' },
+  { href: '/admin/services', icon: 'content_cut', label: 'Services' },
   { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
   { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
-  { href: '/admin/test-env', icon: 'visibility', label: 'Design 2' },
 ];
 
 export default function AdminTopNav() {
@@ -20,7 +19,7 @@ export default function AdminTopNav() {
   const isActive = (path: string) => pathname === path;
 
   return (
-    <header className="h-16 flex items-center justify-between px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-10 sticky top-0">
+    <header className="h-16 flex items-center px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-10 sticky top-0">
       <div className="container mx-auto flex items-center justify-between w-full">
         {/* Logo */}
         <Link href="/" className="flex items-center hover:opacity-70 transition-opacity">
@@ -33,8 +32,8 @@ export default function AdminTopNav() {
           />
         </Link>
 
-        {/* Navigation Items */}
-        <nav className="flex items-center gap-2">
+        {/* Navigation Items - Centered */}
+        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
         {navItems.map((item) => (
           <Link
             key={item.href}
@@ -56,12 +55,8 @@ export default function AdminTopNav() {
         ))}
       </nav>
 
-        {/* Right side - notifications */}
-        <div className="flex items-center gap-4">
-          <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-600 transition-colors">
-            <span className="material-symbols-outlined text-xl">notifications</span>
-          </button>
-        </div>
+        {/* Right side - empty for balance */}
+        <div className="w-[130px]"></div>
       </div>
     </header>
   );

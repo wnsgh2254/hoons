@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServicesByShop } from '@/lib/data';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +17,44 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error in services GET route:', error);
     return NextResponse.json({ error: '서비스 목록을 불러오지 못했습니다.' }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { name, price, duration_minutes, shop_id, is_active, category, visible_to } = body;
+
+    if (!name || price === undefined || !duration_minutes) {
+      return NextResponse.json(
+        { error: 'Name, price, and duration_minutes are required' },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from('services')
+      .insert({
+        name,
+        price,
+        duration_minutes,
+        shop_id: shop_id || null,
+        is_active: is_active !== undefined ? is_active : true,
+        category: category || null,
+        visible_to: visible_to || 'customer',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating service:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ service: data }, { status: 201 });
+  } catch (error) {
+    console.error('Error in services POST route:', error);
+    return NextResponse.json({ error: 'Failed to create service' }, { status: 500 });
   }
 }
 

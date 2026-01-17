@@ -170,6 +170,9 @@ export default function AppointmentsManagementPage() {
   // Comment: Booking restrictions state
   const [bookingRestrictions, setBookingRestrictions] = useState<any[]>([]);
 
+  // Comment: Calendar view mode - show booking count instead of green dot
+  const [showBookingCount, setShowBookingCount] = useState(false);
+
   // Comment: Refs and handlers for click-drag scrolling on schedule grid
   const scheduleRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef(false);
@@ -850,6 +853,20 @@ export default function AppointmentsManagementPage() {
                       <span className="material-symbols-outlined text-lg">chevron_right</span>
                       </button>
                           </div>
+                  {/* Toggle button for showing booking count */}
+                  <div className="mb-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowBookingCount(!showBookingCount)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        showBookingCount
+                          ? 'bg-black text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {showBookingCount ? '점 표시' : '개수 표시'}
+                    </button>
+                  </div>
                   <div className="grid grid-cols-7 gap-2 text-sm text-gray-500 mb-2 font-medium">
                     {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
                               <span key={d} className="text-center">
@@ -872,6 +889,7 @@ export default function AppointmentsManagementPage() {
                                 }
                                 const isSelected = day === selectedDayNumber;
                                 const hasBookings = !!dayCounts[day];
+                                const bookingCount = dayCounts[day] || 0;
                         const cellDate = buildDateFromDay(selectedDate, day);
                                 return (
                                   <button
@@ -889,7 +907,13 @@ export default function AppointmentsManagementPage() {
                                   >
                                     <span>{day}</span>
                                     {hasBookings && (
-                              <span className="mt-1 h-1 w-4 rounded-full bg-emerald-500" />
+                                      showBookingCount ? (
+                                        <span className={`mt-0.5 text-[10px] font-bold ${isSelected ? 'text-white' : 'text-emerald-600'}`}>
+                                          {bookingCount}
+                                        </span>
+                                      ) : (
+                                        <span className="mt-1 h-1 w-4 rounded-full bg-emerald-500" />
+                                      )
                                     )}
                                   </button>
                                 );

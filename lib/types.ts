@@ -25,6 +25,8 @@ export interface Service {
   price: number;
   duration_minutes: number;
   is_active: boolean;
+  category: string | null;
+  visible_to: 'customer' | 'admin' | 'both';
   created_at: string;
 }
 

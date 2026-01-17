@@ -27,24 +27,39 @@ interface Service {
   selected: boolean;
 }
 
+// Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
+function getSydneyToday(): string {
+  const sydney = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
+  );
+  const year = sydney.getFullYear();
+  const month = String(sydney.getMonth() + 1).padStart(2, '0');
+  const day = String(sydney.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function BookingPage() {
   const [step, setStep] = useState<'service' | 'deposit' | 'confirmed'>('service');
+  const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday()); // Comment: Date in YYYY-MM-DD format
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const [selectedDesigner, setSelectedDesigner] = useState<Designer | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedDate, setSelectedDate] = useState<number | null>(24);
   const [selectedTime, setSelectedTime] = useState<string | null>('2:00 PM');
-  const [serviceCategory, setServiceCategory] = useState('Cut & Style');
   const [shopsDb, setShopsDb] = useState<any[]>([]);
-  const [loadingShops, setLoadingShops] = useState<boolean>(true); // Comment: Track initial venue loading state
+  const [loadingShops, setLoadingShops] = useState<boolean>(true);
   const [designersForShop, setDesignersForShop] = useState<any[]>([]);
+  const [availableDesignerIds, setAvailableDesignerIds] = useState<number[]>([]);
+  const [loadingDesigners, setLoadingDesigners] = useState<boolean>(false);
   const [servicesForShop, setServicesForShop] = useState<any[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false); // Comment: Track loading state when creating booking
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
 
   // Comment: Refs to enable smooth scrolling to each step section
-  const serviceSectionRef = useRef<HTMLElement | null>(null);
-  const designerSectionRef = useRef<HTMLElement | null>(null);
   const dateSectionRef = useRef<HTMLElement | null>(null);
+  const venueSectionRef = useRef<HTMLElement | null>(null);
+  const designerSectionRef = useRef<HTMLElement | null>(null);
+  const serviceSectionRef = useRef<HTMLElement | null>(null);
   const timeSectionRef = useRef<HTMLElement | null>(null);
 
   // Comment: Helper to smoothly scroll to a section
@@ -75,33 +90,88 @@ export default function BookingPage() {
     loadShops();
   }, []);
 
-  // Load active designers for a given shop (by DB id) via API
-  const loadDesignersForShop = async (shopIdDb: number) => {
+  // Load all services on mount (all designers can do all services regardless of venue or role)
+  useEffect(() => {
+    void loadAllServices();
+  }, []);
+
+  // Comment: Load available designers when date and shop are selected
+  useEffect(() => {
+    if (selectedDate && selectedShop && shopsDb.length > 0) {
+      const currentShop = shopsDb.find((s) => String(s.id) === selectedShop);
+      if (currentShop && currentShop.id) {
+        void loadAvailableDesigners(selectedDate, currentShop.id);
+      }
+    } else {
+      setDesignersForShop([]);
+      setAvailableDesignerIds([]);
+    }
+  }, [selectedDate, selectedShop, shopsDb]);
+
+  // Comment: Load available designers for a given date and shop
+  const loadAvailableDesigners = async (date: string, shopIdDb: number | null) => {
+    if (!date || !shopIdDb) {
+      setDesignersForShop([]);
+      setAvailableDesignerIds([]);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/designers?shopId=${shopIdDb}`);
-      const json = await res.json();
-      if (!res.ok) {
-        console.error('Error fetching designers for shop via API:', json.error);
+      setLoadingDesigners(true);
+      // Comment: First, get available designer IDs for this date and shop
+      const availabilityRes = await fetch(`/api/designer-schedules?date=${encodeURIComponent(date)}&shopId=${shopIdDb}`);
+      const availabilityData = await availabilityRes.json();
+      
+      if (!availabilityRes.ok) {
+        console.error('Error fetching designer availability:', availabilityData.error);
+        setDesignersForShop([]);
+        setAvailableDesignerIds([]);
         return;
       }
-      setDesignersForShop(json.designers || []);
+
+      const availableIds = availabilityData.designerIds || [];
+      setAvailableDesignerIds(availableIds);
+
+      // Comment: Then, get full designer details for available designers
+      if (availableIds.length === 0) {
+        setDesignersForShop([]);
+        return;
+      }
+
+      const designersRes = await fetch(`/api/designers?shopId=${shopIdDb}`);
+      const designersData = await designersRes.json();
+      
+      if (!designersRes.ok) {
+        console.error('Error fetching designers:', designersData.error);
+        setDesignersForShop([]);
+        return;
+      }
+
+      // Comment: Filter designers to only include those available on the selected date
+      const allDesigners = designersData.designers || [];
+      const availableDesigners = allDesigners.filter((d: any) => availableIds.includes(d.id));
+      setDesignersForShop(availableDesigners);
     } catch (error) {
-      console.error('Unexpected error fetching designers for shop:', error);
+      console.error('Unexpected error fetching available designers:', error);
+      setDesignersForShop([]);
+      setAvailableDesignerIds([]);
+    } finally {
+      setLoadingDesigners(false);
     }
   };
 
-  // Load active services for a given shop (by DB id) via API
-  const loadServicesForShop = async (shopIdDb: number) => {
+  // Load all active services (all designers can do all services regardless of venue or role)
+  const loadAllServices = async () => {
     try {
-      const res = await fetch(`/api/services?shopId=${shopIdDb}`);
+      const res = await fetch(`/api/services`);
       const json = await res.json();
       if (!res.ok) {
-        console.error('Error fetching services for shop via API:', json.error);
+        console.error('Error fetching services via API:', json.error);
         return;
       }
       setServicesForShop(json.services || []);
     } catch (error) {
-      console.error('Unexpected error fetching services for shop:', error);
+      console.error('Unexpected error fetching services:', error);
     }
   };
 
@@ -126,54 +196,150 @@ export default function BookingPage() {
     selected: selectedDesigner ? selectedDesigner.id === String(d.id) : false,
   }));
 
+  // Comment: Helper function to determine service category based on name
+  // Remove (card) or (cash) from name for category detection
+  const getServiceCategory = (name: string): string => {
+    const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+    const lowerName = cleanName.toLowerCase();
+    
+    // Check for category suffix first (e.g., "- Perm", "- Magic", "- Hot Perm", "- Color", "- Clinic", "- Package")
+    if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
+    if (lowerName.includes('- magic')) return 'Magic';
+    if (lowerName.includes('- hot perm')) return 'Hot Perm';
+    if (lowerName.includes('- color')) return 'Color';
+    if (lowerName.includes('- clinic')) return 'Clinic';
+    if (lowerName.includes('- package')) return 'Package';
+    
+    // Check for specific patterns
+    // Package category - includes packages and design additions (without category suffix)
+    if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
+    if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek') || lowerName.includes('clinic')) return 'Clinic';
+    if (lowerName.includes('color') || lowerName.includes('bleach') || lowerName.includes('toning')) return 'Color';
+    if (lowerName.includes('special perm') || lowerName.includes('setting perm') || lowerName.includes('design setting perm')) return 'Hot Perm';
+    if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
+    if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
+    if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
+    
+    // Cut category - includes all cut-related services and additions (without category suffix)
+    if (lowerName.includes('cut') || 
+        (lowerName.includes('length addition') && !lowerName.includes('-')) || 
+        lowerName.includes('hair extension') || 
+        (lowerName.includes('director level') && !lowerName.includes('-')) || 
+        (lowerName.includes('manager level') && !lowerName.includes('-')) ||
+        lowerName.includes('kids cut') ||
+        lowerName.includes('bangs cut')) {
+      return 'Cut';
+    }
+    
+    return 'Other';
+  };
+
   // Map services loaded from API into UI Service objects
-  const services: Service[] = servicesForShop.map((s: any) => ({
-    id: String(s.id),
-    name: s.name as string,
-    price: Number(s.price),
-    priceLabel: 'Standard',
-    duration: `${s.duration_minutes} mins`,
-    description: '',
-    image: '',
-    selected: selectedService ? selectedService.id === String(s.id) : false,
-  }));
+  // Remove "(card)" or "(cash)" from name for display in booking page
+  // Only show card services to customers (filter out cash services)
+  // Hide services that are admin-only (additional fees like Length Addition)
+  const services: Service[] = servicesForShop
+    .filter((s: any) => {
+      const name = (s.name as string).toLowerCase();
+      // Only show card services, hide cash services from customers
+      const isCardService = name.includes('(card)') || (!name.includes('(cash)') && !name.includes('(card)'));
+      // Hide admin-only services (additional fees)
+      const visibleTo = s.visible_to || 'customer';
+      const isVisibleToCustomer = visibleTo === 'customer' || visibleTo === 'both';
+      return isCardService && isVisibleToCustomer;
+    })
+    .map((s: any) => {
+      const displayName = (s.name as string).replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+      return {
+        id: String(s.id),
+        name: displayName,
+        price: Number(s.price),
+        priceLabel: 'Standard',
+        duration: `${s.duration_minutes} mins`,
+        description: '',
+        image: '',
+        selected: selectedService ? selectedService.id === String(s.id) : false,
+      };
+    });
+
+  // Group services by category (use DB category if available, otherwise fallback to name-based detection)
+  // Note: services from API may not have category field, so we need to check the original service data
+  const servicesByCategory = services.reduce((acc, service) => {
+    // Get original service data to check category
+    const originalService = servicesForShop.find((s: any) => String(s.id) === service.id);
+    const category = (originalService?.category as string) || getServiceCategory(service.name);
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(service);
+    return acc;
+  }, {} as Record<string, Service[]>);
+
+  // Define category order
+  const categoryOrder = ['Cut', 'Dry', 'Perm', 'Magic', 'Hot Perm', 'Color', 'Clinic', 'Package', 'Other'];
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    // Comment: When date changes, clear downstream selections
+    setSelectedShop(null);
+    setSelectedDesigner(null);
+    setSelectedService(null);
+    setSelectedTime(null);
+  };
+
+  const handleShopSelect = (shopId: string) => {
+    setSelectedShop(shopId);
+    // Comment: When shop changes, clear downstream selections
+    setSelectedDesigner(null);
+    setSelectedService(null);
+    setSelectedTime(null);
+  };
 
   const handleDesignerSelect = (designer: Designer) => {
     setSelectedDesigner(designer);
+    // Comment: When designer changes, clear downstream selections
+    setSelectedService(null);
+    setSelectedTime(null);
   };
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
-    // Comment: When service changes, clear downstream selections
-    setSelectedDesigner(null);
-    setSelectedDate(null);
+    // Comment: When service changes, clear time selection
     setSelectedTime(null);
+    // Close modal after selection
+    setIsServiceModalOpen(false);
+    setSelectedCategory(null);
+  };
+
+  const handleCategoryClick = (category: string) => {
+    setSelectedCategory(category);
+    setIsServiceModalOpen(true);
   };
 
   // Comment: When each step is selected, scroll to the corresponding section after render
   useEffect(() => {
+    if (selectedDate) {
+      scrollToSection(venueSectionRef);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
     if (selectedShop) {
-      scrollToSection(serviceSectionRef);
+      scrollToSection(designerSectionRef);
     }
   }, [selectedShop]);
 
   useEffect(() => {
-    if (selectedService) {
-      scrollToSection(designerSectionRef);
-    }
-  }, [selectedService]);
-
-  useEffect(() => {
     if (selectedDesigner) {
-      scrollToSection(dateSectionRef);
+      scrollToSection(serviceSectionRef);
     }
   }, [selectedDesigner]);
 
   useEffect(() => {
-    if (selectedDate) {
+    if (selectedService) {
       scrollToSection(timeSectionRef);
     }
-  }, [selectedDate]);
+  }, [selectedService]);
 
   // Comment: When moving to deposit step, smoothly scroll to top
   useEffect(() => {
@@ -198,6 +364,9 @@ export default function BookingPage() {
       const shopDbId = currentShop?._dbId ?? null;
       const designerId = selectedDesigner ? Number(selectedDesigner.id) : null;
       const serviceId = selectedService ? Number(selectedService.id) : null;
+      
+      // Comment: Extract day from YYYY-MM-DD format
+      const day = selectedDate ? Number(selectedDate.split('-')[2]) : null;
 
       await fetch('/api/appointment', {
         method: 'POST',
@@ -208,10 +377,11 @@ export default function BookingPage() {
           shopId: shopDbId,
           designerId,
           serviceId,
-          day: selectedDate,
+          day,
           timeLabel: selectedTime,
           totalAmount: selectedService?.price ?? null,
           depositAmount,
+          fullDate: selectedDate, // Comment: Pass full date in YYYY-MM-DD format
         }),
       });
       // TODO: Optionally show a success toast or redirect
@@ -269,7 +439,7 @@ export default function BookingPage() {
                   <div className="flex justify-between pt-2">
                     <span className="text-sm text-gray-500">Date & Time</span>
                     <span className="text-sm font-medium text-slate-900">
-                      Oct {selectedDate}, 2023 at {selectedTime}
+                      {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} at {selectedTime}
                     </span>
                   </div>
                   <div className="flex justify-between pt-2">
@@ -450,7 +620,7 @@ export default function BookingPage() {
                 <div className="flex justify-between sm:block">
                   <span className="text-gray-500">Date &amp; Time</span>
                   <span className="sm:block font-medium text-slate-900">
-                    Oct {selectedDate}, 2023 at {selectedTime}
+                    {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} at {selectedTime}
                   </span>
                 </div>
               </div>
@@ -485,139 +655,104 @@ export default function BookingPage() {
       <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 md:px-10 lg:px-40 py-8 space-y-16">
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-black font-bold">Shop</span>
+          <span className="text-black font-bold">Date</span>
           <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
-          <span className="text-black font-bold">Service</span>
+          <span className="text-black font-bold">Venue</span>
+          <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
+          <span className="text-gray-400">Designer</span>
+          <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
+          <span className="text-gray-400">Service</span>
           <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
           <span className="text-gray-400">Time</span>
-          <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
-          <span className="text-gray-400">Deposit</span>
         </div>
 
-        {/* 01. Venue Selection */}
-        <section className="space-y-6">
+        {/* 01. Date Selection */}
+        <section ref={dateSectionRef} className="space-y-6">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-black mb-2 tracking-tight">Select Location</h1>
-            <p className="text-gray-600 text-lg font-light">Choose your preferred salon location.</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-black mb-2 tracking-tight">Select Date</h1>
+            <p className="text-gray-600 text-lg font-light">Choose your preferred appointment date.</p>
           </div>
-          <div
-            className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-all duration-500 ${
-              selectedShop ? 'opacity-100 translate-y-0' : 'opacity-100 translate-y-0'
-            }`}
+          <div className="max-w-md">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              min={getSydneyToday()}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl text-lg font-medium text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+            />
+          </div>
+        </section>
+
+        {/* 02. Venue Selection (appears after date is chosen) */}
+        {selectedDate && (
+          <section
+            ref={venueSectionRef}
+            className="transition-all duration-500 space-y-6"
           >
-            {loadingShops && shops.length === 0 && (
-              <>
-                {[1, 2].map((skeleton) => (
-                  <div
-                    key={skeleton}
-                    className="bg-white border-2 border-gray-100 rounded-2xl p-8 shadow-sm animate-pulse"
-                  >
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="bg-gray-200 rounded-full p-3 w-10 h-10" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-200 rounded w-1/2" />
-                        <div className="h-3 bg-gray-100 rounded w-3/4" />
+            <div>
+              <h3 className="text-2xl font-bold text-black flex items-center gap-2 mb-2">
+                <span className="bg-black text-white text-xs font-bold px-2 py-1 rounded">02</span>
+                Select Location
+              </h3>
+              <p className="text-gray-600 text-lg font-light">Choose your preferred salon location.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {loadingShops && shops.length === 0 && (
+                <>
+                  {[1, 2].map((skeleton) => (
+                    <div
+                      key={skeleton}
+                      className="bg-white border-2 border-gray-100 rounded-2xl p-8 shadow-sm animate-pulse"
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="bg-gray-200 rounded-full p-3 w-10 h-10" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-200 rounded w-1/2" />
+                          <div className="h-3 bg-gray-100 rounded w-3/4" />
+                        </div>
                       </div>
+                      <div className="h-3 bg-gray-100 rounded w-2/3" />
                     </div>
-                    <div className="h-3 bg-gray-100 rounded w-2/3" />
-                  </div>
-                ))}
-              </>
-            )}
-            {!loadingShops &&
-              shops.map((shop) => (
-                <button
-                  key={shop.id}
-                  type="button"
+                  ))}
+                </>
+              )}
+              {!loadingShops &&
+                shops.map((shop) => (
+                  <button
+                    key={shop.id}
+                    type="button"
                   onClick={() => {
-                    // Comment: When changing venue, reset all downstream selections
-                    setSelectedShop(shop.id);
-                    setSelectedService(null);
-                    setSelectedDesigner(null);
-                    setSelectedDate(null);
-                    setSelectedTime(null);
-                    if ((shop as any)._dbId) {
-                      void loadDesignersForShop((shop as any)._dbId);
-                      void loadServicesForShop((shop as any)._dbId);
-                    }
-                    // Comment: After selecting a shop, scroll to the service section
-                    scrollToSection(serviceSectionRef);
+                    handleShopSelect(shop.id);
                   }}
-                  className={`text-left bg-white border-2 rounded-2xl p-8 cursor-pointer transition-all shadow-sm hover:shadow-lg ${
-                    selectedShop === shop.id ? 'border-black scale-[1.01]' : 'border-gray-200 hover:border-gray-400'
-                  }`}
-                >
-                  <div className="flex items-start gap-4 mb-2">
-                    <div className="bg-black text-white rounded-full p-3">
-                      <span className="material-symbols-outlined">location_on</span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-black mb-1">{shop.name}</h3>
-                      <p className="text-gray-600 text-sm">{shop.address}</p>
-                    </div>
-                    {selectedShop === shop.id && (
-                      <div className="bg-black text-white rounded-full p-1">
-                        <span className="material-symbols-outlined text-sm">check</span>
+                    className={`text-left bg-white border-2 rounded-2xl p-8 cursor-pointer transition-all shadow-sm hover:shadow-lg ${
+                      selectedShop === shop.id ? 'border-black scale-[1.01]' : 'border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4 mb-2">
+                      <div className="bg-black text-white rounded-full p-3">
+                        <span className="material-symbols-outlined">location_on</span>
                       </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-          </div>
-        </section>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-black mb-1">{shop.name}</h3>
+                        <p className="text-gray-600 text-sm">{shop.address}</p>
+                      </div>
+                      {selectedShop === shop.id && (
+                        <div className="bg-black text-white rounded-full p-1">
+                          <span className="material-symbols-outlined text-sm">check</span>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+            </div>
+          </section>
+        )}
 
-        {/* 02. Service Selection (appears after venue is chosen) */}
-        <section
-          ref={serviceSectionRef}
-          className={`transition-all duration-500 ${
-            selectedShop ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'
-          }`}
-        >
-          <div className="flex items-center justify-between gap-6 mb-8 border-b border-gray-200 pb-4">
-            <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-              <span className="bg-black text-white text-xs font-bold px-2 py-1 rounded">02</span>
-              Select Service
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map((service) => (
-              <button
-                key={service.id}
-                type="button"
-                onClick={() => handleServiceSelect(service)}
-                className={`text-left bg-white border-2 rounded-2xl p-5 flex flex-col justify-between gap-3 transition-all shadow-sm hover:shadow-md ${
-                  service.selected ? 'border-black' : 'border-gray-200 hover:border-gray-400'
-                }`}
-              >
-                <div>
-                  <h4 className="text-black text-lg font-bold mb-1">{service.name}</h4>
-                  <p className="text-sm text-gray-500">
-                    Duration: <span className="font-medium text-gray-800">{service.duration}</span>
-                  </p>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-sm font-semibold text-gray-900">${service.price}</span>
-                  {service.selected && (
-                    <span className="inline-flex items-center justify-center rounded-full bg-black text-white text-xs px-2 py-1">
-                      Selected
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-            {services.length === 0 && (
-              <p className="text-gray-500 text-sm col-span-full">
-                No services found for this shop. Please configure services in the admin panel.
-              </p>
-            )}
-          </div>
-        </section>
-
-        {/* 03. Designer Selection (only after service is chosen) */}
-        {services.length > 0 && selectedService && (
+        {/* 03. Designer Selection (only after date and venue are chosen) */}
+        {selectedDate && selectedShop && (
           <section
             ref={designerSectionRef}
-            className="transition-all duration-500 opacity-100 translate-y-0 space-y-10"
+            className="transition-all duration-500 space-y-6"
           >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 border-b border-gray-200 pb-4">
               <h3 className="text-2xl font-bold text-black flex items-center gap-2">
@@ -625,106 +760,154 @@ export default function BookingPage() {
                 Select Designer
               </h3>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {designers.map((designer) => (
-                <button
-                  key={designer.id}
-                  type="button"
-                  onClick={() => handleDesignerSelect(designer)}
-                  className={`bg-white border-2 rounded-2xl p-6 text-left flex flex-col gap-2 transition-all shadow-sm hover:shadow-md ${
-                    designer.selected ? 'border-black' : 'border-gray-200 hover:border-gray-400'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3 mb-1">
-                    <div>
-                      <h4 className="text-lg font-bold text-black">{designer.name}</h4>
-                      <p className="text-sm text-gray-500">{designer.title}</p>
-                    </div>
-                    {designer.selected && (
-                      <div className="rounded-full bg-black text-white px-2 py-1 text-xs font-semibold flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">check</span>
-                        Selected
+            {loadingDesigners ? (
+              <div className="text-center py-8">
+                <div className="inline-block w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin"></div>
+                <p className="text-gray-500 text-sm mt-4">Loading available designers...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {designers.map((designer) => (
+                  <button
+                    key={designer.id}
+                    type="button"
+                    onClick={() => handleDesignerSelect(designer)}
+                    className={`bg-white border-2 rounded-2xl p-6 text-left flex flex-col gap-2 transition-all shadow-sm hover:shadow-md ${
+                      designer.selected ? 'border-black' : 'border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <div>
+                        <h4 className="text-lg font-bold text-black">{designer.name}</h4>
+                        <p className="text-sm text-gray-500">{designer.title}</p>
                       </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-              {designers.length === 0 && (
-                <p className="text-gray-500 text-sm col-span-full">
-                  No designers linked to this shop yet. Please configure staff in the admin panel.
-                </p>
-              )}
-            </div>
+                      {designer.selected && (
+                        <div className="rounded-full bg-black text-white px-2 py-1 text-xs font-semibold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">check</span>
+                          Selected
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+                {designers.length === 0 && !loadingDesigners && (
+                  <p className="text-gray-500 text-sm col-span-full">
+                    No designers available for this date and location. Please try a different date or location.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
-            {/* 04. Date Selection (only after designer is chosen) */}
-            {selectedDesigner && (
-              <section ref={dateSectionRef} className="space-y-6">
-                <div className="flex items-center justify-between gap-6 mb-2 border-b border-gray-200 pb-4">
-                  <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-                    <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">04</span>
-                    Select Date
-                  </h3>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                  <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                    <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors">
-                      <span className="material-symbols-outlined">chevron_left</span>
+        {/* 04. Service Selection (only after designer is chosen) */}
+        {selectedDate && selectedShop && selectedDesigner && (
+          <section
+            ref={serviceSectionRef}
+            className="transition-all duration-500"
+          >
+            <div className="flex items-center justify-between gap-6 mb-8 border-b border-gray-200 pb-4">
+              <h3 className="text-2xl font-bold text-black flex items-center gap-2">
+                <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">04</span>
+                Select Service
+              </h3>
+            </div>
+            {services.length === 0 ? (
+              <p className="text-gray-500 text-sm">
+                No services found for this shop. Please configure services in the admin panel.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {categoryOrder.map((category) => {
+                  const categoryServices = servicesByCategory[category];
+                  if (!categoryServices || categoryServices.length === 0) return null;
+                  
+                  const hasSelectedService = selectedService && getServiceCategory(selectedService.name) === category;
+                  
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => handleCategoryClick(category)}
+                      className={`bg-white border-2 rounded-2xl p-6 hover:border-black hover:shadow-md transition-all text-center ${
+                        hasSelectedService ? 'border-black bg-gray-50' : 'border-gray-200'
+                      }`}
+                    >
+                      <h4 className="text-lg font-bold text-black mb-2">{category}</h4>
+                      <p className="text-sm text-gray-500">{categoryServices.length} services</p>
+                      {hasSelectedService && (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center justify-center rounded-full bg-black text-white text-xs px-2 py-1">
+                            Selected
+                          </span>
+                        </div>
+                      )}
                     </button>
-                    <h2 className="text-sm md:text-base font-bold text-slate-900">October 2023</h2>
-                    <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600 transition-colors">
-                      <span className="material-symbols-outlined">chevron_right</span>
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 text-center py-3 bg-gray-50">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                      <span key={day} className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                        {day}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 text-center p-3 gap-y-3 gap-x-1 md:gap-x-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].map(
-                      (day) => {
-                        const isOff = day === 10 || day === 17;
-                        const isSelected = day === selectedDate;
-                        return (
-                          <button
-                            key={day}
-                            onClick={() => {
-                              if (isOff) return;
-                              setSelectedDate(day);
-                              // Comment: After choosing date, scroll to time section
-                              scrollToSection(timeSectionRef);
-                            }}
-                            className={`h-9 w-full flex items-center justify-center rounded-lg text-xs transition-colors ${
-                              isOff
-                                ? 'text-gray-400 cursor-not-allowed'
-                                : isSelected
-                                ? 'bg-linear-to-br from-gray-800 to-black text-white font-bold shadow-md shadow-gray-500/30'
-                                : 'text-slate-900 hover:bg-gray-100'
-                            }`}
-                            disabled={isOff}
-                            title={isOff ? 'Day Off' : ''}
-                          >
-                            {day}
-                          </button>
-                        );
-                      }
-                    )}
-                  </div>
-                </div>
-              </section>
+                  );
+                })}
+              </div>
             )}
 
-            {/* 05. Time Selection + Continue (only after date is chosen) */}
-            {selectedDesigner && selectedDate && (
-              <section ref={timeSectionRef} className="space-y-6">
-                <div className="flex items-center justify-between gap-6 mb-2 border-b border-gray-200 pb-4">
-                  <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-                    <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">05</span>
-                    Select Time
-                  </h3>
+            {/* Service Selection Modal */}
+            {isServiceModalOpen && selectedCategory && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
+                <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                    <h3 className="text-2xl font-bold text-black">{selectedCategory}</h3>
+                    <button
+                      type="button"
+                      onClick={() => setIsServiceModalOpen(false)}
+                      className="text-gray-500 hover:text-black transition-colors"
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {servicesByCategory[selectedCategory]?.map((service) => (
+                        <button
+                          key={service.id}
+                          type="button"
+                          onClick={() => handleServiceSelect(service)}
+                          className={`text-left bg-white border-2 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all shadow-sm hover:shadow-md ${
+                            service.selected ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-400'
+                          }`}
+                        >
+                          <div>
+                            <h4 className="text-black text-base font-bold mb-1">{service.name}</h4>
+                            <p className="text-xs text-gray-500">
+                              Duration: <span className="font-medium text-gray-800">{service.duration}</span>
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-sm font-semibold text-gray-900">
+                              From ${service.price.toFixed(0)}
+                            </span>
+                            {service.selected && (
+                              <span className="inline-flex items-center justify-center rounded-full bg-black text-white text-xs px-2 py-1">
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 05. Time Selection + Continue (only after service is chosen) */}
+        {selectedDate && selectedShop && selectedDesigner && selectedService && (
+          <section ref={timeSectionRef} className="space-y-6">
+            <div className="flex items-center justify-between gap-6 mb-2 border-b border-gray-200 pb-4">
+              <h3 className="text-2xl font-bold text-black flex items-center gap-2">
+                <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">05</span>
+                Select Time
+              </h3>
+            </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Morning</span>
@@ -827,8 +1010,6 @@ export default function BookingPage() {
                 </div>
               </section>
             )}
-          </section>
-        )}
       </main>
       {/* Sticky summary bar removed: UX now advances automatically on selection */}
     </div>

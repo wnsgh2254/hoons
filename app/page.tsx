@@ -72,10 +72,10 @@ const Home = () => {
       <section id="services" className="bg-[#F4F4F4]">
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-black">
              {[
-                { title: 'Cut', price: '65', img: 'https://i.pinimg.com/736x/46/14/a3/4614a381370f5bdaf30c8b0853e9436d.jpg' },
-                { title: 'Perm', price: '300', img: 'https://i.pinimg.com/736x/df/7c/cb/df7ccbcffc5d71ffea4b8cbb8a529625.jpg' },
-                { title: 'Color', price: '220', img: 'https://i.pinimg.com/736x/d0/9c/f5/d09cf50e9c06f929e6bb7270b769a4fe.jpg' },
-                { title: 'Care', price: '150', img: 'https://i.pinimg.com/736x/1a/c2/6d/1ac26da7d8e22cb9872a2a2f2ce46cfc.jpg' },
+                { title: 'Cut', price: '55', img: 'https://i.pinimg.com/736x/46/14/a3/4614a381370f5bdaf30c8b0853e9436d.jpg' },
+                { title: 'Perm', price: '170', img: 'https://i.pinimg.com/736x/df/7c/cb/df7ccbcffc5d71ffea4b8cbb8a529625.jpg' },
+                { title: 'Color', price: '170', img: 'https://i.pinimg.com/736x/d0/9c/f5/d09cf50e9c06f929e6bb7270b769a4fe.jpg' },
+                { title: 'Care', price: '60', img: 'https://i.pinimg.com/736x/1a/c2/6d/1ac26da7d8e22cb9872a2a2f2ce46cfc.jpg' },
              ].map((item, idx) => (
                 <div key={idx} className="group relative aspect-square border-r border-black last:border-r-0 md:last:border-r-0 odd:border-r md:odd:border-r overflow-hidden">
                     <img 
@@ -90,7 +90,7 @@ const Home = () => {
                         <div className="flex justify-between items-end text-white z-10">
                             {/* Matching size with Space section text below: text-2xl md:text-3xl */}
                             <span className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter">{item.title}</span>
-                            <span className="font-mono text-xs md:text-sm opacity-90">${item.price} AUD</span>
+                            <span className="font-mono text-xs md:text-sm opacity-90">From ${item.price}</span>
                 </div>
               </div>
                 </div>
@@ -147,28 +147,29 @@ const Home = () => {
           ))}
       </section>
 
-      {/* DESIGNERS SECTION - Will show designer profiles */}
-      <section id="designers" className="border-t border-black bg-[#F4F4F4] py-32 px-6 md:px-12">
-        <div className="w-full">
-          <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Designers</h4>
-          <p className="font-light text-lg text-left text-gray-500 mb-12">Meet our talented team of stylists.</p>
-          {/* Comment: Designer profiles will be displayed here */}
-          {/* TODO: Add designer profiles from database */}
-        </div>
-      </section>
-
-      {/* EXPLORE SECTION - Instagram Feed */}
-      <section id="explore" className="border-t border-black bg-[#F4F4F4]">
+      {/* PORTFOLIO SECTION - Instagram Feed */}
+      <section id="portfolio" className="border-t border-black bg-[#F4F4F4]">
          <div className="w-full">
              {/* Header with equal top and bottom padding to spacing */}
              <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
-                <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
+                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Portfolio</h4>
+                <p className="font-light text-lg text-left text-gray-500">Discover our latest work and inspirations from our designers&apos; Instagram.</p>
           </div>
 
             {/* Instagram Feed Grid - Full Width */}
             {/* Comment: This section will display Instagram feed from designers */}
-            {/* TODO: Integrate Instagram API to fetch real posts from designers */}
+            {/* TODO: Integrate Instagram Basic Display API or Instagram Graph API to fetch real posts */}
+            {/* 
+              Instagram API Integration Options:
+              1. Instagram Basic Display API - for personal accounts
+              2. Instagram Graph API - for business accounts (requires Facebook Business account)
+              
+              Steps:
+              1. Set up Instagram App in Facebook Developers
+              2. Get Access Token
+              3. Create API route to fetch posts (e.g., /api/instagram)
+              4. Replace GALLERY_ITEMS with real Instagram posts
+            */}
             <div className="grid grid-cols-2 md:grid-cols-4 border-t border-black">
                 {GALLERY_ITEMS.map((item, idx) => (
                     <div 

@@ -39,7 +39,8 @@ export function MainNav() {
           <nav className="hidden md:flex space-x-12 absolute left-1/2 transform -translate-x-1/2">
             <Link href={sectionHref('#services')} className="hover:underline">Menu</Link>
             <Link href={sectionHref('#locations')} className="hover:underline">Locations</Link>
-            <Link href={sectionHref('#designers')} className="hover:underline">Designers</Link>
+            <Link href="/designers" className="hover:underline">Designers</Link>
+            <Link href={sectionHref('#portfolio')} className="hover:underline">Portfolio</Link>
           </nav>
 
           {/* Right: Book Now / Staff Login / Mobile Menu */}
@@ -69,7 +70,8 @@ export function MainNav() {
             { name: 'Home', path: '/', hash: '' },
             { name: 'Menu', path: '/', hash: '#services' },
             { name: 'Locations', path: '/', hash: '#locations' },
-            { name: 'Designers', path: '/', hash: '#designers' },
+            { name: 'Designers', path: '/designers', hash: '' },
+            { name: 'Portfolio', path: '/', hash: '#portfolio' },
             { name: 'Staff Login', path: '/admin/appointments', hash: '' },
             { name: 'Book Now', path: '/booking', hash: '' },
           ].map((item) => (
