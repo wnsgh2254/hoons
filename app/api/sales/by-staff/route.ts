@@ -91,23 +91,23 @@ export async function GET(request: NextRequest) {
     (services || []).forEach((s: any) => servicesMap.set(s.id, s));
 
     // Comment: Fetch designers (from bookings and prepaid pass sales)
-    const designerIdsFromBookings = Array.from(
-      new Set(
+    const designerIdsFromBookings: number[] = Array.from(
+      new Set<number>(
         (bookings || [])
           .map((b: any) => b.designer_id)
           .filter((id: number | null | undefined): id is number => id !== null && id !== undefined)
       )
     );
 
-    const designerIdsFromPayments = Array.from(
-      new Set(
+    const designerIdsFromPayments: number[] = Array.from(
+      new Set<number>(
         (payments || [])
           .map((p: any) => p.designer_id)
           .filter((id: number | null | undefined): id is number => id !== null && id !== undefined)
       )
     );
 
-    const allDesignerIds: number[] = Array.from(new Set([...designerIdsFromBookings, ...designerIdsFromPayments]));
+    const allDesignerIds: number[] = Array.from(new Set<number>([...designerIdsFromBookings, ...designerIdsFromPayments]));
 
     const { data: designers } = await supabase
       .from('designers')
