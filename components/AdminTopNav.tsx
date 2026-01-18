@@ -11,6 +11,7 @@ const navItems = [
   { href: '/admin/services', icon: 'content_cut', label: 'Services' },
   { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
   { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
+  { href: '/admin/wages', icon: 'payments', label: 'Wages' },
 ];
 
 export default function AdminTopNav() {
