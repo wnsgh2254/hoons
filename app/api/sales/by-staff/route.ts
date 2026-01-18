@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       )
     );
 
-    const allDesignerIds = Array.from(new Set([...designerIdsFromBookings, ...designerIdsFromPayments]));
+    const allDesignerIds: number[] = Array.from(new Set([...designerIdsFromBookings, ...designerIdsFromPayments]));
 
     const { data: designers } = await supabase
       .from('designers')
@@ -118,33 +118,32 @@ export async function GET(request: NextRequest) {
     (designers || []).forEach((d: any) => designersMap.set(d.id, d));
 
     // Comment: Group bookings by designer
-    const staffSalesMap = new Map<
-      number,
-      {
-        designerId: number;
-        name: string;
-        sales: {
-          service: { quantity: number; amount: number };
-          product: { quantity: number; amount: number };
-          subtotal: number;
-          membership: { quantity: number; amount: number };
-          ticket: { quantity: number; amount: number };
-          total: number;
-        };
-        membershipDeduction: {
-          service: { quantity: number; amount: number };
-          subtotal: number;
-        };
-        total: {
-          service: { amount: number };
-          product: { amount: number };
-          subtotal: number;
-        };
-      }
-    >();
+    type StaffSalesData = {
+      designerId: number;
+      name: string;
+      sales: {
+        service: { quantity: number; amount: number };
+        product: { quantity: number; amount: number };
+        subtotal: number;
+        membership: { quantity: number; amount: number };
+        ticket: { quantity: number; amount: number };
+        total: number;
+      };
+      membershipDeduction: {
+        service: { quantity: number; amount: number };
+        subtotal: number;
+      };
+      total: {
+        service: { amount: number };
+        product: { amount: number };
+        subtotal: number;
+      };
+    };
+
+    const staffSalesMap = new Map<number, StaffSalesData>();
 
     // Comment: Initialize staff data
-    allDesignerIds.forEach((id) => {
+    allDesignerIds.forEach((id: number) => {
       const designer = designersMap.get(id);
       if (designer) {
         staffSalesMap.set(id, {
