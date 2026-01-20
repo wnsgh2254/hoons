@@ -4,10 +4,11 @@ import { supabase } from '@/lib/supabase';
 // Comment: Load single purchase header + items
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const purchaseId = Number(params.id);
+    const { id } = await context.params;
+    const purchaseId = Number(id);
     if (!purchaseId) {
       return NextResponse.json({ error: '잘못된 id 입니다.' }, { status: 400 });
     }
