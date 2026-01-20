@@ -90,24 +90,24 @@ export default function AdminTopNav() {
                   >
                     <span className="material-symbols-outlined text-xl">{item.icon}</span>
                   </Link>
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-0 w-[360px] rounded-2xl bg-slate-800 text-white shadow-2xl border border-slate-700 opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto z-50">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-0 w-[360px] rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto z-50">
                     <div className="p-4 grid grid-cols-2 gap-4">
                       {item.submenu.map((section) => (
                         <div key={section.title} className="flex flex-col gap-3">
-                          <p className="text-sm font-semibold text-white/90">{section.title}</p>
+                          <p className="text-sm font-semibold text-gray-900">{section.title}</p>
                           <div className="flex flex-col gap-2">
                             {section.items.map((subItem) => (
                               <Link
                                 key={subItem.href}
                                 href={subItem.href}
-                                className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-white/10"
+                                className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-gray-50"
                               >
-                                <span className="flex size-9 items-center justify-center rounded-full bg-white/10 text-white">
+                                <span className="flex size-9 items-center justify-center rounded-full bg-gray-100 text-gray-700">
                                   <span className="material-symbols-outlined text-lg">
                                     {subItem.icon}
                                   </span>
                                 </span>
-                                <span className="text-sm font-medium text-white/90">
+                                <span className="text-sm font-medium text-gray-800">
                                   {subItem.label}
                                 </span>
                               </Link>
