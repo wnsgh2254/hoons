@@ -75,11 +75,11 @@ export default function StaffManagementPage() {
       member.role.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => {
-      // Sort order: Director -> Manager -> Designer -> Others
+      // Sort order: Director -> Senior Designer -> Designer -> Others
       const getRoleOrder = (role: string) => {
         const roleLower = role.toLowerCase();
         if (roleLower.includes('director')) return 1;
-        if (roleLower.includes('manager')) return 2;
+        if (roleLower.includes('senior designer')) return 2;
         if (roleLower.includes('designer') || roleLower.includes('stylist')) return 3;
         return 4;
       };
@@ -359,11 +359,13 @@ export default function StaffManagementPage() {
 function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({
     name: '',
+    english_name: '',
     role: '',
     shop_id: '',
     wage_type: 'percent' as 'percent' | 'hourly',
     percent_rate: '',
     hourly_rate: '',
+    instagramLink: '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -381,11 +383,15 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
     try {
       const requestBody = {
         name: formData.name.trim(),
+        // Comment: English display name for public-facing pages
+        english_name: formData.english_name.trim() || null,
         role: formData.role.trim(),
         shop_id: formData.shop_id ? Number(formData.shop_id) : null,
         wage_type: formData.wage_type,
         percent_rate: formData.wage_type === 'percent' ? Number(formData.percent_rate) : null,
         hourly_rate: formData.wage_type === 'hourly' ? Number(formData.hourly_rate) : null,
+        // Comment: Optional Instagram profile URL
+        instagramLink: formData.instagramLink.trim() || null,
         is_active: true,
       };
 
@@ -425,12 +431,22 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Korean Name</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">English Name</label>
+            <input
+              type="text"
+              placeholder="e.g. Yoonhoon"
+              value={formData.english_name}
+              onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
@@ -444,7 +460,7 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
             >
               <option value="">Select Role</option>
               <option value="Director">Director</option>
-              <option value="Manager">Manager</option>
+              <option value="Senior Designer">Senior Designer</option>
               <option value="Designer">Designer</option>
               <option value="Senior Director">Senior Director</option>
               <option value="Top Stylist">Top Stylist</option>
@@ -478,6 +494,16 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
               <option value="percent">Commission (Percent)</option>
               <option value="hourly">Hourly</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram URL</label>
+            <input
+              type="url"
+              placeholder="https://www.instagram.com/username"
+              value={formData.instagramLink}
+              onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+            />
           </div>
           {formData.wage_type === 'percent' ? (
             <div>
@@ -533,11 +559,13 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
 function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: designer.name,
+    english_name: designer.english_name || '',
     role: designer.role,
     shop_id: designer.shop_id?.toString() || '',
     wage_type: designer.wage_type,
     percent_rate: designer.percent_rate?.toString() || '',
     hourly_rate: designer.hourly_rate?.toString() || '',
+    instagramLink: designer.instagramLink || '',
   });
   const [shops, setShops] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -560,11 +588,15 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
     try {
       const requestBody = {
         name: formData.name.trim(),
+        // Comment: English display name for public-facing pages
+        english_name: formData.english_name.trim() || null,
         role: formData.role.trim(),
         shop_id: formData.shop_id ? Number(formData.shop_id) : null,
         wage_type: formData.wage_type,
         percent_rate: formData.wage_type === 'percent' ? Number(formData.percent_rate) : null,
         hourly_rate: formData.wage_type === 'hourly' ? Number(formData.hourly_rate) : null,
+        // Comment: Optional Instagram profile URL
+        instagramLink: formData.instagramLink.trim() || null,
         is_active: true,
       };
 
@@ -627,12 +659,21 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Korean Name</label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">English Name</label>
+            <input
+              type="text"
+              value={formData.english_name}
+              onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
@@ -646,7 +687,7 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
             >
               <option value="">Select Role</option>
               <option value="Director">Director</option>
-              <option value="Manager">Manager</option>
+              <option value="Senior Designer">Senior Designer</option>
               <option value="Designer">Designer</option>
               <option value="Senior Director">Senior Director</option>
               <option value="Top Stylist">Top Stylist</option>
@@ -668,6 +709,15 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram URL</label>
+            <input
+              type="url"
+              value={formData.instagramLink}
+              onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Wage Type</label>

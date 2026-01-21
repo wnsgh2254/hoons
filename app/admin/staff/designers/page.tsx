@@ -122,7 +122,7 @@ export default function DesignerManagementPage() {
             />
             <div className="flex-col hidden lg:flex">
               <span className="text-sm font-medium text-white">Admin</span>
-              <span className="text-xs text-gray-400">Manager</span>
+              <span className="text-xs text-gray-400">Senior Designer</span>
             </div>
           </div>
         </div>

@@ -1,8 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
-import { DESIGNERS } from './haeyoom---conceptual-hair-salon/services/mockData';
-
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
@@ -33,12 +31,79 @@ const GALLERY_ITEMS = Array.from({ length: 36 }, (_, i) => ({
   image: `https://picsum.photos/id/${10 + i * 2}/800/800`,
 }));
 
-const Home = () => {
-  const [selectedShop, setSelectedShop] = useState<string>('all');
+// Comment: Minimal type for home page designers fetched from /api/designers
+interface HomeDesigner {
+  id: number;
+  name: string;
+  english_name: string | null;
+  role: string;
+  shop_id: number | null;
+  instagramLink?: string | null;
+}
 
-  const filteredDesigners = selectedShop === 'all' 
-    ? DESIGNERS 
-    : DESIGNERS.filter(d => d.shopId === selectedShop);
+const Home = () => {
+  const [selectedShop, setSelectedShop] = useState<number | 'all'>('all');
+  const [designers, setDesigners] = useState<HomeDesigner[]>([]);
+  const [designerShops, setDesignerShops] = useState<{ id: number; name: string }[]>([]);
+
+  // Comment: Load designers & shops via API routes (server uses real Supabase env)
+  useEffect(() => {
+    async function fetchDesignersAndShops() {
+      try {
+        const [designersRes, shopsRes] = await Promise.all([
+          fetch('/api/designers'),
+          fetch('/api/shops'),
+        ]);
+
+        if (!designersRes.ok) {
+          throw new Error('Failed to fetch designers');
+        }
+        if (!shopsRes.ok) {
+          throw new Error('Failed to fetch shops');
+        }
+
+        const designersJson = await designersRes.json();
+        const shopsJson = await shopsRes.json();
+
+        const apiDesigners: HomeDesigner[] = (designersJson.designers || []) as HomeDesigner[];
+        const apiShops: { id: number; name: string }[] = (shopsJson.shops || []).map(
+          (shop: any) => ({
+            id: shop.id,
+            name: shop.name || `HAEYOOM ${shop.location || 'Shop'}`,
+          })
+        );
+
+        const roleRank = (role: string | null | undefined) => {
+          const r = (role || '').toUpperCase();
+          if (r.includes('DIRECTOR')) return 0;
+          if (r.includes('MANAGER')) return 1;
+          if (r.includes('DESIGNER')) return 2;
+          return 3;
+        };
+
+        // Comment: Ensure designers are ordered by role then name
+        const orderedDesigners = apiDesigners.slice().sort((a, b) => {
+          const ra = roleRank(a.role);
+          const rb = roleRank(b.role);
+          if (ra !== rb) return ra - rb;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+
+        setDesigners(orderedDesigners);
+        setDesignerShops(apiShops);
+      } catch (error) {
+        // Comment: Log error for debugging, but keep page rendering
+        console.error('Error loading designers for home page:', error);
+      }
+    }
+
+    fetchDesignersAndShops();
+  }, []);
+
+  const filteredDesigners =
+    selectedShop === 'all'
+      ? designers
+      : designers.filter((d) => d.shop_id === selectedShop);
 
   return (
     <div className="w-full bg-[#F4F4F4]">
@@ -110,7 +175,7 @@ const Home = () => {
                         className="absolute inset-0 w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-700" 
                     />
                     {/* Dark gradient overlay for white text readability */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-linear-to-t from-black/50 to-transparent pointer-events-none" />
                     
                     <div className="absolute inset-0 p-6 flex flex-col justify-end">
                         <div className="flex justify-between items-end text-white z-10">
@@ -162,83 +227,18 @@ const Home = () => {
           ))}
       </section>
 
-      {/* DESIGNERS SECTION - Will show designer profiles */}
       <section id="designers" className="border-t border-black bg-[#F4F4F4]">
         <div className="w-full">
           <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
             <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
-            <div className="flex gap-4 mb-2 md:mb-4 flex-shrink-0">
+            <div className="flex gap-4 mb-2 md:mb-4 shrink-0">
                   <button 
                       onClick={() => setSelectedShop('all')}
                       className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
                   >
                       All
                   </button>
-                  {SHOPS.map(shop => (
-                      <button 
-                          key={shop.id}
-                          onClick={() => setSelectedShop(shop.id)}
-                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
-                      >
-                          {shop.name.replace('HAEYOOM ', '')}
-                      </button>
-                  ))}
-              </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-b border-black">
-              {filteredDesigners.map((designer, index) => {
-                const totalItems = filteredDesigners.length;
-                const lastRowStartMobile = Math.floor((totalItems - 1) / 2) * 2;
-                const lastRowStartDesktop = Math.floor((totalItems - 1) / 4) * 4;
-                const isLastRowMobile = index >= lastRowStartMobile;
-                const isLastRowDesktop = index >= lastRowStartDesktop;
-                
-                return (
-                  <div 
-                    key={designer.id} 
-                    className={`group md:border-r md:[&:nth-child(4n)]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
-                  >
-                      <div className="aspect-[1/1] overflow-hidden border-b border-black relative">
-                          <img src={designer.profileImage} alt={designer.name} className="w-full h-full object-cover grayscale mix-blend-multiply group-hover:mix-blend-normal transition-all duration-500" />
-                          
-                          <div className="absolute bottom-0 left-0 bg-black text-white px-3 py-1">
-                              <span className="text-xs uppercase tracking-widest">{designer.role}</span>
-                          </div>
-                      </div>
-                      
-                      <div className="p-8">
-                          <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-3">{designer.name}</h4>
-                          {designer.instagramLink && (
-                            <a 
-                              href={designer.instagramLink} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="hidden md:flex items-center gap-1 hover:underline mt-4 text-xs uppercase"
-                            >
-                                <span>Instagram</span>
-                                <ArrowUpRight size={12} />
-                            </a>
-                          )}
-                      </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      </section>
-
-      <section id="designers" className="border-t border-black bg-[#F4F4F4]">
-        <div className="w-full">
-          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
-            <div className="flex gap-4 mb-2 md:mb-4 flex-shrink-0">
-                  <button 
-                      onClick={() => setSelectedShop('all')}
-                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
-                  >
-                      All
-                  </button>
-                  {SHOPS.map(shop => (
+                  {designerShops.map((shop) => (
                       <button 
                           key={shop.id}
                           onClick={() => setSelectedShop(shop.id)}
@@ -263,7 +263,7 @@ const Home = () => {
                 return (
                   <div 
                     key={designer.id} 
-                    className={`group md:border-r p-8 md:[&:nth-child(4n)]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
+                    className={`group md:border-r p-8 md:nth-[4n]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
                   >
                     {/* <div className="flex flex-wrap gap-2 mb-3">
                           <span className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-light tracking-wider">
@@ -273,18 +273,22 @@ const Home = () => {
 
                     <span className="block text-xs uppercase tracking-widest mb-2">{designer.role}</span>
 
-                    <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-8">{designer.name}</h4>
+                    <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-titter mb-8">
+                      {designer.english_name || designer.name}
+                    </h4>
 
 
-                    <a 
-                      href={designer.instagramLink} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase"
-                    >
-                        <span>Instagram</span>
-                        <ArrowUpRight size={12} />
-                    </a>
+                    {designer.instagramLink && (
+                      <a 
+                        href={designer.instagramLink ?? undefined} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase"
+                      >
+                          <span>Instagram</span>
+                          <ArrowUpRight size={12} />
+                      </a>
+                    )}
                   </div>
                 );
               })}

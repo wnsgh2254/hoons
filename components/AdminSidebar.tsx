@@ -133,7 +133,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
         </nav>
       </div>
       <div className="p-6 border-t border-gray-100">
-        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
           <div
             className="size-10 rounded-full bg-cover bg-center grayscale"
             style={{
@@ -143,7 +143,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
           />
           <div className="flex flex-col">
             <p className="text-sm font-medium text-black">Sarah Kim</p>
-            <p className="text-xs text-gray-500">Manager</p>
+            <p className="text-xs text-gray-500">Senior Designer</p>
           </div>
         </div>
       </div>

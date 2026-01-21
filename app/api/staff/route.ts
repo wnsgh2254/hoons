@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, role, shop_id, wage_type, percent_rate, hourly_rate, is_active } = body;
+    const { name, english_name, role, shop_id, wage_type, percent_rate, hourly_rate, instagramLink, is_active } = body;
 
     // Validate required fields
     if (!name || !name.trim()) {
@@ -130,11 +130,13 @@ export async function POST(request: NextRequest) {
     // Insert new designer
     const insertData = {
       name: name.trim(),
+      english_name: english_name ? english_name.trim() : null,
       role: role.trim(),
       shop_id: shop_id || null,
       wage_type,
       percent_rate: wage_type === 'percent' ? percent_rate : null,
       hourly_rate: wage_type === 'hourly' ? hourly_rate : null,
+      instagramLink: instagramLink || null,
       is_active: is_active !== undefined ? is_active : true,
     };
 
@@ -165,15 +167,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, role, shop_id, wage_type, percent_rate, hourly_rate, is_active } = body;
+    const { name, english_name, role, shop_id, wage_type, percent_rate, hourly_rate, instagramLink, is_active } = body;
 
     const designer = await updateDesigner(Number(id), {
       name,
+      english_name,
       role,
       shop_id,
       wage_type,
       percent_rate,
       hourly_rate,
+      instagramLink,
       is_active,
     });
 

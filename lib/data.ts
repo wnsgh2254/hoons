@@ -189,11 +189,13 @@ export async function updateDesigner(
   id: number,
   updates: {
     name: string;
+    english_name?: string | null;
     role: string;
     shop_id?: number | null;
     wage_type: string;
     percent_rate?: number | null;
     hourly_rate?: number | null;
+    instagramLink?: string | null;
     is_active?: boolean;
   }
 ) {
@@ -203,11 +205,13 @@ export async function updateDesigner(
 
   const updateData: any = {
     name: updates.name.trim(),
+    english_name: updates.english_name !== undefined ? updates.english_name?.trim() || null : undefined,
     role: updates.role.trim(),
     shop_id: updates.shop_id || null,
     wage_type: updates.wage_type,
     percent_rate: updates.wage_type === 'percent' ? updates.percent_rate : null,
     hourly_rate: updates.wage_type === 'hourly' ? updates.hourly_rate : null,
+    instagramLink: updates.instagramLink !== undefined ? updates.instagramLink || null : undefined,
     is_active: updates.is_active !== undefined ? updates.is_active : true,
   };
 

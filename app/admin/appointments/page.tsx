@@ -635,7 +635,7 @@ export default function AppointmentsManagementPage() {
     if (allDesigners.length > 0) {
       const roleOrder: Record<string, number> = {
         'Director': 1,
-        'Manager': 2,
+        'Senior Designer': 2,
         'Designer': 3,
       };
       

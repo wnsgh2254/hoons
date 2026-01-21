@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// Comment: GET - Fetch all designers (name and id only)
-export async function GET(request: NextRequest) {
+// Comment: GET - Fetch all active designers from DB (used by home & designers pages)
+export async function GET(_request: NextRequest) {
   try {
-    // Comment: Get all active designers, select id, name, and role for sorting
+    // Comment: Include shop_id for filtering and instagramLink for profile link if present
     const { data, error } = await supabase
       .from('designers')
-      .select('id, name, role')
+      .select('id, name, english_name, role, shop_id, instagramLink')
       .eq('is_active', true);
 
     if (error) {

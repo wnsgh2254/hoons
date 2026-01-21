@@ -10,6 +10,7 @@ export interface Designer {
   id: number;
   shop_id: number | null;
   name: string;
+  english_name: string | null;
   role: string;
   wage_type: 'percent' | 'hourly';
   percent_rate: number | null;
