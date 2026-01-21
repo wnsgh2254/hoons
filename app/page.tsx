@@ -184,10 +184,7 @@ const Home = () => {
                       </button>
                   ))}
               </div>
-            {/* Comment: Designer profiles will be displayed here */}
-            {/* TODO: Add designer profiles from database */}
           </div>
-          {/* Grid - Changed to 4 columns */}
           <div className="grid grid-cols-2 md:grid-cols-4 border-t border-b border-black">
               {filteredDesigners.map((designer, index) => {
                 const totalItems = filteredDesigners.length;
@@ -211,7 +208,6 @@ const Home = () => {
                       
                       <div className="p-8">
                           <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-3">{designer.name}</h4>
-                          {/* <p className="text-base leading-relaxed text-gray-600">{SHOPS.find(s => s.id === designer.shopId)?.name.replace('HAEYOOM ', '')}</p> */}
                           {designer.instagramLink && (
                             <a 
                               href={designer.instagramLink} 
@@ -224,6 +220,71 @@ const Home = () => {
                             </a>
                           )}
                       </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </section>
+
+      <section id="designers" className="border-t border-black bg-[#F4F4F4]">
+        <div className="w-full">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
+            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
+            <div className="flex gap-4 mb-2 md:mb-4 flex-shrink-0">
+                  <button 
+                      onClick={() => setSelectedShop('all')}
+                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                  >
+                      All
+                  </button>
+                  {SHOPS.map(shop => (
+                      <button 
+                          key={shop.id}
+                          onClick={() => setSelectedShop(shop.id)}
+                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                      >
+                          {shop.name.replace('HAEYOOM ', '')}
+                      </button>
+                  ))}
+              </div>
+            {/* Comment: Designer profiles will be displayed here */}
+            {/* TODO: Add designer profiles from database */}
+          </div>
+          {/* Grid - Changed to 4 columns */}
+          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-b border-black">
+              {filteredDesigners.map((designer, index) => {
+                const totalItems = filteredDesigners.length;
+                const lastRowStartMobile = Math.floor((totalItems - 1) / 2) * 2;
+                const lastRowStartDesktop = Math.floor((totalItems - 1) / 4) * 4;
+                const isLastRowMobile = index >= lastRowStartMobile;
+                const isLastRowDesktop = index >= lastRowStartDesktop;
+                
+                return (
+                  <div 
+                    key={designer.id} 
+                    className={`group md:border-r p-8 md:[&:nth-child(4n)]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
+                  >
+                    {/* <div className="flex flex-wrap gap-2 mb-3">
+                          <span className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-light tracking-wider">
+                          {designer.role}
+                          </span>
+                    </div> */}
+
+                    <span className="block text-xs uppercase tracking-widest mb-2">{designer.role}</span>
+
+                    <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-8">{designer.name}</h4>
+
+
+                    <a 
+                      href={designer.instagramLink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase"
+                    >
+                        <span>Instagram</span>
+                        <ArrowUpRight size={12} />
+                    </a>
                   </div>
                 );
               })}
