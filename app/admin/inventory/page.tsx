@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import type { InventoryItem } from '@/lib/types';
 import AdminTopNav from '@/components/AdminTopNav';
 
@@ -149,7 +149,7 @@ const INVENTORY_VIEWS: Record<string, InventoryView> = {
   },
 };
 
-export default function InventoryManagementPage() {
+function InventoryContent() {
   const [category, setCategory] = useState('All Categories');
   const [status, setStatus] = useState('All Status');
   const [brand, setBrand] = useState<string>('전체');
@@ -3410,5 +3410,20 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
         </form>
       </div>
     </div>
+  );
+}
+
+export default function InventoryManagementPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50">
+        <AdminTopNav />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      </div>
+    }>
+      <InventoryContent />
+    </Suspense>
   );
 }
