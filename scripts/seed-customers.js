@@ -12,24 +12,29 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const exampleCustomers = [
-  { name: 'kb', phone: '0450261216' },
-  { name: 'priscilla', phone: '0412345678' },
-  { name: '에스더 한', phone: '0423456789' },
-  { name: 'Anna Nguyen', phone: '0434567890' },
-  { name: 'Sarah Kim', phone: '0445678901' },
-  { name: 'James Park', phone: '0456789012' },
-  { name: 'Lisa Chen', phone: '0467890123' },
-  { name: 'Michael Lee', phone: '0478901234' },
-  { name: 'Emma Wilson', phone: '0489012345' },
-  { name: 'David Brown', phone: '0490123456' },
-  { name: 'Sophie Taylor', phone: '0401234567' },
-  { name: 'Ryan Johnson', phone: '0412345679' },
-  { name: 'Olivia Martinez', phone: '0423456780' },
-];
-
 async function seedCustomers() {
   try {
+    // Comment: Get customers data from command line arguments or stdin
+    const customersData = [];
+    
+    // Comment: Read from command line arguments (format: name:phone,name:phone,...)
+    if (process.argv.length > 2) {
+      const input = process.argv.slice(2).join(' ');
+      const pairs = input.split(',').map(pair => pair.trim());
+      
+      pairs.forEach(pair => {
+        const [name, phone] = pair.split(':').map(s => s.trim());
+        if (name && phone) {
+          customersData.push({ name, phone });
+        }
+      });
+    }
+
+    if (customersData.length === 0) {
+      console.error('No customers provided. Usage: node seed-customers.js "name1:phone1,name2:phone2,..."');
+      process.exit(1);
+    }
+
     // Comment: Get the last customer number
     const { data: lastCustomer } = await supabase
       .from('customers')
@@ -43,7 +48,7 @@ async function seedCustomers() {
       nextCustomerNumber = Number(lastCustomer.customer_number) + 1;
     }
 
-    const customersToInsert = exampleCustomers.map((customer, index) => ({
+    const customersToInsert = customersData.map((customer, index) => ({
       name: customer.name,
       phone: customer.phone.replace(/\D/g, ''),
       customer_number: nextCustomerNumber + index,

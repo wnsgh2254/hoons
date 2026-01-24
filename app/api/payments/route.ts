@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         .eq('customer_id', Number(customerId));
 
       if (bookings && bookings.length > 0) {
-        const bookingIds = bookings.map((b) => b.id);
+        const bookingIds = bookings.map((b: { id: number }) => b.id);
         query = query.in('booking_id', bookingIds);
       } else {
         return NextResponse.json({ payments: [] });
