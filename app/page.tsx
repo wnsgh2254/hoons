@@ -46,6 +46,20 @@ const Home = () => {
   const [designers, setDesigners] = useState<HomeDesigner[]>([]);
   const [designerShops, setDesignerShops] = useState<{ id: number; name: string }[]>([]);
 
+  // Comment: Keyboard shortcut for hidden login access (Ctrl+Shift+L)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Comment: Ctrl+Shift+L to access login page
+      if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        window.location.href = '/admin/login';
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Comment: Load designers & shops via API routes (server uses real Supabase env)
   useEffect(() => {
     async function fetchDesignersAndShops() {

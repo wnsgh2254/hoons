@@ -6,11 +6,9 @@ import type { Designer } from '@/lib/types';
 import AdminTopNav from '@/components/AdminTopNav';
 
 export default function StaffManagementPage() {
-  const [filter, setFilter] = useState('All Staff');
   const [staffMembers, setStaffMembers] = useState<Designer[]>([]);
-  const [stats, setStats] = useState({ totalStaff: 0, activeStaff: 0, estimatedPayroll: 0, totalHours: 0 });
+  const [stats, setStats] = useState({ totalStaff: 0 });
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [shops, setShops] = useState<any[]>([]);
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showManageServiceModal, setShowManageServiceModal] = useState(false);
@@ -37,63 +35,61 @@ export default function StaffManagementPage() {
 
   // Fetch staff data from API (single call with stats included)
   useEffect(() => {
+    let isMounted = true;
     const fetchStaffData = async () => {
       try {
         setLoading(true);
-        const role = filter === 'All Staff' ? '' : filter;
         const params = new URLSearchParams();
-        if (role) params.append('role', role);
         params.append('include_stats', 'true');
 
         const res = await fetch(`/api/staff?${params.toString()}`);
         const data = await res.json();
 
-        if (data.staff) setStaffMembers(data.staff);
-        if (data.shops) setShops(data.shops);
-        if (data.stats) {
-          setStats({
-            totalStaff: data.stats.totalStaff || 0,
-            activeStaff: data.stats.activeStaff || 0,
-            estimatedPayroll: 0,
-            totalHours: 0,
-          });
+        if (isMounted) {
+          if (data.staff) setStaffMembers(data.staff);
+          if (data.shops) setShops(data.shops);
+          if (data.stats) {
+            setStats({
+              totalStaff: data.stats.totalStaff || 0,
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching staff data:', error);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchStaffData();
-  }, [filter]);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  // Filter staff by search query
-  const filteredStaff = staffMembers
-    .filter((member) =>
-      member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.role.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
-      // Sort order: Director -> Senior Designer -> Designer -> Others
-      const getRoleOrder = (role: string) => {
-        const roleLower = role.toLowerCase();
-        if (roleLower.includes('director')) return 1;
-        if (roleLower.includes('senior designer')) return 2;
-        if (roleLower.includes('designer') || roleLower.includes('stylist')) return 3;
-        return 4;
-      };
-      
-      const orderA = getRoleOrder(a.role);
-      const orderB = getRoleOrder(b.role);
-      
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-      
-      // If same role order, sort by name
-      return a.name.localeCompare(b.name);
-    });
+  // Sort staff members
+  const sortedStaff = staffMembers.sort((a, b) => {
+    // Sort order: Director -> Senior Designer -> Designer -> Others
+    const getRoleOrder = (role: string) => {
+      const roleLower = role.toLowerCase();
+      if (roleLower.includes('director')) return 1;
+      if (roleLower.includes('senior designer')) return 2;
+      if (roleLower.includes('designer') || roleLower.includes('stylist')) return 3;
+      return 4;
+    };
+    
+    const orderA = getRoleOrder(a.role);
+    const orderB = getRoleOrder(b.role);
+    
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    
+    // If same role order, sort by name
+    return a.name.localeCompare(b.name);
+  });
 
   // Format wage display - use DB wage_type value
   const formatWage = (member: Designer) => {
@@ -136,26 +132,6 @@ export default function StaffManagementPage() {
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
       <AdminTopNav />
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative hidden md:block flex-1 max-w-md ml-4">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-[20px]">search</span>
-              <input
-                className="pl-10 pr-4 py-2 bg-gray-50 border-none rounded-full text-sm focus:ring-1 focus:ring-black w-full placeholder-gray-400"
-                placeholder="Search staff..."
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
-              <span className="material-symbols-outlined text-xl">notifications</span>
-            </button>
-            <button className="flex items-center justify-center size-8 rounded-full hover:bg-gray-100 text-gray-500 md:hidden transition-colors">
-              <span className="material-symbols-outlined text-xl">menu</span>
-            </button>
-          </div>
-        </header>
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
           <div className="max-w-7xl mx-auto flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -164,21 +140,6 @@ export default function StaffManagementPage() {
                 <p className="text-gray-500 text-sm">Manage stylists, track hours, and process payroll.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
-                  {['All Staff', 'Stylists', 'Assistants'].map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setFilter(f)}
-                      className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        filter === f
-                          ? 'bg-gray-100 text-black font-semibold'
-                          : 'text-gray-500 hover:text-black hover:bg-gray-50'
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
                 <button 
                   onClick={() => setShowAddStaffModal(true)}
                   className="flex items-center gap-2 bg-linear-to-r from-black to-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg"
@@ -198,45 +159,18 @@ export default function StaffManagementPage() {
                   <span className="material-symbols-outlined">badge</span>
                 </div>
               </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Currently Active</p>
-                  <h3 className="text-2xl font-bold text-black mt-1">{loading ? '...' : stats.activeStaff}</h3>
-                </div>
-                <div className="size-10 rounded-full bg-green-50 flex items-center justify-center text-green-600">
-                  <span className="material-symbols-outlined">check_circle</span>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Est. Payroll (Oct)</p>
-                  <h3 className="text-2xl font-bold text-black mt-1">{loading ? '...' : `AU$${stats.estimatedPayroll.toLocaleString()}`}</h3>
-                </div>
-                <div className="size-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
-                  <span className="material-symbols-outlined">payments</span>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Hours</p>
-                  <h3 className="text-2xl font-bold text-black mt-1">{loading ? '...' : `${stats.totalHours}h`}</h3>
-                </div>
-                <div className="size-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
-                  <span className="material-symbols-outlined">schedule</span>
-                </div>
-              </div>
             </div>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-gray-500">Loading staff data...</div>
               </div>
-            ) : filteredStaff.length === 0 ? (
+            ) : sortedStaff.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-gray-500">No staff members found.</div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredStaff.map((member) => {
+                {sortedStaff.map((member) => {
                   const wageType = formatWageType(member);
                   const wageRate = formatWage(member);
                   return (

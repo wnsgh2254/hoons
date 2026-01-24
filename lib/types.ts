@@ -34,10 +34,13 @@ export interface Service {
 
 export interface Customer {
   id: number;
+  customer_number?: number;
   name: string | null;
   phone: string | null;
   email: string | null;
   created_at: string;
+  prepaid_balance?: number;
+  total_sales?: number;
 }
 
 export interface Booking {

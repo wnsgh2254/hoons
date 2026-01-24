@@ -164,6 +164,7 @@ function TotalSalesTab({
   const [loading, setLoading] = useState(false);
   const [salesData, setSalesData] = useState<any>(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(true);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -307,6 +308,17 @@ function TotalSalesTab({
         <div className="text-center py-12 text-gray-500">Loading...</div>
       ) : salesData ? (
         <div className="flex flex-col gap-6">
+          {/* 히스토리 버튼 */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">history</span>
+              판매내역
+            </button>
+          </div>
+
           {/* 판매 합계 (회원권 판매 기준) */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="p-4 border-b border-gray-200 bg-gray-50">
@@ -343,6 +355,17 @@ function TotalSalesTab({
           </div>
         </div>
       ) : null}
+
+      {/* Sales History Modal */}
+      {showHistoryModal && (
+        <SalesHistoryModal
+          dateMode={dateMode}
+          selectedDate={selectedDate}
+          startDate={startDate}
+          endDate={endDate}
+          onClose={() => setShowHistoryModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -738,6 +761,7 @@ function ByStaffSalesTab({
   const [loading, setLoading] = useState(false);
   const [staffSalesData, setStaffSalesData] = useState<any[]>([]);
   const [includePointDeduction, setIncludePointDeduction] = useState(true);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -912,93 +936,118 @@ function ByStaffSalesTab({
       ) : !hasSearched ? null : staffSalesData.length === 0 ? (
         <div className="text-center py-12 text-gray-500">해당 기간에 데이터가 없습니다.</div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">직원</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">판매/차감</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    서비스 매출
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    제품 매출
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">소계 (A + B)</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    정액권 판매
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    티켓 판매
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">합계 (A + B + C + D)</th>
-                </tr>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th colSpan={2}></th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (A)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (B)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (C)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (D)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staffSalesData.map((staff, idx) => (
-                  <React.Fragment key={staff.designerId}>
-                    <tr className="border-b border-gray-100">
-                      <td className="px-4 py-3 font-medium" rowSpan={3}>
-                        {staff.name}
-                      </td>
-                      <td className="px-4 py-3 font-medium">판매</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.service.quantity}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.service.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.product.quantity}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.product.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.sales.subtotal.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.membership.quantity}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.membership.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.ticket.quantity}</td>
-                      <td className="px-4 py-3 text-center">{staff.sales.ticket.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.sales.total.toLocaleString()}</td>
-                    </tr>
-                    <tr className="border-b border-gray-100">
-                      <td className="px-4 py-3 font-medium">회원권 차감</td>
-                      <td className="px-4 py-3 text-center">{staff.membershipDeduction.service.quantity}</td>
-                      <td className="px-4 py-3 text-center">{staff.membershipDeduction.service.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
-                    </tr>
-                    <tr className="bg-yellow-50 border-b-2 border-yellow-200">
-                      <td className="px-4 py-3 font-bold">합계</td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.total.service.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.total.product.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{staff.total.subtotal.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center"></td>
-                      <td className="px-4 py-3 text-center font-bold">{staff.total.subtotal.toLocaleString()}</td>
-                    </tr>
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+        <div className="flex flex-col gap-6">
+          {/* 히스토리 버튼 */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">history</span>
+              판매내역
+            </button>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">직원</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">판매/차감</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      서비스 매출
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      제품 매출
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">소계 (A + B)</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      정액권 판매
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      티켓 판매
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">합계 (A + B + C + D)</th>
+                  </tr>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th colSpan={2}></th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (A)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (B)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (C)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (D)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffSalesData.map((staff, idx) => (
+                    <React.Fragment key={staff.designerId}>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-3 font-medium" rowSpan={3}>
+                          {staff.name}
+                        </td>
+                        <td className="px-4 py-3 font-medium">판매</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.service.quantity}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.product.quantity}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.product.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.sales.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.membership.quantity}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.membership.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.ticket.quantity}</td>
+                        <td className="px-4 py-3 text-center">{staff.sales.ticket.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.sales.total.toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-3 font-medium">회원권 차감</td>
+                        <td className="px-4 py-3 text-center">{staff.membershipDeduction.service.quantity}</td>
+                        <td className="px-4 py-3 text-center">{staff.membershipDeduction.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
+                      </tr>
+                      <tr className="bg-yellow-50 border-b-2 border-yellow-200">
+                        <td className="px-4 py-3 font-bold">합계</td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.total.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.total.product.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center font-semibold">{staff.total.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center"></td>
+                        <td className="px-4 py-3 text-center font-bold">{staff.total.subtotal.toLocaleString()}</td>
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Sales History Modal */}
+      {showHistoryModal && (
+        <SalesHistoryModal
+          dateMode={dateMode}
+          selectedDate={selectedDate}
+          startDate={startDate}
+          endDate={endDate}
+          designerId={selectedDesignerId}
+          onClose={() => setShowHistoryModal(false)}
+        />
       )}
     </div>
   );
@@ -1038,6 +1087,7 @@ function ByItemSalesTab({
   const [itemSalesData, setItemSalesData] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [aggregationMode, setAggregationMode] = useState<'category' | 'service'>('category');
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -1239,72 +1289,654 @@ function ByItemSalesTab({
       ) : !hasSearched ? null : itemSalesData.length === 0 ? (
         <div className="text-center py-12 text-gray-500">해당 기간에 데이터가 없습니다.</div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">분류</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    판매
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    정액권 차감
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                    티켓 차감
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">합계 (A + B + C)</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">평균 단가</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700">포인트 차감</th>
-                </tr>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th></th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (A)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (B)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (C)</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                  <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itemSalesData.map((item, idx) => (
-                  <tr key={idx} className="border-b border-gray-100">
-                    <td className="px-4 py-3 font-medium">{item.category}</td>
-                    <td className="px-4 py-3 text-center">{item.sales.quantity}</td>
-                    <td className="px-4 py-3 text-center">{item.sales.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center">{item.membershipDeduction.quantity}</td>
-                    <td className="px-4 py-3 text-center">{item.membershipDeduction.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center">{item.ticketDeduction.quantity}</td>
-                    <td className="px-4 py-3 text-center">{item.ticketDeduction.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{item.total.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center">{item.avgPrice.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center">{item.pointDeduction.toLocaleString()}</td>
+        <div className="flex flex-col gap-6">
+          {/* 히스토리 버튼 */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">history</span>
+              판매내역
+            </button>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">분류</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      판매
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      정액권 차감
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                      티켓 차감
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">합계 (A + B + C)</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">평균 단가</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">포인트 차감</th>
                   </tr>
-                ))}
-                {summary && (
-                  <tr className="bg-yellow-50 border-t-2 border-yellow-200">
-                    <td className="px-4 py-3 font-bold">합계</td>
-                    <td className="px-4 py-3 text-center font-semibold">{summary.salesQuantity}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{summary.salesAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{summary.membershipQuantity}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{summary.membershipAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center font-semibold">0</td>
-                    <td className="px-4 py-3 text-center font-semibold">0</td>
-                    <td className="px-4 py-3 text-center font-bold">{summary.totalAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{summary.avgPrice.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center font-semibold">0</td>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th></th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (A)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (B)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (C)</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {itemSalesData.map((item, idx) => (
+                    <tr key={idx} className="border-b border-gray-100">
+                      <td className="px-4 py-3 font-medium">{item.category}</td>
+                      <td className="px-4 py-3 text-center">{item.sales.quantity}</td>
+                      <td className="px-4 py-3 text-center">{item.sales.amount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">{item.membershipDeduction.quantity}</td>
+                      <td className="px-4 py-3 text-center">{item.membershipDeduction.amount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">{item.ticketDeduction.quantity}</td>
+                      <td className="px-4 py-3 text-center">{item.ticketDeduction.amount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center font-semibold">{item.total.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">{item.avgPrice.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">{item.pointDeduction.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {summary && (
+                    <tr className="bg-yellow-50 border-t-2 border-yellow-200">
+                      <td className="px-4 py-3 font-bold">합계</td>
+                      <td className="px-4 py-3 text-center font-semibold">{summary.salesQuantity}</td>
+                      <td className="px-4 py-3 text-center font-semibold">{summary.salesAmount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center font-semibold">{summary.membershipQuantity}</td>
+                      <td className="px-4 py-3 text-center font-semibold">{summary.membershipAmount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center font-semibold">0</td>
+                      <td className="px-4 py-3 text-center font-semibold">0</td>
+                      <td className="px-4 py-3 text-center font-bold">{summary.totalAmount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center font-semibold">{summary.avgPrice.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center font-semibold">0</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Sales History Modal */}
+      {showHistoryModal && (
+        <SalesHistoryModal
+          dateMode={dateMode}
+          selectedDate={selectedDate}
+          startDate={startDate}
+          endDate={endDate}
+          designerId={selectedDesignerId}
+          itemType={selectedItemType}
+          onClose={() => setShowHistoryModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Comment: Sales History Modal Component
+function SalesHistoryModal({
+  dateMode: initialDateMode,
+  selectedDate: initialSelectedDate,
+  startDate: initialStartDate,
+  endDate: initialEndDate,
+  designerId: initialDesignerId,
+  itemType: initialItemType,
+  onClose,
+}: {
+  dateMode: DateMode;
+  selectedDate: string;
+  startDate: string;
+  endDate: string;
+  designerId?: string;
+  itemType?: string;
+  onClose: () => void;
+}) {
+  const [dateMode, setDateMode] = useState<DateMode>(initialDateMode);
+  const [selectedDate, setSelectedDate] = useState<string>(initialSelectedDate);
+  const [startDate, setStartDate] = useState<string>(initialStartDate);
+  const [endDate, setEndDate] = useState<string>(initialEndDate);
+  const [selectedItemType, setSelectedItemType] = useState<string>(initialItemType || '전체');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('전체');
+  const [selectedDesignerId, setSelectedDesignerId] = useState<string>(initialDesignerId || '');
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [designers, setDesigners] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [shops, setShops] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const ITEMS_PER_PAGE = 10;
+
+  // Comment: Fetch initial data
+  useEffect(() => {
+    let isMounted = true;
+    const fetchInitialData = async () => {
+      try {
+        const [designersRes, servicesRes, shopsRes, customersRes] = await Promise.all([
+          fetch('/api/staff'),
+          fetch('/api/services'),
+          fetch('/api/shops'),
+          fetch('/api/customers?limit=1000'),
+        ]);
+
+        if (!isMounted) return;
+
+        const designersData = await designersRes.json();
+        const servicesData = await servicesRes.json();
+        const shopsData = await shopsRes.json();
+        const customersData = await customersRes.json();
+
+        if (designersRes.ok && designersData.staff) {
+          setDesigners(designersData.staff);
+        }
+        if (servicesRes.ok && servicesData.services) {
+          setServices(servicesData.services);
+        }
+        if (shopsRes.ok && shopsData.shops) {
+          setShops(shopsData.shops);
+        }
+        if (customersRes.ok && customersData.customers) {
+          setCustomers(customersData.customers);
+        }
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+      }
+    };
+
+    fetchInitialData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Comment: Fetch history data
+  const fetchHistory = async (page: number = 1) => {
+    try {
+      setLoading(true);
+      const actualStartDate = dateMode === 'daily' ? selectedDate : startDate;
+      const actualEndDate = dateMode === 'daily' ? selectedDate : endDate;
+
+      const params = new URLSearchParams();
+      params.append('start_date', actualStartDate);
+      params.append('end_date', actualEndDate);
+      params.append('limit', String(ITEMS_PER_PAGE));
+      params.append('page', String(page));
+      if (selectedDesignerId) {
+        params.append('designer_id', selectedDesignerId);
+      }
+
+      const bookingsRes = await fetch(`/api/appointment?${params.toString()}`);
+      const bookingsData = await bookingsRes.json();
+
+      if (bookingsRes.ok && bookingsData.bookings) {
+        let bookings = bookingsData.bookings;
+
+        // Comment: Filter by item type
+        if (selectedItemType === '서비스') {
+          bookings = bookings.filter((b: any) => b.service_id !== null);
+        } else if (selectedItemType === '제품') {
+          bookings = [];
+        }
+
+        // Comment: Get payments for bookings
+        if (bookings.length > 0) {
+          const bookingIds = bookings.map((b: any) => b.id);
+          const paymentsRes = await fetch(`/api/payments?booking_ids=${bookingIds.join(',')}`);
+          const paymentsData = await paymentsRes.json();
+
+          if (paymentsRes.ok && paymentsData.payments) {
+            const paymentsMap = new Map();
+            paymentsData.payments.forEach((p: any) => {
+              if (p.booking_id) {
+                if (!paymentsMap.has(p.booking_id)) {
+                  paymentsMap.set(p.booking_id, []);
+                }
+                paymentsMap.get(p.booking_id).push(p);
+              }
+            });
+
+            // Comment: Group bookings by customer and date/time, attach payments
+            const grouped = new Map();
+            bookings.forEach((booking: any) => {
+              const key = `${booking.customer_id}_${booking.booking_date}_${booking.booking_time}`;
+              if (!grouped.has(key)) {
+                grouped.set(key, {
+                  id: booking.id,
+                  customer_id: booking.customer_id,
+                  booking_date: booking.booking_date,
+                  booking_time: booking.booking_time,
+                  shop_id: booking.shop_id,
+                  items: [],
+                  payments: paymentsMap.get(booking.id) || [],
+                });
+              }
+              grouped.get(key).items.push({
+                service_id: booking.service_id,
+                designer_id: booking.designer_id,
+                total_amount: booking.total_amount,
+                memo: booking.memo,
+              });
+            });
+
+            let history = Array.from(grouped.values());
+
+            // Comment: Filter by payment method
+            if (selectedPaymentMethod !== '전체') {
+              history = history.filter((h: any) => {
+                if (h.payments.length === 0) return false;
+                return h.payments.some((p: any) => {
+                  if (selectedPaymentMethod === '현금') return p.method === 'cash';
+                  if (selectedPaymentMethod === '카드') return p.method === 'card';
+                  return true;
+                });
+              });
+            }
+
+            setHistoryData(history);
+            setTotalCount(history.length);
+            setTotalPages(Math.ceil(history.length / ITEMS_PER_PAGE));
+          } else {
+            setHistoryData(bookings.map((b: any) => ({
+              id: b.id,
+              customer_id: b.customer_id,
+              booking_date: b.booking_date,
+              booking_time: b.booking_time,
+              shop_id: b.shop_id,
+              items: [{
+                service_id: b.service_id,
+                designer_id: b.designer_id,
+                total_amount: b.total_amount,
+                memo: b.memo,
+              }],
+              payments: [],
+            })));
+            setTotalCount(bookings.length);
+            setTotalPages(Math.ceil(bookings.length / ITEMS_PER_PAGE));
+          }
+        } else {
+          setHistoryData([]);
+          setTotalCount(0);
+          setTotalPages(1);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching sales history:', error);
+      setHistoryData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory(1);
+    setCurrentPage(1);
+  }, [dateMode, selectedDate, startDate, endDate, selectedItemType, selectedPaymentMethod, selectedDesignerId]);
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchHistory(1);
+  };
+
+  const handleDateChange = (direction: 'prev' | 'next') => {
+    if (dateMode === 'daily') {
+      const date = new Date(selectedDate);
+      if (direction === 'prev') {
+        date.setDate(date.getDate() - 1);
+      } else {
+        date.setDate(date.getDate() + 1);
+      }
+      setSelectedDate(date.toISOString().split('T')[0]);
+    }
+  };
+
+  const getDesignerName = (designerId: number | null) => {
+    if (!designerId) return '-';
+    const designer = designers.find((d) => d.id === designerId);
+    return designer?.name || '-';
+  };
+
+  const getServiceName = (serviceId: number | null) => {
+    if (!serviceId) return '-';
+    const service = services.find((s) => s.id === serviceId);
+    return service?.name || '-';
+  };
+
+  const getCustomerName = (customerId: number | null) => {
+    if (!customerId) return '-';
+    const customer = customers.find((c) => c.id === customerId);
+    return customer?.name || '-';
+  };
+
+  const formatTime = (time: string) => {
+    if (!time) return '';
+    const [hours, minutes] = time.split(':');
+    const hour = parseInt(hours, 10);
+    return `${hour}:${minutes}`;
+  };
+
+  const formatPaymentMethod = (method: string) => {
+    if (method === 'cash') return '현금';
+    if (method === 'card') return '카드';
+    return method;
+  };
+
+  const paginatedData = historyData.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="bg-black text-white p-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold">매출 히스토리</h2>
+          <button onClick={onClose} className="text-white hover:text-gray-200">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Filters */}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
+            <div className="flex flex-col md:flex-row gap-4 items-end">
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={dateMode === 'daily'}
+                    onChange={() => setDateMode('daily')}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">일별</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={dateMode === 'period'}
+                    onChange={() => setDateMode('period')}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">기간</span>
+                </label>
+              </div>
+
+              {dateMode === 'daily' ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDateChange('prev')}
+                    className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    &lt;
+                  </button>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                  <button
+                    onClick={() => handleDateChange('next')}
+                    className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    &gt;
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                  <span className="text-gray-400">~</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    min={startDate}
+                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                </div>
+              )}
+
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">항목</label>
+                <select
+                  value={selectedItemType}
+                  onChange={(e) => setSelectedItemType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+                >
+                  <option value="전체">전체</option>
+                  <option value="서비스">서비스</option>
+                  <option value="제품">제품</option>
+                  <option value="정액권">정액권</option>
+                  <option value="티켓">티켓</option>
+                </select>
+              </div>
+
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">결제 방법</label>
+                <select
+                  value={selectedPaymentMethod}
+                  onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+                >
+                  <option value="전체">전체</option>
+                  <option value="현금">현금</option>
+                  <option value="카드">카드</option>
+                </select>
+              </div>
+
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">담당자</label>
+                <select
+                  value={selectedDesignerId}
+                  onChange={(e) => setSelectedDesignerId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
+                >
+                  <option value="">전체</option>
+                  {designers.map((designer) => (
+                    <option key={designer.id} value={designer.id}>
+                      {designer.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">search</span>
+                검색
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">로딩 중...</div>
+            </div>
+          ) : paginatedData.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">해당 기간에 내역이 없습니다.</div>
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="text-sm font-medium text-gray-700">
+                  총 {totalCount}건
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={showDeleted}
+                    onChange={(e) => setShowDeleted(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span>삭제 항목 표시</span>
+                  <span className="material-symbols-outlined text-sm text-gray-400">help_outline</span>
+                </label>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">날짜</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">고객명</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">판매 항목</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">담당자</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">영업 구분</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">할인</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">금액</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">결제 방법</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">결제 금액</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">메모</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedData.map((item: any, idx: number) => {
+                      const totalAmount = item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+                      const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+                      const paymentMethods = item.payments.map((p: any) => formatPaymentMethod(p.method)).join(', ') || '-';
+                      
+                      return (
+                        <tr key={`${item.id}_${idx}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {item.booking_date} {formatTime(item.booking_time)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {getCustomerName(item.customer_id)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            <div className="flex flex-col gap-1">
+                              {item.items.map((it: any, i: number) => (
+                                <div key={i}>{getServiceName(it.service_id)}</div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            <div className="flex flex-col gap-1">
+                              {item.items.map((it: any, i: number) => (
+                                <div key={i}>{getDesignerName(it.designer_id)}</div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">-</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">-</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                            <div className="flex flex-col gap-1 items-end">
+                              {item.items.map((it: any, i: number) => (
+                                <div key={i}>{it.total_amount ? Number(it.total_amount).toLocaleString() : '-'}</div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{paymentMethods}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                            {totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {item.items[0]?.memo || '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  페이지 {currentPage} 의 {totalPages}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (currentPage > 1) {
+                        setCurrentPage(1);
+                        fetchHistory(1);
+                      }
+                    }}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    &lt;&lt;
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (currentPage > 1) {
+                        setCurrentPage(currentPage - 1);
+                        fetchHistory(currentPage - 1);
+                      }
+                    }}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    &lt;
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (currentPage < totalPages) {
+                        setCurrentPage(currentPage + 1);
+                        fetchHistory(currentPage + 1);
+                      }
+                    }}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    &gt;
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (currentPage < totalPages) {
+                        setCurrentPage(totalPages);
+                        fetchHistory(totalPages);
+                      }
+                    }}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                  >
+                    &gt;&gt;
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const page = parseInt(e.target.value);
+                      if (page >= 1 && page <= totalPages) {
+                        setCurrentPage(page);
+                        fetchHistory(page);
+                      }
+                    }}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                  />
+                  <span className="text-sm text-gray-700">이동</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

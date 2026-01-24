@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { hasAccess } from '@/lib/auth';
+import type { UserRole } from '@/lib/auth';
 
 type SubmenuItem = {
   href: string;
@@ -48,14 +51,52 @@ const navItems: NavItem[] = [
   },
   { href: '/admin/services', icon: 'content_cut', label: 'Services' },
   { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
+  { href: '/admin/customers', icon: 'people', label: 'Customers' },
   { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
   { href: '/admin/wages', icon: 'payments', label: 'Wages' },
 ];
 
 export default function AdminTopNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Comment: Fetch user session to determine role
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const res = await fetch('/api/auth/session');
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setUserRole(data.user.role);
+        }
+      } catch (error) {
+        console.error('Error fetching session:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSession();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/admin/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
 
   const isActive = (path: string) => pathname === path;
+
+  // Comment: Filter nav items based on user role
+  const filteredNavItems = navItems.filter((item) => {
+    if (!userRole) return false;
+    const basePath = item.href.split('?')[0];
+    return hasAccess(userRole, basePath);
+  });
 
   return (
     <header className="h-16 flex items-center px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-10 sticky top-0">
@@ -73,7 +114,7 @@ export default function AdminTopNav() {
 
         {/* Navigation Items - Centered */}
         <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const active = isActive(item.href.split('?')[0]);
 
             if (item.submenu) {
@@ -90,7 +131,7 @@ export default function AdminTopNav() {
                   >
                     <span className="material-symbols-outlined text-xl">{item.icon}</span>
                   </Link>
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-0 w-[360px] rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto z-50">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-0 w-[360px] rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto z-[9999]">
                     <div className="p-4 grid grid-cols-2 gap-4">
                       {item.submenu.map((section) => (
                         <div key={section.title} className="flex flex-col gap-3">
@@ -142,8 +183,19 @@ export default function AdminTopNav() {
           })}
         </nav>
 
-        {/* Right side - empty for balance */}
-        <div className="w-[130px]"></div>
+        {/* Right side - Logout button */}
+        <div className="w-[130px] flex justify-end">
+          {!loading && userRole && (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-black hover:bg-gray-100 rounded-lg transition-colors"
+              title="Logout"
+            >
+              <span className="material-symbols-outlined text-lg">logout</span>
+              <span className="hidden md:inline">Logout</span>
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

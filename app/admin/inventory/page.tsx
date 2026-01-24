@@ -173,6 +173,7 @@ function InventoryContent() {
       return;
     }
 
+    let isMounted = true;
     const fetchInventory = async () => {
       try {
         setLoading(true);
@@ -193,46 +194,63 @@ function InventoryContent() {
         const res = await fetch(`/api/inventory${queryString ? `?${queryString}` : ''}`);
         const data = await res.json();
 
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to load inventory');
-        }
+        if (isMounted) {
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to load inventory');
+          }
 
-        const items: InventoryItem[] = data.items || [];
-        setProducts(items);
-        setStockDrafts(
-          items.reduce((acc, item) => {
-            acc[item.id] = item.stock;
-            return acc;
-          }, {} as Record<number, number>)
-        );
+          const items: InventoryItem[] = data.items || [];
+          setProducts(items);
+          setStockDrafts(
+            items.reduce((acc, item) => {
+              acc[item.id] = item.stock;
+              return acc;
+            }, {} as Record<number, number>)
+          );
+        }
       } catch (err: any) {
-        setError(err.message || 'Failed to load inventory');
-        setProducts([]);
-        setStockDrafts({});
+        if (isMounted) {
+          setError(err.message || 'Failed to load inventory');
+          setProducts([]);
+          setStockDrafts({});
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchInventory();
+    return () => {
+      isMounted = false;
+    };
   }, [category, status, searchQuery, viewKey]);
 
   // Comment: Load brand options from database
   useEffect(() => {
+    let isMounted = true;
     const fetchBrands = async () => {
       try {
         const res = await fetch('/api/inventory-brands');
         const data = await res.json();
-        const names: string[] = Array.isArray(data.brands)
-          ? data.brands.map((b: any) => String(b.name))
-          : [];
-        setBrandOptions(['전체', ...names]);
+        if (isMounted) {
+          const names: string[] = Array.isArray(data.brands)
+            ? data.brands.map((b: any) => String(b.name))
+            : [];
+          setBrandOptions(['전체', ...names]);
+        }
       } catch {
-        setBrandOptions(['전체']);
+        if (isMounted) {
+          setBrandOptions(['전체']);
+        }
       }
     };
 
     fetchBrands();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const getStatusColor = (status: string) => {

@@ -4,6 +4,66 @@ import { supabase } from '@/lib/supabase';
 // Comment: Create test data for sales page - 2026-01-18
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+    const seedCustomers = body?.seedCustomers === true;
+
+    // Comment: Seed customers if requested
+    if (seedCustomers) {
+      const exampleCustomers = [
+        { name: 'kb', phone: '0450261216' },
+        { name: 'priscilla', phone: '0412345678' },
+        { name: '에스더 한', phone: '0423456789' },
+        { name: 'Anna Nguyen', phone: '0434567890' },
+        { name: 'Sarah Kim', phone: '0445678901' },
+        { name: 'James Park', phone: '0456789012' },
+        { name: 'Lisa Chen', phone: '0467890123' },
+        { name: 'Michael Lee', phone: '0478901234' },
+        { name: 'Emma Wilson', phone: '0489012345' },
+        { name: 'David Brown', phone: '0490123456' },
+        { name: 'Sophie Taylor', phone: '0401234567' },
+        { name: 'Ryan Johnson', phone: '0412345679' },
+        { name: 'Olivia Martinez', phone: '0423456780' },
+      ];
+
+      // Comment: Get the last customer number
+      const { data: lastCustomer } = await supabase
+        .from('customers')
+        .select('customer_number')
+        .order('customer_number', { ascending: false })
+        .limit(1)
+        .single();
+
+      let nextCustomerNumber = 1;
+      if (lastCustomer?.customer_number) {
+        nextCustomerNumber = Number(lastCustomer.customer_number) + 1;
+      }
+
+      const customersToInsert = exampleCustomers.map((customer, index) => ({
+        name: customer.name,
+        phone: customer.phone.replace(/\D/g, ''),
+        customer_number: nextCustomerNumber + index,
+        created_at: new Date().toISOString(),
+      }));
+
+      const { data: insertedCustomers, error: customersError } = await supabase
+        .from('customers')
+        .insert(customersToInsert)
+        .select();
+
+      if (customersError) {
+        console.error('Error inserting customers:', customersError);
+        return NextResponse.json(
+          { error: '고객 데이터 생성에 실패했습니다.', details: customersError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        customers: insertedCustomers?.length || 0,
+        message: `${insertedCustomers?.length || 0}명의 고객이 생성되었습니다.`,
+      });
+    }
     // Comment: Get designers (태훈, 윤훈)
     const { data: designers, error: designersError } = await supabase
       .from('designers')

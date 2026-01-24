@@ -68,24 +68,34 @@ export default function ServiceMenuSettingPage() {
 
   // Load services
   useEffect(() => {
+    let isMounted = true;
     const fetchServices = async () => {
       try {
         setLoading(true);
         setError(null);
         const res = await fetch('/api/services');
         const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to load services');
+        if (isMounted) {
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to load services');
+          }
+          setServices(data.services || []);
         }
-        setServices(data.services || []);
       } catch (err: any) {
-        setError(err.message || 'Failed to load services');
-        setServices([]);
+        if (isMounted) {
+          setError(err.message || 'Failed to load services');
+          setServices([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     fetchServices();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Group services by category (use DB category if available, otherwise fallback to name-based detection)

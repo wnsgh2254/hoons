@@ -167,6 +167,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const shopId = searchParams.get('shop_id');
     const designerId = searchParams.get('designer_id');
+    const customerId = searchParams.get('customer_id');
     const date = searchParams.get('date');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
@@ -194,6 +195,10 @@ export async function GET(request: NextRequest) {
 
     if (designerId) {
       query = query.eq('designer_id', designerId);
+    }
+
+    if (customerId) {
+      query = query.eq('customer_id', customerId);
     }
 
     if (startDate && endDate) {

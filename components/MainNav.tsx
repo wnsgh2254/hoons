@@ -62,9 +62,6 @@ export function MainNav() {
               </button>
             </div>
             <div className="hidden md:flex items-center gap-4" style={{ isolation: 'isolate' }}>
-              <Link href="/admin/appointments" className="hover:underline text-xs">
-                Staff Login
-              </Link>
               <Link 
                 href="/booking" 
                 className="flex items-center gap-1 border border-black text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
@@ -95,7 +92,6 @@ export function MainNav() {
             { name: 'Menu', path: '/', hash: '#services' },
             { name: 'Locations', path: '/', hash: '#locations' },
             { name: 'Designers', path: '/', hash: '#designers' },
-            { name: 'Staff Login', path: '/admin/appointments', hash: '' },
             { name: 'Book Now', path: '/booking', hash: '' },
           ].map((item) => (
             <Link 

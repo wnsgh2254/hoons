@@ -191,6 +191,7 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Load bookings for selected date (all shops)
   useEffect(() => {
+    let isMounted = true;
     const fetchBookings = async () => {
       try {
         setLoading(true);
@@ -199,22 +200,32 @@ export default function AppointmentsManagementPage() {
           `/api/appointment?date=${encodeURIComponent(selectedDate)}`
         );
         const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to load bookings');
+        if (isMounted) {
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to load bookings');
+          }
+          setBookings(data.bookings || []);
         }
-        setBookings(data.bookings || []);
       } catch (err: any) {
-        setError(err.message || 'Failed to load bookings');
+        if (isMounted) {
+          setError(err.message || 'Failed to load bookings');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchBookings();
+    return () => {
+      isMounted = false;
+    };
   }, [selectedDate]);
 
   // Comment: Load booking restrictions for selected date or week range
   useEffect(() => {
+    let isMounted = true;
     const fetchRestrictions = async () => {
       try {
         if (isWeekViewMode && weekViewStartDate) {
@@ -229,7 +240,7 @@ export default function AppointmentsManagementPage() {
             `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`
           );
           const data = await res.json();
-          if (res.ok) {
+          if (isMounted && res.ok) {
             setBookingRestrictions(data.restrictions || []);
           }
         } else {
@@ -237,7 +248,7 @@ export default function AppointmentsManagementPage() {
             `/api/booking-restrictions?date=${encodeURIComponent(selectedDate)}`
           );
           const data = await res.json();
-          if (res.ok) {
+          if (isMounted && res.ok) {
             setBookingRestrictions(data.restrictions || []);
           }
         }
@@ -247,6 +258,9 @@ export default function AppointmentsManagementPage() {
     };
 
     fetchRestrictions();
+    return () => {
+      isMounted = false;
+    };
   }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId]);
 
   // Comment: Check for existing restriction when modal opens
@@ -356,6 +370,7 @@ export default function AppointmentsManagementPage() {
       return;
     }
 
+    let isMounted = true;
     const fetchWeekBookings = async () => {
       try {
         const startDate = new Date(weekViewStartDate);
@@ -369,7 +384,7 @@ export default function AppointmentsManagementPage() {
           `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}&limit=1000`
         );
         const data = await res.json();
-        if (res.ok) {
+        if (isMounted && res.ok) {
           setWeekViewBookings(data.bookings || []);
         }
       } catch (error) {
@@ -378,10 +393,14 @@ export default function AppointmentsManagementPage() {
     };
 
     fetchWeekBookings();
+    return () => {
+      isMounted = false;
+    };
   }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate]);
 
   // Comment: Load monthly bookings to power calendar dots (all shops)
   useEffect(() => {
+    let isMounted = true;
     const fetchMonth = async () => {
       try {
         const [year, month] = monthKey.split('-').map((v) => Number(v));
@@ -396,6 +415,8 @@ export default function AppointmentsManagementPage() {
           )}&end_date=${encodeURIComponent(end)}`
         );
         const data = await res.json();
+        if (!isMounted) return;
+        
         if (!res.ok) {
           throw new Error(data.error || 'Failed to load monthly bookings');
         }
@@ -408,42 +429,62 @@ export default function AppointmentsManagementPage() {
           const day = d.getDate();
           counts[day] = (counts[day] || 0) + 1;
         });
-        setDayCounts(counts);
+        if (isMounted) {
+          setDayCounts(counts);
+        }
       } catch (err) {
         // Silent fail – calendar dots are non-critical
-        console.error(err);
-        setDayCounts({});
+        if (isMounted) {
+          console.error(err);
+          setDayCounts({});
+        }
       }
     };
 
     fetchMonth();
+    return () => {
+      isMounted = false;
+    };
   }, [monthKey]);
 
   // Comment: Load admin memo on mount
   useEffect(() => {
+    let isMounted = true;
     const fetchMemo = async () => {
       setMemoLoading(true);
       try {
         const res = await fetch('/api/admin-memo');
         const data = await res.json();
-        if (res.ok) {
-          setMemo(data.content || '');
-        } else {
-          console.error('Failed to load admin memo:', data.error);
+        if (isMounted) {
+          if (res.ok) {
+            setMemo(data.content || '');
+          } else {
+            // Comment: Silently handle error - memo is optional
+            setMemo('');
+          }
         }
       } catch (err) {
-        console.error('Error loading admin memo:', err);
+        // Comment: Silently handle error - memo is optional
+        if (isMounted) {
+          setMemo('');
+        }
       } finally {
-        setMemoLoading(false);
+        if (isMounted) {
+          setMemoLoading(false);
+        }
       }
     };
 
     fetchMemo();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Comment: Load designer availability for the selected date (per weekday)
   // This includes designers with regular schedule OR special work day (특별 근무일)
   useEffect(() => {
+    let isMounted = true;
     const fetchAvailability = async () => {
       setLoadingDesignerAvailability(true);
       try {
@@ -451,24 +492,32 @@ export default function AppointmentsManagementPage() {
           `/api/designer-schedules?date=${encodeURIComponent(selectedDate)}`
         );
         const data = await res.json();
-        if (!res.ok) {
-          console.error('Failed to load designer availability:', data.error);
-          setAvailableDesignerIds([]);
-          return;
+        if (isMounted) {
+          if (!res.ok) {
+            console.error('Failed to load designer availability:', data.error);
+            setAvailableDesignerIds([]);
+          } else {
+            // Comment: Special work days have priority - designers with special work day are included
+            // even if they don't have regular schedule for that weekday
+            setAvailableDesignerIds(data.designerIds || []);
+          }
         }
-        // Comment: Special work days have priority - designers with special work day are included
-        // even if they don't have regular schedule for that weekday
-        setAvailableDesignerIds(data.designerIds || []);
-        console.log(`[appointments] Available designers for ${selectedDate}:`, data.designerIds);
       } catch (err) {
-        console.error('Error loading designer availability:', err);
-        setAvailableDesignerIds([]);
+        if (isMounted) {
+          console.error('Error loading designer availability:', err);
+          setAvailableDesignerIds([]);
+        }
       } finally {
-        setLoadingDesignerAvailability(false);
+        if (isMounted) {
+          setLoadingDesignerAvailability(false);
+        }
       }
     };
 
     fetchAvailability();
+    return () => {
+      isMounted = false;
+    };
   }, [selectedDate]);
 
   // Comment: When a booking is focused from the schedule, scroll/highlight it in Upcoming
@@ -532,30 +581,36 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Load all designers for the schedule grid - always load on mount
   useEffect(() => {
+    let isMounted = true;
     const loadAllDesigners = async () => {
       try {
         const res = await fetch('/api/designers');
         const data = await res.json();
         
-        if (res.ok) {
-          // Comment: API returns { designers: [...] } format with id and name
-          const designers = data.designers || [];
-          if (designers.length > 0) {
-            setAllDesigners(designers);
+        if (isMounted) {
+          if (res.ok) {
+            // Comment: API returns { designers: [...] } format with id and name
+            const designers = data.designers || [];
+            if (designers.length > 0) {
+              setAllDesigners(designers);
+            } else {
+              console.warn('No designers found in API response');
+            }
           } else {
-            console.warn('No designers found in API response');
+            console.error('Failed to load designers:', data.error || data);
           }
-        } else {
-          console.error('Failed to load designers:', data.error || data);
         }
       } catch (err) {
         console.error('Error loading designers:', err);
       }
     };
     loadAllDesigners();
-    // Comment: Reload designers periodically to ensure they're always up to date
-    const interval = setInterval(loadAllDesigners, 60000); // Every minute
-    return () => clearInterval(interval);
+    // Comment: Reload designers periodically to ensure they're always up to date (every 5 minutes instead of 1 minute)
+    const interval = setInterval(loadAllDesigners, 300000); // Every 5 minutes
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Comment: Close dropdown when clicking outside
