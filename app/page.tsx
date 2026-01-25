@@ -149,18 +149,18 @@ const Home = () => {
       <section className="border-b border-black bg-[#F4F4F4]">
         {/* Adjusted padding to px-6 md:px-12 */}
         <div className="flex justify-between items-center px-6 md:px-12 py-12 md:py-20 overflow-hidden">
-            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter">Book</h2>
-            <Link href="/booking" className="text-sm md:text-base font-light uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
+            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-black">Book</h2>
+            <Link href="/booking" className="text-sm md:text-base font-light uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4 text-black">
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
-            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-right">Now</h2>
+            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-right text-black">Now</h2>
         </div>
       </section>
 
       {/* BIG STATEMENT TEXT */}
       <section id="about" className="py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
         <div className="w-full">
-             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
+             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12 text-black">
                 HAEYOOM originated from a pure Korean word that means "beautiful thoughts."
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
@@ -217,9 +217,9 @@ const Home = () => {
             </div>
                  <div className="md:col-span-4 p-8 md:p-12 flex flex-col justify-between bg-[#F4F4F4]">
               <div>
-                        <span className="block text-xs uppercase tracking-widest mb-4">Location 0{idx + 1}</span>
+                        <span className="block text-xs uppercase tracking-widest mb-4 text-black">Location 0{idx + 1}</span>
                         
-                        <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6">
+                        <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6 text-black">
                             <span className="block mb-2">HAEYOOM</span>
                             {shop.name.replace('HAEYOOM ', '')}
                         </h4>
@@ -315,7 +315,7 @@ const Home = () => {
          <div className="w-full">
              {/* Header with equal top and bottom padding to spacing */}
             <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
+                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left text-black">Explore</h4>
                 <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
             </div>
 
