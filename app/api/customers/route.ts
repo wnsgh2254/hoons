@@ -70,11 +70,31 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Comment: Add calculated fields to customers
+    // Comment: Get designer information for customers with assigned_designer_id
+    const designerIds = Array.from(
+      new Set((data || []).map((c: any) => c.assigned_designer_id).filter(Boolean))
+    );
+    const designersMap: Record<number, { id: number; name: string }> = {};
+
+    if (designerIds.length > 0) {
+      const { data: designersData } = await supabase
+        .from('designers')
+        .select('id, name')
+        .in('id', designerIds);
+
+      (designersData || []).forEach((d: any) => {
+        designersMap[d.id] = { id: d.id, name: d.name };
+      });
+    }
+
+    // Comment: Add calculated fields and designer information to customers
     const customersWithStats = (data || []).map((customer: any) => ({
       ...customer,
       prepaid_balance: prepaidBalances[customer.id] || 0,
       total_sales: totalSales[customer.id] || 0,
+      assigned_designer: customer.assigned_designer_id 
+        ? designersMap[customer.assigned_designer_id] || null
+        : null,
     }));
 
     return NextResponse.json({
@@ -96,7 +116,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, phone } = body;
+    const { name, phone, assigned_designer_id } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json(
@@ -133,15 +153,32 @@ export async function POST(request: NextRequest) {
         phone: phone.trim().replace(/\D/g, ''), // Comment: Remove non-digits
         customer_number: nextCustomerNumber,
         created_at: new Date().toISOString(),
+        assigned_designer_id: assigned_designer_id ? Number(assigned_designer_id) : null,
       })
       .select()
       .single();
+
+    // Comment: Get designer information if assigned
+    let assignedDesigner = null;
+    if (data?.assigned_designer_id) {
+      const { data: designerData } = await supabase
+        .from('designers')
+        .select('id, name')
+        .eq('id', data.assigned_designer_id)
+        .single();
+      assignedDesigner = designerData;
+    }
 
     if (error) {
       throw new Error(error.message);
     }
 
-    return NextResponse.json({ customer: data }, { status: 201 });
+    return NextResponse.json({ 
+      customer: {
+        ...data,
+        assigned_designer: assignedDesigner,
+      }
+    }, { status: 201 });
   } catch (error: any) {
     console.error('Error in customers POST route:', error);
     return NextResponse.json(
@@ -165,7 +202,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, phone } = body;
+    const { name, phone, assigned_designer_id } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json(
@@ -181,12 +218,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const updateData: any = {
+      name: name.trim(),
+      phone: phone.trim().replace(/\D/g, ''), // Comment: Remove non-digits
+    };
+
+    // Comment: Update assigned_designer_id if provided
+    if (assigned_designer_id !== undefined) {
+      updateData.assigned_designer_id = assigned_designer_id ? Number(assigned_designer_id) : null;
+    }
+
     const { data, error } = await supabase
       .from('customers')
-      .update({
-        name: name.trim(),
-        phone: phone.trim().replace(/\D/g, ''), // Comment: Remove non-digits
-      })
+      .update(updateData)
       .eq('id', Number(id))
       .select()
       .single();
@@ -195,7 +239,23 @@ export async function PATCH(request: NextRequest) {
       throw new Error(error.message);
     }
 
-    return NextResponse.json({ customer: data });
+    // Comment: Get designer information if assigned
+    let assignedDesigner = null;
+    if (data?.assigned_designer_id) {
+      const { data: designerData } = await supabase
+        .from('designers')
+        .select('id, name')
+        .eq('id', data.assigned_designer_id)
+        .single();
+      assignedDesigner = designerData;
+    }
+
+    return NextResponse.json({ 
+      customer: {
+        ...data,
+        assigned_designer: assignedDesigner,
+      }
+    });
   } catch (error: any) {
     console.error('Error in customers PATCH route:', error);
     return NextResponse.json(

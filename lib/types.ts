@@ -41,6 +41,8 @@ export interface Customer {
   created_at: string;
   prepaid_balance?: number;
   total_sales?: number;
+  assigned_designer_id?: number | null;
+  assigned_designer?: { id: number; name: string } | null;
 }
 
 export interface Booking {
