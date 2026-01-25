@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
+import { sendSMS } from '@/lib/twilio';
 
 export async function POST(request: NextRequest) {
   try {
@@ -138,6 +139,8 @@ export async function POST(request: NextRequest) {
       totalAmount,
       depositAmount,
       fullDate,
+      customerPhone, // Comment: Customer phone number for SMS reminder
+      sendSmsNow, // Comment: For testing - send SMS immediately instead of 24h before
     } = body;
 
     if (!shopId || !day || !timeLabel) {
@@ -155,7 +158,14 @@ export async function POST(request: NextRequest) {
       fullDate: typeof fullDate === 'string' ? fullDate : undefined,
     });
 
-    return NextResponse.json({ success: true, booking }, { status: 201 });
+    // Comment: TEST MODE - Always send SMS for any booking
+    const smsResult = await sendSMS('+18777804236', 'booking_test');
+
+    return NextResponse.json({ 
+      success: true, 
+      booking,
+      sms: smsResult,
+    }, { status: 201 });
   } catch (error) {
     console.error('Error in appointment POST route:', error);
     return NextResponse.json({ error: '예약 생성에 실패했습니다.' }, { status: 500 });
