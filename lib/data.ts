@@ -45,6 +45,38 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
     throw new Error(`Invalid time format: ${timeLabel}`);
   }
 
+  // Comment: Check if booking end time exceeds 21:00 (9 PM)
+  // Maximum end time is 21:00, so if start time is 20:00 or later, duration must be 1 hour or less
+  const [startHour, startMin] = bookingTime.split(':').map(Number);
+  const startMinutes = startHour * 60 + startMin;
+  
+  // Comment: Get service duration if serviceId is provided
+  if (serviceId) {
+    const { data: service, error: serviceError } = await supabase
+      .from('services')
+      .select('duration_minutes')
+      .eq('id', serviceId)
+      .single();
+
+    if (!serviceError && service) {
+      const durationMinutes = service.duration_minutes || 60;
+      const endMinutes = startMinutes + durationMinutes;
+      const endHour = Math.floor(endMinutes / 60);
+      
+      // Comment: If end time exceeds 21:00, throw error
+      if (endHour > 21 || (endHour === 21 && (endMinutes % 60) > 0)) {
+        throw new Error(`예약 종료 시간이 21시를 넘을 수 없습니다. 시작 시간 ${startHour}:${String(startMin).padStart(2, '0')}에 ${durationMinutes}분 예약은 불가능합니다.`);
+      }
+    }
+  } else {
+    // Comment: If no service, assume 1 hour duration and check
+    const endMinutes = startMinutes + 60;
+    const endHour = Math.floor(endMinutes / 60);
+    if (endHour > 21 || (endHour === 21 && (endMinutes % 60) > 0)) {
+      throw new Error(`예약 종료 시간이 21시를 넘을 수 없습니다. 시작 시간 ${startHour}:${String(startMin).padStart(2, '0')}에 예약은 불가능합니다.`);
+    }
+  }
+
   const { data, error } = await supabase
     .from('bookings')
     .insert({

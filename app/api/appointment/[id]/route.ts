@@ -15,6 +15,60 @@ export async function PATCH(
     const body = await request.json();
     const updates: any = {};
 
+    // Comment: Get current booking to check end time
+    const { data: currentBooking, error: fetchError } = await supabase
+      .from('bookings')
+      .select('booking_time, service_id, custom_service_duration, service:service_id(duration_minutes)')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) {
+      return NextResponse.json({ error: '예약을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const bookingTime = typeof body.booking_time === 'string' ? body.booking_time : currentBooking?.booking_time;
+    const serviceId = body.service_id !== undefined ? (body.service_id === null ? null : Number(body.service_id)) : currentBooking?.service_id;
+    const customDuration = typeof body.custom_service_duration === 'number' || typeof body.custom_service_duration === 'string' 
+      ? Number(body.custom_service_duration) 
+      : currentBooking?.custom_service_duration;
+
+    // Comment: Check if booking end time exceeds 21:00 (9 PM)
+    if (bookingTime) {
+      const [startHour, startMin] = bookingTime.split(':').map(Number);
+      const startMinutes = startHour * 60 + startMin;
+      let durationMinutes = 60; // Default 1 hour
+
+      if (customDuration && customDuration > 0) {
+        durationMinutes = customDuration;
+      } else if (serviceId) {
+        const service = currentBooking?.service as any;
+        if (service?.duration_minutes) {
+          durationMinutes = service.duration_minutes;
+        } else if (body.service_id !== undefined) {
+          // Comment: Fetch service if it's being updated
+          const { data: serviceData } = await supabase
+            .from('services')
+            .select('duration_minutes')
+            .eq('id', serviceId)
+            .single();
+          if (serviceData?.duration_minutes) {
+            durationMinutes = serviceData.duration_minutes;
+          }
+        }
+      }
+
+      const endMinutes = startMinutes + durationMinutes;
+      const endHour = Math.floor(endMinutes / 60);
+
+      // Comment: If end time exceeds 21:00, return error
+      if (endHour > 21 || (endHour === 21 && (endMinutes % 60) > 0)) {
+        return NextResponse.json(
+          { error: `예약 종료 시간이 21시를 넘을 수 없습니다. 시작 시간 ${startHour}:${String(startMin).padStart(2, '0')}에 ${durationMinutes}분 예약은 불가능합니다.` },
+          { status: 400 }
+        );
+      }
+    }
+
     if (typeof body.booking_date === 'string') {
       updates.booking_date = body.booking_date;
     }

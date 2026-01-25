@@ -685,6 +685,7 @@ export default function AppointmentsManagementPage() {
   }, [bookings]);
 
   // Comment: Designers visible in the grid - filter by availability for selected date
+  // Also include designers who have bookings on the selected date
   const visibleDesigners = useMemo(() => {
     // Filter designers based on availability for the selected date
     if (allDesigners.length > 0) {
@@ -694,12 +695,22 @@ export default function AppointmentsManagementPage() {
         'Designer': 3,
       };
       
-      // Comment: Filter designers that are available on the selected date
-      // If availableDesignerIds is empty (still loading), show all designers
-      // Otherwise, only show designers whose IDs are in availableDesignerIds
-      const filtered = availableDesignerIds.length > 0
-        ? allDesigners.filter((d) => availableDesignerIds.includes(d.id))
-        : allDesigners;
+      // Comment: Get designer IDs that have bookings on the selected date
+      const designerIdsWithBookings = new Set<number>();
+      bookings.forEach((b) => {
+        if (b.designer?.id) {
+          designerIdsWithBookings.add(b.designer.id);
+        }
+      });
+      
+      // Comment: Filter designers that are available on the selected date OR have bookings
+      // If still loading, show all designers
+      // If loading is complete, show designers whose IDs are in availableDesignerIds OR have bookings
+      const filtered = loadingDesignerAvailability
+        ? allDesigners // Still loading - show all designers
+        : allDesigners.filter((d) => 
+            availableDesignerIds.includes(d.id) || designerIdsWithBookings.has(d.id)
+          ); // Loading complete - filter by availability or bookings
       
       const sorted = [...filtered].sort((a, b) => {
         const roleA = (a.role || '').trim();
@@ -720,7 +731,7 @@ export default function AppointmentsManagementPage() {
     
     // Fallback: if designers not loaded yet, return empty array (will show once loaded)
     return [];
-  }, [allDesigners, availableDesignerIds]);
+  }, [allDesigners, availableDesignerIds, loadingDesignerAvailability, bookings]);
 
   // Comment: Stable color assignment per designer
   const designerColorMap = useMemo(() => {
@@ -1150,7 +1161,7 @@ export default function AppointmentsManagementPage() {
                         </div>
                       ) : (
                         // Comment: Normal view header - designers
-                        <div className="grid flex-1 relative" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
+                        <div className="grid flex-1 relative border-b border-[#e2e8f0]" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
                           {/* Vertical column dividers for header - full height, positioned correctly */}
                           {visibleDesigners.map((_, colIndex) => {
                             // Comment: Calculate position based on grid column width
