@@ -193,6 +193,7 @@ export async function GET(request: NextRequest) {
             product: sales.total?.product?.amount || 0,
             membership: sales.sales?.membership?.amount || 0,
             membershipDeduction: sales.membershipDeduction?.subtotal || 0,
+            ticket: sales.sales?.ticket?.amount || 0,
           },
         };
       })

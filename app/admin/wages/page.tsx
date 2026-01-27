@@ -86,6 +86,7 @@ export default function WagesPage() {
   const [shouldFetch, setShouldFetch] = useState(false);
   const [viewingPayslip, setViewingPayslip] = useState<any>(null);
   const [viewingDetail, setViewingDetail] = useState<any>(null);
+  const [viewingIncentives, setViewingIncentives] = useState(false);
 
   // Comment: Calculate weeks for selected month
   const weeks = useMemo(() => {
@@ -215,7 +216,10 @@ export default function WagesPage() {
             <div className="flex items-center justify-between mb-8">
               <h1 className="text-3xl font-bold text-black">급여 명세서</h1>
               <div className="flex gap-2">
-                <button className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                <button 
+                  onClick={() => setViewingIncentives(true)}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                >
                   직원별 인센티브
                 </button>
                 <button className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
@@ -345,6 +349,13 @@ export default function WagesPage() {
         <DetailHistoryModal
           detail={viewingDetail}
           onClose={() => setViewingDetail(null)}
+        />
+      )}
+
+      {/* Incentives Modal */}
+      {viewingIncentives && (
+        <IncentivesModal
+          onClose={() => setViewingIncentives(false)}
         />
       )}
     </div>
@@ -997,6 +1008,399 @@ function DetailHistoryModal({ detail, onClose }: {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Comment: Incentives Modal Component
+function IncentivesModal({ onClose }: { onClose: () => void }) {
+  const [dateMode, setDateMode] = useState<DateMode>('monthly');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [selectedDesignerId, setSelectedDesignerId] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [incentivesData, setIncentivesData] = useState<any[]>([]);
+  const [designers, setDesigners] = useState<any[]>([]);
+
+  // Comment: Fetch designers list
+  useEffect(() => {
+    const fetchDesigners = async () => {
+      try {
+        const res = await fetch('/api/staff');
+        const data = await res.json();
+        if (data.staff) {
+          setDesigners(data.staff);
+        }
+      } catch (error) {
+        console.error('Error fetching designers:', error);
+      }
+    };
+    fetchDesigners();
+  }, []);
+
+  const handleSearch = async () => {
+    if (dateMode === 'monthly' && !selectedMonth) {
+      alert('월을 선택해주세요.');
+      return;
+    }
+    if (dateMode === 'period' && (!startDate || !endDate)) {
+      alert('시작 날짜와 종료 날짜를 선택해주세요.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      let start = '';
+      let end = '';
+
+      if (dateMode === 'monthly') {
+        const [year, month] = selectedMonth.split('-').map(Number);
+        start = getFirstDayOfMonth(year, month);
+        end = getLastDayOfMonth(year, month);
+      } else {
+        start = startDate;
+        end = endDate;
+      }
+
+      // Comment: Fetch wages data for all designers or selected designer
+      const params = new URLSearchParams();
+      params.append('start_date', start);
+      params.append('end_date', end);
+      if (selectedDesignerId) {
+        params.append('designer_id', selectedDesignerId);
+      }
+
+      const res = await fetch(`/api/wages/calculate?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch incentives data');
+      }
+      const data = await res.json();
+      setIncentivesData(data.wages || []);
+    } catch (error) {
+      console.error('Error fetching incentives data:', error);
+      setIncentivesData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMonthChange = (direction: 'prev' | 'next') => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    let newYear = year;
+    let newMonth = month;
+    
+    if (direction === 'prev') {
+      newMonth--;
+      if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
+      }
+    } else {
+      newMonth++;
+      if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+      }
+    }
+    
+    setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, '0')}`);
+  };
+
+  // Comment: Calculate totals (with rate applied)
+  const totals = useMemo(() => {
+    return incentivesData.reduce((acc, item) => {
+      const rate = item.calculationDetails?.rate || 0;
+      const isPercentType = item.wageType === 'percent';
+      
+      // Comment: Calculate incentive amounts by applying rate
+      const serviceSalesAmount = item.sales?.service || 0;
+      const serviceDeductionAmount = item.sales?.membershipDeduction || 0;
+      const productSalesAmount = item.sales?.product || 0;
+      const membershipSalesAmount = item.sales?.membership || 0;
+      const ticketSalesAmount = item.sales?.ticket || 0;
+      
+      if (isPercentType && rate > 0) {
+        acc.serviceSales += Math.round((serviceSalesAmount * rate) / 100);
+        acc.serviceDeduction += Math.round((serviceDeductionAmount * rate) / 100);
+        acc.productSales += Math.round((productSalesAmount * rate) / 100);
+        acc.membershipSales += Math.round((membershipSalesAmount * rate) / 100);
+        acc.ticketSales += Math.round((ticketSalesAmount * rate) / 100);
+      }
+      
+      acc.total += item.wage || 0;
+      return acc;
+    }, {
+      serviceSales: 0,
+      serviceDeduction: 0,
+      productSales: 0,
+      productDeduction: 0,
+      membershipSales: 0,
+      ticketSales: 0,
+      total: 0,
+    });
+  }, [incentivesData]);
+
+  const handleExcelDownload = async (designerId: number, designerName: string) => {
+    // Comment: TODO: Implement Excel download functionality
+    alert(`${designerName}님의 인센티브 엑셀 다운로드 기능은 준비 중입니다.`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="bg-white p-6 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-black">직원별 인센티브</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-gray-50 p-4 border-b border-gray-200">
+          <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  checked={dateMode === 'monthly'}
+                  onChange={() => setDateMode('monthly')}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">월</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  checked={dateMode === 'period'}
+                  onChange={() => setDateMode('period')}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">기간</span>
+              </label>
+            </div>
+
+            {dateMode === 'monthly' ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleMonthChange('prev')}
+                  className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  &lt;
+                </button>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+                <button
+                  onClick={() => handleMonthChange('next')}
+                  className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  &gt;
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+                <span className="text-gray-400">~</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
+            )}
+
+            <div className="flex-1">
+              <select
+                value={selectedDesignerId}
+                onChange={(e) => setSelectedDesignerId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+              >
+                <option value="">전체</option>
+                {designers.map((designer) => (
+                  <option key={designer.id} value={designer.id}>
+                    {designer.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">search</span>
+              검색
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">로딩 중...</div>
+            </div>
+          ) : incentivesData.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-gray-500">데이터가 없습니다. 검색을 실행해주세요.</div>
+            </div>
+          ) : (
+            <div className="p-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">
+                        직원
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200" colSpan={2}>
+                        서비스
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200" colSpan={2}>
+                        제품
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">
+                        정액권 판매
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">
+                        티켓 판매
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200">
+                        합계
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        엑셀
+                      </th>
+                    </tr>
+                    <tr>
+                      <th className="border-r border-gray-200"></th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">판매</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">차감</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">판매</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">차감</th>
+                      <th className="border-r border-gray-200"></th>
+                      <th className="border-r border-gray-200"></th>
+                      <th className="border-r border-gray-200"></th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {incentivesData.map((item: any) => {
+                      // Comment: Get rate from calculationDetails (only for percent type)
+                      const rate = item.calculationDetails?.rate || 0;
+                      const isPercentType = item.wageType === 'percent';
+                      
+                      // Comment: Calculate incentive amounts by applying rate to sales amounts
+                      const serviceSalesAmount = item.sales?.service || 0;
+                      const serviceDeductionAmount = item.sales?.membershipDeduction || 0;
+                      const productSalesAmount = item.sales?.product || 0;
+                      const productDeductionAmount = 0; // Comment: Product deduction not available in current API
+                      const membershipSalesAmount = item.sales?.membership || 0;
+                      const ticketSalesAmount = item.sales?.ticket || 0;
+                      
+                      // Comment: Apply rate to calculate incentives (only for percent type)
+                      const serviceSales = isPercentType && rate > 0 
+                        ? Math.round((serviceSalesAmount * rate) / 100) 
+                        : 0;
+                      const serviceDeduction = isPercentType && rate > 0 
+                        ? Math.round((serviceDeductionAmount * rate) / 100) 
+                        : 0;
+                      const productSales = isPercentType && rate > 0 
+                        ? Math.round((productSalesAmount * rate) / 100) 
+                        : 0;
+                      const productDeduction = 0; // Comment: Product deduction not available in current API
+                      const membershipSales = isPercentType && rate > 0 
+                        ? Math.round((membershipSalesAmount * rate) / 100) 
+                        : 0;
+                      const ticketSales = isPercentType && rate > 0 
+                        ? Math.round((ticketSalesAmount * rate) / 100) 
+                        : 0;
+                      const total = item.wage || 0;
+
+                      return (
+                        <tr key={item.designerId} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 border-r border-gray-200">{item.name}</td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                            {serviceSales > 0 ? serviceSales.toLocaleString() : ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                            {serviceDeduction > 0 ? serviceDeduction.toLocaleString() : ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                            {productSales > 0 ? productSales.toLocaleString() : ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                            {productDeduction > 0 ? productDeduction.toLocaleString() : ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                            {membershipSales > 0 ? membershipSales.toLocaleString() : ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                            {ticketSales > 0 ? ticketSales.toLocaleString() : ''}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900 border-r border-gray-200">
+                            {total.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => handleExcelDownload(item.designerId, item.name)}
+                              className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                            >
+                              엑셀
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* Totals Row */}
+                    {incentivesData.length > 0 && (
+                      <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold">
+                        <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">합계</td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.serviceSales > 0 ? totals.serviceSales.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.serviceDeduction > 0 ? totals.serviceDeduction.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.productSales > 0 ? totals.productSales.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.productDeduction > 0 ? totals.productDeduction.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.membershipSales > 0 ? totals.membershipSales.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.ticketSales > 0 ? totals.ticketSales.toLocaleString() : ''}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-900 border-r border-gray-200">
+                          {totals.total.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3"></td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

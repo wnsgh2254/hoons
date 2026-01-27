@@ -120,11 +120,11 @@ const Home = () => {
       : designers.filter((d) => d.shop_id === selectedShop);
 
   return (
-    <div className="w-full bg-[#F4F4F4]">
+    <div className="w-full min-h-screen bg-[#F4F4F4]">
       
       {/* HERO SECTION: Single Large Image sticking to top */}
-      {/* Added border-b border-black */}
-      <section className="relative w-full h-screen overflow-hidden border-b border-black">
+      {/* Comment: Use smaller height on mobile to avoid overflows */}
+      <section className="relative w-full h-[70vh] md:h-screen overflow-hidden border-b border-black">
         <img 
             src="/images/hero.png" 
             className="w-full h-full object-cover object-top grayscale" 
@@ -147,20 +147,27 @@ const Home = () => {
 
       {/* SPLIT HEADER: BOOK / NOW */}
       <section className="border-b border-black bg-[#F4F4F4]">
-        {/* Adjusted padding to px-6 md:px-12 */}
-        <div className="flex justify-between items-center px-6 md:px-12 py-12 md:py-20 overflow-hidden">
-            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-black">Book</h2>
-            <Link href="/booking" className="text-sm md:text-base font-light uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4 text-black">
+        {/* Comment: Stack vertically on small screens to prevent overflow */}
+        <div className="flex flex-col items-start gap-6 px-6 md:px-12 py-10 md:py-20 overflow-hidden md:flex-row md:items-center md:justify-between">
+            <h2 className="font-display font-light text-4xl sm:text-5xl md:text-8xl uppercase tracking-tighter text-black">
+              Book
+            </h2>
+            <Link
+              href="/booking"
+              className="text-xs sm:text-sm md:text-base font-light uppercase tracking-widest border border-black px-6 sm:px-8 py-2.5 sm:py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap text-black"
+            >
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
-            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-right text-black">Now</h2>
+            <h2 className="font-display font-light text-4xl sm:text-5xl md:text-8xl uppercase tracking-tighter text-left md:text-right text-black">
+              Now
+            </h2>
         </div>
       </section>
 
       {/* BIG STATEMENT TEXT */}
-      <section id="about" className="py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
+      <section id="about" className="py-16 md:py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
         <div className="w-full">
-             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12 text-black">
+             <h3 className="font-display font-light text-4xl sm:text-5xl md:text-8xl leading-[0.95] uppercase tracking-tighter mb-8 md:mb-12 text-black">
                 HAEYOOM originated from a pure Korean word that means "beautiful thoughts."
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
@@ -174,7 +181,7 @@ const Home = () => {
       </section>
 
       {/* PRODUCT GRID (Services) - 4 Columns on one line */}
-      <section id="services" className="bg-[#F4F4F4] pb-32">
+      <section id="services" className="bg-[#F4F4F4] pb-20 md:pb-32">
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-black">
              {[
                 { title: 'Cut', price: '55', img: '/images/cut.png' },
@@ -206,8 +213,11 @@ const Home = () => {
       {/* SPACE / LOCATIONS STRIP */}
       <section id="locations" className="border-t border-black">
           {SHOPS.map((shop, idx) => (
-             <div key={shop.id} className={`grid grid-cols-1 md:grid-cols-12 ${idx !== SHOPS.length - 1 ? 'border-b border-black' : ''}`}>
-                 <div className="md:col-span-8 border-b md:border-b-0 md:border-r border-black relative min-h-[50vh]">
+             <div
+              key={shop.id}
+              className={`grid grid-cols-1 md:grid-cols-12 ${idx !== SHOPS.length - 1 ? 'border-b border-black' : ''}`}
+             >
+                 <div className="md:col-span-8 border-b md:border-b-0 md:border-r border-black relative min-h-[40vh] sm:min-h-[50vh]">
                      {/* Added absolute inset-0 to make image strictly fill the container height */}
                      <img 
                         src={shop.image} 
@@ -215,7 +225,7 @@ const Home = () => {
                         alt={shop.name} 
                      />
             </div>
-                 <div className="md:col-span-4 p-8 md:p-12 flex flex-col justify-between bg-[#F4F4F4]">
+                 <div className="md:col-span-4 p-6 md:p-12 flex flex-col justify-between bg-[#F4F4F4] gap-6">
               <div>
                         <span className="block text-xs uppercase tracking-widest mb-4 text-black">Location 0{idx + 1}</span>
                         
@@ -224,7 +234,7 @@ const Home = () => {
                             {shop.name.replace('HAEYOOM ', '')}
                         </h4>
                         
-                        <p className="text-base leading-relaxed text-gray-600">
+                        <p className="text-sm md:text-base leading-relaxed text-gray-600">
                            {shop.address}
                         </p>
               </div>
@@ -243,9 +253,14 @@ const Home = () => {
 
       <section id="designers" className="border-t border-black bg-[#F4F4F4]">
         <div className="w-full">
-          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left text-black" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
-            <div className="flex gap-4 mb-2 md:mb-4 shrink-0">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-10 md:pb-20">
+            <h4
+              className="font-display font-light text-4xl sm:text-5xl md:text-8xl uppercase tracking-tighter mb-4 md:mb-8 text-left text-black"
+              style={{ color: 'rgba(26, 26, 26, 1)' }}
+            >
+              Designers
+            </h4>
+            <div className="flex flex-wrap gap-2 md:gap-4 mb-3 md:mb-4">
                   <button 
                       onClick={() => setSelectedShop('all')}
                       className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
