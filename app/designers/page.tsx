@@ -178,7 +178,8 @@ export default function DesignersPage() {
                       </div>
                   </div>
               </div>
-          ))}
+            );
+          })}
           
           {/* Filler blocks - Adjusted for 4 columns */}
           {Array.from({ length: fillerCount }).map((_, i) => (
