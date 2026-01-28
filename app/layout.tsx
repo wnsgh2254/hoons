@@ -17,6 +17,28 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Haeyoom - Sydney Hair Salon",
   description: "Where minimalism meets artistry. Experience the finest hair styling in a space curated for your comfort.",
+  icons: {
+    icon: "/images/favicon.png",
+  },
+  openGraph: {
+    title: "Haeyoom - Sydney Hair Salon",
+    description: "Where minimalism meets artistry. Experience the finest hair styling in a space curated for your comfort.",
+    images: [
+      {
+        url: "/images/haeyoom_image.png",
+        width: 1200,
+        height: 630,
+        alt: "Haeyoom - Sydney Hair Salon",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Haeyoom - Sydney Hair Salon",
+    description: "Where minimalism meets artistry. Experience the finest hair styling in a space curated for your comfort.",
+    images: ["/images/haeyoom_image.png"],
+  },
 };
 
 export default function RootLayout({

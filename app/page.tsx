@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { DESIGNERS } from './haeyoom---conceptual-hair-salon/services/mockData';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
@@ -31,100 +33,19 @@ const GALLERY_ITEMS = Array.from({ length: 36 }, (_, i) => ({
   image: `https://picsum.photos/id/${10 + i * 2}/800/800`,
 }));
 
-// Comment: Minimal type for home page designers fetched from /api/designers
-interface HomeDesigner {
-  id: number;
-  name: string;
-  english_name: string | null;
-  role: string;
-  shop_id: number | null;
-  instagramLink?: string | null;
-}
-
 const Home = () => {
-  const [selectedShop, setSelectedShop] = useState<number | 'all'>('all');
-  const [designers, setDesigners] = useState<HomeDesigner[]>([]);
-  const [designerShops, setDesignerShops] = useState<{ id: number; name: string }[]>([]);
+  const [selectedShop, setSelectedShop] = useState<string>('all');
 
-  // Comment: Keyboard shortcut for hidden login access (Ctrl+Shift+L)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Comment: Ctrl+Shift+L to access login page
-      if (e.ctrlKey && e.shiftKey && e.key === 'L') {
-        e.preventDefault();
-        window.location.href = '/admin/login';
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Comment: Load designers & shops via API routes (server uses real Supabase env)
-  useEffect(() => {
-    async function fetchDesignersAndShops() {
-      try {
-        const [designersRes, shopsRes] = await Promise.all([
-          fetch('/api/designers'),
-          fetch('/api/shops'),
-        ]);
-
-        if (!designersRes.ok) {
-          throw new Error('Failed to fetch designers');
-        }
-        if (!shopsRes.ok) {
-          throw new Error('Failed to fetch shops');
-        }
-
-        const designersJson = await designersRes.json();
-        const shopsJson = await shopsRes.json();
-
-        const apiDesigners: HomeDesigner[] = (designersJson.designers || []) as HomeDesigner[];
-        const apiShops: { id: number; name: string }[] = (shopsJson.shops || []).map(
-          (shop: any) => ({
-            id: shop.id,
-            name: shop.name || `HAEYOOM ${shop.location || 'Shop'}`,
-          })
-        );
-
-        const roleRank = (role: string | null | undefined) => {
-          const r = (role || '').toUpperCase();
-          if (r.includes('DIRECTOR')) return 0;
-          if (r.includes('MANAGER')) return 1;
-          if (r.includes('DESIGNER')) return 2;
-          return 3;
-        };
-
-        // Comment: Ensure designers are ordered by role then name
-        const orderedDesigners = apiDesigners.slice().sort((a, b) => {
-          const ra = roleRank(a.role);
-          const rb = roleRank(b.role);
-          if (ra !== rb) return ra - rb;
-          return (a.name || '').localeCompare(b.name || '');
-        });
-
-        setDesigners(orderedDesigners);
-        setDesignerShops(apiShops);
-      } catch (error) {
-        // Comment: Log error for debugging, but keep page rendering
-        console.error('Error loading designers for home page:', error);
-      }
-    }
-
-    fetchDesignersAndShops();
-  }, []);
-
-  const filteredDesigners =
-    selectedShop === 'all'
-      ? designers
-      : designers.filter((d) => d.shop_id === selectedShop);
+  const filteredDesigners = selectedShop === 'all' 
+    ? DESIGNERS 
+    : DESIGNERS.filter(d => d.shopId === selectedShop);
 
   return (
-    <div className="w-full min-h-screen bg-[#F4F4F4]">
+    <div className="w-full bg-[#F4F4F4]">
       
       {/* HERO SECTION: Single Large Image sticking to top */}
-      {/* Comment: Use smaller height on mobile to avoid overflows */}
-      <section className="relative w-full h-[70vh] md:h-screen overflow-hidden border-b border-black">
+      {/* Added border-b border-black */}
+      <section className="relative w-full h-screen overflow-hidden border-b border-black">
         <img 
             src="/images/hero.png" 
             className="w-full h-full object-cover object-top grayscale" 
@@ -147,27 +68,20 @@ const Home = () => {
 
       {/* SPLIT HEADER: BOOK / NOW */}
       <section className="border-b border-black bg-[#F4F4F4]">
-        {/* Comment: Stack vertically on small screens to prevent overflow */}
-        <div className="flex flex-col items-start gap-6 px-6 md:px-12 py-10 md:py-20 overflow-hidden md:flex-row md:items-center md:justify-between">
-            <h2 className="font-display font-light text-4xl sm:text-5xl md:text-8xl uppercase tracking-tighter text-black">
-              Book
-            </h2>
-            <Link
-              href="/booking"
-              className="text-xs sm:text-sm md:text-base font-light uppercase tracking-widest border border-black px-6 sm:px-8 py-2.5 sm:py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap text-black"
-            >
+        {/* Adjusted padding to px-6 md:px-12 */}
+        <div className="flex justify-between items-center px-6 md:px-12 py-16 overflow-hidden">
+            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter">Book</h2>
+            <Link href="/booking" className="text-sm md:text-base font-light uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
-            <h2 className="font-display font-light text-4xl sm:text-5xl md:text-8xl uppercase tracking-tighter text-left md:text-right text-black">
-              Now
-            </h2>
+            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-right">Now</h2>
         </div>
       </section>
 
       {/* BIG STATEMENT TEXT */}
-      <section id="about" className="py-16 md:py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
+      <section id="about" className="py-32 px-6 md:px-12 bg-[#F4F4F4] border-b border-black overflow-hidden">
         <div className="w-full">
-             <h3 className="font-display font-light text-4xl sm:text-5xl md:text-8xl leading-[0.95] uppercase tracking-tighter mb-8 md:mb-12 text-black">
+             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
                 HAEYOOM originated from a pure Korean word that means "beautiful thoughts."
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
@@ -181,8 +95,8 @@ const Home = () => {
       </section>
 
       {/* PRODUCT GRID (Services) - 4 Columns on one line */}
-      <section id="services" className="bg-[#F4F4F4] pb-20 md:pb-32">
-        <div className="grid grid-cols-2 md:grid-cols-4 border-b border-black">
+      <section id="services" className="bg-[#F4F4F4]">
+        <div className="grid grid-cols-2 md:grid-cols-4">
              {[
                 { title: 'Cut', price: '55', img: '/images/cut.png' },
                 { title: 'Perm', price: '170', img: '/images/perm.png' },
@@ -196,7 +110,7 @@ const Home = () => {
                         className="absolute inset-0 w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-700" 
                     />
                     {/* Dark gradient overlay for white text readability */}
-                    <div className="absolute inset-0 bg-linear-to-t from-black/50 to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
                     
                     <div className="absolute inset-0 p-6 flex flex-col justify-end">
                         <div className="flex justify-between items-end text-white z-10">
@@ -207,17 +121,18 @@ const Home = () => {
               </div>
                 </div>
              ))}
-              </div>
+        </div>
       </section>
 
       {/* SPACE / LOCATIONS STRIP */}
       <section id="locations" className="border-t border-black">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24 border-b border-black">
+                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Locations</h4>
+                <p className="font-light text-lg text-left text-gray-500">Visit us at one of our locations and take a moment to relax while we take care of your hair.</p>
+          </div>
           {SHOPS.map((shop, idx) => (
-             <div
-              key={shop.id}
-              className={`grid grid-cols-1 md:grid-cols-12 ${idx !== SHOPS.length - 1 ? 'border-b border-black' : ''}`}
-             >
-                 <div className="md:col-span-8 border-b md:border-b-0 md:border-r border-black relative min-h-[40vh] sm:min-h-[50vh]">
+             <div key={shop.id} className={`grid grid-cols-1 md:grid-cols-12 ${idx !== SHOPS.length - 1 ? 'border-b border-black' : ''}`}>
+                 <div className="md:col-span-8 border-b md:border-b-0 md:border-r border-black relative min-h-[50vh]">
                      {/* Added absolute inset-0 to make image strictly fill the container height */}
                      <img 
                         src={shop.image} 
@@ -225,16 +140,16 @@ const Home = () => {
                         alt={shop.name} 
                      />
             </div>
-                 <div className="md:col-span-4 p-6 md:p-12 flex flex-col justify-between bg-[#F4F4F4] gap-6">
+                 <div className="md:col-span-4 p-8 md:p-12 flex flex-col justify-between bg-[#F4F4F4]">
               <div>
-                        <span className="block text-xs uppercase tracking-widest mb-4 text-black">Location 0{idx + 1}</span>
+                        <span className="block text-xs uppercase tracking-widest mb-4">Location 0{idx + 1}</span>
                         
-                        <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6 text-black">
+                        <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6">
                             <span className="block mb-2">HAEYOOM</span>
                             {shop.name.replace('HAEYOOM ', '')}
                         </h4>
                         
-                        <p className="text-sm md:text-base leading-relaxed text-gray-600">
+                        <p className="text-base leading-relaxed text-gray-600">
                            {shop.address}
                         </p>
               </div>
@@ -251,27 +166,87 @@ const Home = () => {
           ))}
       </section>
 
+      {/* DESIGNERS SECTION - Will show designer profiles */}
       <section id="designers" className="border-t border-black bg-[#F4F4F4]">
         <div className="w-full">
-          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-10 md:pb-20">
-            <h4
-              className="font-display font-light text-4xl sm:text-5xl md:text-8xl uppercase tracking-tighter mb-4 md:mb-8 text-left text-black"
-              style={{ color: 'rgba(26, 26, 26, 1)' }}
-            >
-              Designers
-            </h4>
-            <div className="flex flex-wrap gap-2 md:gap-4 mb-3 md:mb-4">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
+            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
+            <div className="flex gap-4 mb-2 md:mb-4 flex-shrink-0">
                   <button 
                       onClick={() => setSelectedShop('all')}
-                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
+                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
                   >
                       All
                   </button>
-                  {designerShops.map((shop) => (
+                  {SHOPS.map(shop => (
                       <button 
                           key={shop.id}
                           onClick={() => setSelectedShop(shop.id)}
-                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
+                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                      >
+                          {shop.name.replace('HAEYOOM ', '')}
+                      </button>
+                  ))}
+              </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-b border-black">
+              {filteredDesigners.map((designer, index) => {
+                const totalItems = filteredDesigners.length;
+                const lastRowStartMobile = Math.floor((totalItems - 1) / 2) * 2;
+                const lastRowStartDesktop = Math.floor((totalItems - 1) / 4) * 4;
+                const isLastRowMobile = index >= lastRowStartMobile;
+                const isLastRowDesktop = index >= lastRowStartDesktop;
+                
+                return (
+                  <div 
+                    key={designer.id} 
+                    className={`group md:border-r md:[&:nth-child(4n)]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
+                  >
+                      <div className="aspect-[1/1] overflow-hidden border-b border-black relative">
+                          <img src={designer.profileImage} alt={designer.name} className="w-full h-full object-cover grayscale mix-blend-multiply group-hover:mix-blend-normal transition-all duration-500" />
+                          
+                          <div className="absolute bottom-0 left-0 bg-black text-white px-3 py-1">
+                              <span className="text-xs uppercase tracking-widest">{designer.role}</span>
+                          </div>
+                      </div>
+                      
+                      <div className="p-8">
+                          <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-3">{designer.name}</h4>
+                          {designer.instagramLink && (
+                            <a 
+                              href={designer.instagramLink} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="hidden md:flex items-center gap-1 hover:underline mt-4 text-xs uppercase"
+                            >
+                                <span>Instagram</span>
+                                <ArrowUpRight size={12} />
+                            </a>
+                          )}
+                      </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </section>
+
+      <section id="designers" className="border-t border-black bg-[#F4F4F4]">
+        <div className="w-full">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
+            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
+            <div className="flex gap-4 mb-2 md:mb-4 flex-shrink-0">
+                  <button 
+                      onClick={() => setSelectedShop('all')}
+                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                  >
+                      All
+                  </button>
+                  {SHOPS.map(shop => (
+                      <button 
+                          key={shop.id}
+                          onClick={() => setSelectedShop(shop.id)}
+                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
                       >
                           {shop.name.replace('HAEYOOM ', '')}
                       </button>
@@ -288,12 +263,11 @@ const Home = () => {
                 const lastRowStartDesktop = Math.floor((totalItems - 1) / 4) * 4;
                 const isLastRowMobile = index >= lastRowStartMobile;
                 const isLastRowDesktop = index >= lastRowStartDesktop;
-                const isLastColumnDesktop = (index + 1) % 4 === 0;
                 
                 return (
                   <div 
                     key={designer.id} 
-                    className={`group p-8 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'} ${!isLastColumnDesktop ? 'md:border-r md:border-black' : ''}`}
+                    className={`group md:border-r p-8 md:[&:nth-child(4n)]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
                   >
                     {/* <div className="flex flex-wrap gap-2 mb-3">
                           <span className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-light tracking-wider">
@@ -301,24 +275,20 @@ const Home = () => {
                           </span>
                     </div> */}
 
-                    <span className="block text-xs uppercase tracking-widest mb-2 text-black">{designer.role}</span>
+                    <span className="block text-xs uppercase tracking-widest mb-2">{designer.role}</span>
 
-                    <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-titter mb-8 text-black">
-                      {designer.english_name || designer.name}
-                    </h4>
+                    <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter mb-8">{designer.name}</h4>
 
 
-                    {designer.instagramLink && (
-                      <a 
-                        href={designer.instagramLink ?? undefined} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase text-black"
-                      >
-                          <span>Instagram</span>
-                          <ArrowUpRight size={12} />
-                      </a>
-                    )}
+                    <a 
+                      href={designer.instagramLink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase"
+                    >
+                        <span>Instagram</span>
+                        <ArrowUpRight size={12} />
+                    </a>
                   </div>
                 );
               })}
@@ -331,7 +301,7 @@ const Home = () => {
          <div className="w-full">
              {/* Header with equal top and bottom padding to spacing */}
             <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left text-black">Explore</h4>
+                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
                 <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
             </div>
 

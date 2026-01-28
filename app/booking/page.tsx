@@ -55,12 +55,6 @@ export default function BookingPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
 
-  // Comment: Customer information state for step 6
-  const [customerName, setCustomerName] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
-  const [existingCustomerId, setExistingCustomerId] = useState<number | null>(null);
-  const [isExistingCustomer, setIsExistingCustomer] = useState<boolean | null>(null);
-
   // Comment: Refs to enable smooth scrolling to each step section
   const dateSectionRef = useRef<HTMLElement | null>(null);
   const venueSectionRef = useRef<HTMLElement | null>(null);
@@ -203,34 +197,77 @@ export default function BookingPage() {
   }));
 
   // Comment: Helper function to determine service category based on name
+  // Remove (card) or (cash) from name for category detection
   const getServiceCategory = (name: string): string => {
-    const lowerName = name.toLowerCase();
-    if (lowerName.includes('package')) return 'Package';
-    if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek')) return 'Clinic';
+    const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+    const lowerName = cleanName.toLowerCase();
+    
+    // Check for category suffix first (e.g., "- Perm", "- Magic", "- Hot Perm", "- Color", "- Clinic", "- Package")
+    if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
+    if (lowerName.includes('- magic')) return 'Magic';
+    if (lowerName.includes('- hot perm')) return 'Hot Perm';
+    if (lowerName.includes('- color')) return 'Color';
+    if (lowerName.includes('- clinic')) return 'Clinic';
+    if (lowerName.includes('- package')) return 'Package';
+    
+    // Check for specific patterns
+    // Package category - includes packages and design additions (without category suffix)
+    if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
+    if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek') || lowerName.includes('clinic')) return 'Clinic';
     if (lowerName.includes('color') || lowerName.includes('bleach') || lowerName.includes('toning')) return 'Color';
     if (lowerName.includes('special perm') || lowerName.includes('setting perm') || lowerName.includes('design setting perm')) return 'Hot Perm';
-    if (lowerName.includes('magic')) return 'Magic';
-    if (lowerName.includes('perm')) return 'Perm';
+    if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
+    if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
     if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
-    if (lowerName.includes('cut')) return 'Cut';
+    
+    // Cut category - includes all cut-related services and additions (without category suffix)
+    if (lowerName.includes('cut') || 
+        (lowerName.includes('length addition') && !lowerName.includes('-')) || 
+        lowerName.includes('hair extension') || 
+        (lowerName.includes('director level') && !lowerName.includes('-')) || 
+        (lowerName.includes('manager level') && !lowerName.includes('-')) ||
+        lowerName.includes('kids cut') ||
+        lowerName.includes('bangs cut')) {
+      return 'Cut';
+    }
+    
     return 'Other';
   };
 
   // Map services loaded from API into UI Service objects
-  const services: Service[] = servicesForShop.map((s: any) => ({
-    id: String(s.id),
-    name: s.name as string,
-    price: Number(s.price),
-    priceLabel: 'Standard',
-    duration: `${s.duration_minutes} mins`,
-    description: '',
-    image: '',
-    selected: selectedService ? selectedService.id === String(s.id) : false,
-  }));
+  // Remove "(card)" or "(cash)" from name for display in booking page
+  // Only show card services to customers (filter out cash services)
+  // Hide services that are admin-only (additional fees like Length Addition)
+  const services: Service[] = servicesForShop
+    .filter((s: any) => {
+      const name = (s.name as string).toLowerCase();
+      // Only show card services, hide cash services from customers
+      const isCardService = name.includes('(card)') || (!name.includes('(cash)') && !name.includes('(card)'));
+      // Hide admin-only services (additional fees)
+      const visibleTo = s.visible_to || 'customer';
+      const isVisibleToCustomer = visibleTo === 'customer' || visibleTo === 'both';
+      return isCardService && isVisibleToCustomer;
+    })
+    .map((s: any) => {
+      const displayName = (s.name as string).replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+      return {
+        id: String(s.id),
+        name: displayName,
+        price: Number(s.price),
+        priceLabel: 'Standard',
+        duration: `${s.duration_minutes} mins`,
+        description: '',
+        image: '',
+        selected: selectedService ? selectedService.id === String(s.id) : false,
+      };
+    });
 
-  // Group services by category
+  // Group services by category (use DB category if available, otherwise fallback to name-based detection)
+  // Note: services from API may not have category field, so we need to check the original service data
   const servicesByCategory = services.reduce((acc, service) => {
-    const category = getServiceCategory(service.name);
+    // Get original service data to check category
+    const originalService = servicesForShop.find((s: any) => String(s.id) === service.id);
+    const category = (originalService?.category as string) || getServiceCategory(service.name);
     if (!acc[category]) {
       acc[category] = [];
     }
@@ -248,10 +285,6 @@ export default function BookingPage() {
     setSelectedDesigner(null);
     setSelectedService(null);
     setSelectedTime(null);
-    setCustomerName('');
-    setCustomerPhone('');
-    setExistingCustomerId(null);
-    setIsExistingCustomer(null);
   };
 
   const handleShopSelect = (shopId: string) => {
@@ -260,10 +293,6 @@ export default function BookingPage() {
     setSelectedDesigner(null);
     setSelectedService(null);
     setSelectedTime(null);
-    setCustomerName('');
-    setCustomerPhone('');
-    setExistingCustomerId(null);
-    setIsExistingCustomer(null);
   };
 
   const handleDesignerSelect = (designer: Designer) => {
@@ -271,20 +300,12 @@ export default function BookingPage() {
     // Comment: When designer changes, clear downstream selections
     setSelectedService(null);
     setSelectedTime(null);
-    setCustomerName('');
-    setCustomerPhone('');
-    setExistingCustomerId(null);
-    setIsExistingCustomer(null);
   };
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
-    // Comment: When service changes, clear time and customer info
+    // Comment: When service changes, clear time selection
     setSelectedTime(null);
-    setCustomerName('');
-    setCustomerPhone('');
-    setExistingCustomerId(null);
-    setIsExistingCustomer(null);
     // Close modal after selection
     setIsServiceModalOpen(false);
     setSelectedCategory(null);
@@ -327,45 +348,8 @@ export default function BookingPage() {
     }
   }, [step]);
 
-  // Comment: Resolve customer (existing vs new) right before moving to deposit step
-  const handleContinueToPayment = async () => {
-    if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
-    if (!customerName || !customerPhone) {
-      // Comment: Require customer name and phone before moving to payment step
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/customers/lookup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ phone: customerPhone.trim() }),
-      });
-
-      const json = await res.json();
-
-      if (res.ok && json.exists && json.customer) {
-        setExistingCustomerId(json.customer.id);
-        // Comment: Keep the name entered by the customer instead of overwriting with DB value
-        setIsExistingCustomer(true);
-      } else if (res.ok) {
-        // Comment: No existing customer, treat as new
-        setExistingCustomerId(null);
-        setIsExistingCustomer(false);
-      } else {
-        console.error('Error looking up customer:', json.error);
-        setExistingCustomerId(null);
-        setIsExistingCustomer(false);
-      }
-    } catch (error) {
-      console.error('Unexpected error looking up customer:', error);
-      setExistingCustomerId(null);
-      setIsExistingCustomer(false);
-    }
-
-    // Comment: Move to deposit step after lookup
+  // Comment: Move to deposit UI step (no DB write yet)
+  const goToDeposit = () => {
     setStep('deposit');
   };
 
@@ -398,9 +382,6 @@ export default function BookingPage() {
           totalAmount: selectedService?.price ?? null,
           depositAmount,
           fullDate: selectedDate, // Comment: Pass full date in YYYY-MM-DD format
-          customerName,
-          customerPhone,
-          existingCustomerId,
         }),
       });
       // TODO: Optionally show a success toast or redirect
@@ -426,91 +407,28 @@ export default function BookingPage() {
 
   // Step 4: Deposit Payment
   if (step === 'deposit') {
-    const welcomeText =
-      isExistingCustomer === true
-        ? `Welcome back ${customerName}`
-        : isExistingCustomer === false
-        ? `Welcome ${customerName}`
-        : '';
-
     return (
-      <div className="bg-white text-slate-900 font-display min-h-screen flex flex-col overflow-x-hidden antialiased selection:bg-gray-200 selection:text-black pt-20">
-        <main className="flex-grow w-full max-w-[1280px] mx-auto px-4 md:px-6 py-8">
-          <div className="flex items-center gap-2 mb-6 text-sm">
-            <Link href="/" className="text-gray-500 hover:text-black transition-colors">
-              Home
-            </Link>
-            <span className="text-gray-300">/</span>
-            <Link href="/booking" className="text-gray-500 hover:text-black transition-colors">
-              Booking
-            </Link>
-            <span className="text-gray-300">/</span>
-            <span className="text-black font-medium">Deposit</span>
+      <div className="w-full bg-[#F4F4F4] font-display min-h-screen flex flex-col overflow-x-hidden antialiased pt-24">
+        <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 md:px-12 pt-8 pb-24 space-y-16">
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-400 uppercase">01. Appointment Details</span>
+            <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
+            <span className="text-black font-bold uppercase">02. Confirmation & Payment</span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-            <aside className="lg:col-span-4 space-y-6">
-              <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
-                <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-black">receipt_long</span>
-                  Booking Summary
-                </h4>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-start pb-4 border-b border-gray-100">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{selectedService?.name}</p>
-                      <p className="text-xs text-gray-500">With {selectedDesigner?.name}</p>
-                    </div>
-                    <p className="text-sm font-medium text-slate-900">${selectedService?.price.toFixed(2)}</p>
-                  </div>
-                  <div className="flex justify-between pt-2">
-                    <span className="text-sm text-gray-500">Date & Time</span>
-                    <span className="text-sm font-medium text-slate-900">
-                      {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} at {selectedTime}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-2">
-                    <span className="text-sm text-gray-500">Duration</span>
-                    <span className="text-sm font-medium text-slate-900">{selectedService?.duration}</span>
-                  </div>
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm text-gray-500">Total Amount</span>
-                      <span className="text-lg font-bold text-black">${totalPrice.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-                      <span className="text-sm font-medium text-slate-900">Deposit (20%)</span>
-                      <span className="text-xl font-bold text-black">${depositAmount.toFixed(2)}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Remaining ${(totalPrice - depositAmount).toFixed(2)} will be paid on the day of your appointment.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg flex gap-3 items-start border border-gray-200">
-                <span className="material-symbols-outlined text-black mt-0.5 text-lg">info</span>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Your deposit is non-refundable but can be rescheduled up to 24 hours before your appointment.
-                </p>
-              </div>
-            </aside>
             <section className="lg:col-span-8 space-y-8">
               <div>
-                {welcomeText && (
-                  <p className="text-sm font-semibold text-gray-800 mb-2">{welcomeText}</p>
-                )}
-                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900 mb-2">
-                  Secure Your Booking
-                </h1>
+                <h1 className="text-3xl md:text-4xl font-light tracking-tight text-slate-900 mb-2 uppercase">Secure Your Booking</h1>
                 <p className="text-gray-500">Pay your deposit to confirm your appointment.</p>
               </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 mb-6">Payment Method</h3>
+                <div className="bg-[#F4F4F4]  border border-black p-8">
+                <h3 className="text-lg font-light text-slate-900 mb-6 uppercase">Payment Method</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                   {['Card', 'Cash', 'Transfer'].map((method) => (
                     <button
                       key={method}
-                      className="p-4 border-2 border-gray-200 rounded-xl hover:border-black transition-colors text-left"
+                      className="p-4 border border-black  hover:bg-black hover:text-white transition-colors text-left"
                     >
                       <div className="flex items-center gap-3">
                         <span className="material-symbols-outlined text-2xl text-gray-400">
@@ -527,7 +445,7 @@ export default function BookingPage() {
                       Card Number
                     </label>
                     <input
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                      className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                       id="card-number"
                       placeholder="1234 5678 9012 3456"
                       type="text"
@@ -539,7 +457,7 @@ export default function BookingPage() {
                         Expiry Date
                       </label>
                       <input
-                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                        className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                         id="expiry"
                         placeholder="MM/YY"
                         type="text"
@@ -550,7 +468,7 @@ export default function BookingPage() {
                         CVV
                       </label>
                       <input
-                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                        className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                         id="cvv"
                         placeholder="123"
                         type="text"
@@ -562,7 +480,7 @@ export default function BookingPage() {
                       Cardholder Name
                     </label>
                     <input
-                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                      className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                       id="card-name"
                       placeholder="John Doe"
                       type="text"
@@ -573,7 +491,7 @@ export default function BookingPage() {
               <div className="flex items-center justify-between pt-4">
                 <button
                   onClick={handleBack}
-                  className="px-6 py-3 rounded-lg text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined">arrow_back</span>
                   Back
@@ -581,7 +499,7 @@ export default function BookingPage() {
                 <button
                   type="button"
                   onClick={handlePayDeposit}
-                  className={`w-full md:w-auto font-bold text-lg px-10 py-4 rounded-xl shadow-lg shadow-gray-400/50 transform transition-all flex items-center justify-center gap-3 ${
+                  className={`w-full md:w-auto font-bold text-lg px-10 py-4  shadow-lg shadow-gray-400/50 transform transition-all flex items-center justify-center gap-3 ${
                     isSubmitting
                       ? 'bg-gray-300 text-gray-700 cursor-wait'
                       : 'bg-black hover:bg-gray-800 text-white hover:-translate-y-0.5 active:translate-y-0'
@@ -590,7 +508,7 @@ export default function BookingPage() {
                 >
                   {isSubmitting ? (
                     <>
-                      <span className="inline-block size-5 border-2 border-gray-700 border-t-transparent rounded-full animate-spin" />
+                      <span className="inline-block size-5 border border-black border-t-transparent  animate-spin" />
                       <span className="text-sm">Processing payment...</span>
                     </>
                   ) : (
@@ -602,13 +520,51 @@ export default function BookingPage() {
                 </button>
               </div>
             </section>
+            <aside className="lg:col-span-4 space-y-6">
+              <div className="bg-[#F4F4F4]  p-6 border border-black">
+                <h4 className="text-lg font-bold text-slate-900 mb-4 uppercase">Booking Summary</h4>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-start pb-4 border-b border-black">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{selectedService?.name}</p>
+                      <p className="text-xs text-gray-500">With {selectedDesigner?.name}</p>
+                    </div>
+                    <p className="text-sm font-medium text-slate-900">${selectedService?.price.toFixed(2)}</p>
+                  </div>
+                  <div className="flex justify-between pt-2">
+                    <span className="text-sm text-gray-500">Date & Time</span>
+                    <span className="text-sm font-medium text-slate-900">
+                      {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} at {selectedTime}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2">
+                    <span className="text-sm text-gray-500">Duration</span>
+                    <span className="text-sm font-medium text-slate-900">{selectedService?.duration}</span>
+                  </div>
+                  <div className="pt-4 border-t border-black">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-gray-500">Total Amount</span>
+                      <span className="text-lg font-bold text-black">${totalPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-black">
+                      <span className="text-sm font-medium text-slate-900">Deposit (20%)</span>
+                      <span className="text-xl font-bold text-black">${depositAmount.toFixed(2)}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Remaining ${(totalPrice - depositAmount).toFixed(2)} will be paid on the day of your appointment.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-[#F4F4F4] p-4  flex gap-3 items-start border border-black">
+                <span className="material-symbols-outlined text-black mt-0.5 text-lg">info</span>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Your deposit is non-refundable but can be rescheduled up to 24 hours before your appointment.
+                </p>
+              </div>
+            </aside>
           </div>
         </main>
-        <footer className="border-t border-gray-200 bg-white py-8 mt-12">
-          <div className="max-w-[1280px] mx-auto px-6 text-center">
-            <p className="text-gray-400 text-xs">© 2023 Haeyoom Hair Salon. All rights reserved.</p>
-          </div>
-        </footer>
       </div>
     );
   }
@@ -616,22 +572,22 @@ export default function BookingPage() {
   // Step 5: Booking Confirmed
   if (step === 'confirmed') {
     return (
-      <div className="bg-white text-slate-900 font-display min-h-screen flex flex-col overflow-x-hidden antialiased selection:bg-gray-200 selection:text-black pt-24">
-        <main className="flex-grow w-full max-w-[1280px] mx-auto px-4 md:px-6 py-10">
+      <div className="w-full bg-[#F4F4F4] font-display min-h-screen flex flex-col overflow-x-hidden antialiased pt-24">
+        <main className="flex-grow w-full max-w-[1280px] mx-auto px-6 md:px-12 py-10">
           <div className="max-w-3xl mx-auto text-center space-y-8">
-            <div className="inline-flex items-center justify-center rounded-full bg-emerald-100 text-emerald-700 px-4 py-2 text-sm font-medium gap-2">
+            <div className="inline-flex items-center justify-center  bg-emerald-100 text-emerald-700 px-4 py-2 text-sm font-medium gap-2">
               <span className="material-symbols-outlined">check_circle</span>
               <span>Booking Confirmed</span>
             </div>
             <div className="space-y-3">
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900">
+              <h1 className="text-3xl md:text-4xl font-light tracking-tight text-slate-900 uppercase">
                 Your appointment is confirmed
               </h1>
               <p className="text-gray-500">
                 Thank you. Your deposit has been recorded and your spot is now secured.
               </p>
             </div>
-            <div className="mt-6 inline-flex flex-col items-start gap-3 bg-gray-50 border border-gray-200 rounded-2xl px-6 py-5 text-left">
+            <div className="mt-6 inline-flex flex-col items-start gap-3 bg-[#F4F4F4] border border-black  px-6 py-5 text-left">
               <p className="text-sm font-semibold text-gray-700">Booking details</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                 <div className="flex justify-between sm:block">
@@ -655,7 +611,7 @@ export default function BookingPage() {
                   </span>
                 </div>
               </div>
-              <div className="pt-3 border-t border-gray-200 w-full flex justify-between text-sm">
+              <div className="pt-3 border-t border-black w-full flex justify-between text-sm">
                 <span className="text-gray-500">Deposit paid</span>
                 <span className="font-bold text-slate-900">${depositAmount.toFixed(2)}</span>
               </div>
@@ -663,13 +619,13 @@ export default function BookingPage() {
             <div className="flex justify-center gap-4 pt-4">
               <Link
                 href="/booking"
-                className="px-6 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
               >
                 Make another booking
               </Link>
               <Link
                 href="/"
-                className="px-6 py-3 rounded-lg text-sm font-medium bg-black text-white hover:bg-gray-800 transition-colors"
+                className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
               >
                 Back to home
               </Link>
@@ -682,26 +638,24 @@ export default function BookingPage() {
 
   // Step 2: Service & Designer Selection
   return (
-    <div className="bg-white text-zinc-900 font-display antialiased selection:bg-black selection:text-white min-h-screen pt-24">
-      <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 md:px-10 lg:px-40 py-8 space-y-16">
+    <div className="w-full bg-[#F4F4F4] font-display antialiased min-h-screen pt-24">
+      <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 md:px-12 pt-8 pb-24 space-y-16">
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-black font-bold">Date</span>
+          <span className="text-black font-bold uppercase">01. Appointment Details</span>
           <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
-          <span className="text-black font-bold">Venue</span>
-          <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
-          <span className="text-gray-400">Designer</span>
-          <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
-          <span className="text-gray-400">Service</span>
-          <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
-          <span className="text-gray-400">Time</span>
+          <span className="text-gray-400 uppercase">02. Confirmation & Payment</span>
         </div>
 
+        <div className="space-y-32">
         {/* 01. Date Selection */}
         <section ref={dateSectionRef} className="space-y-6">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-black mb-2 tracking-tight">Select Date</h1>
-            <p className="text-gray-600 text-lg font-light">Choose your preferred appointment date.</p>
+          <div className="border-b border-black pb-4">
+            <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+              <span className="bg-black text-white text-sm font-bold px-2 py-1">01</span>
+              Select Date
+            </h1>
+            <p className="font-light text-lg text-left text-gray-500">Choose your preferred appointment date.</p>
           </div>
           <div className="max-w-md">
             <input
@@ -709,7 +663,7 @@ export default function BookingPage() {
               value={selectedDate}
               onChange={(e) => handleDateChange(e.target.value)}
               min={getSydneyToday()}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl text-lg font-medium text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+              className="w-full px-4 py-3 border border-black  text-lg font-medium text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
             />
           </div>
         </section>
@@ -720,12 +674,12 @@ export default function BookingPage() {
             ref={venueSectionRef}
             className="transition-all duration-500 space-y-6"
           >
-            <div>
-              <h3 className="text-2xl font-bold text-black flex items-center gap-2 mb-2">
-                <span className="bg-black text-white text-xs font-bold px-2 py-1 rounded">02</span>
+            <div className="border-b border-black pb-4">
+              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+                <span className="bg-black text-white text-sm font-bold px-2 py-1">02</span>
                 Select Location
-              </h3>
-              <p className="text-gray-600 text-lg font-light">Choose your preferred salon location.</p>
+              </h1>
+              <p className="font-light text-lg text-left text-gray-500">Choose your preferred salon location.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {loadingShops && shops.length === 0 && (
@@ -733,48 +687,54 @@ export default function BookingPage() {
                   {[1, 2].map((skeleton) => (
                     <div
                       key={skeleton}
-                      className="bg-white border-2 border-gray-100 rounded-2xl p-8 shadow-sm animate-pulse"
+                      className="bg-[#F4F4F4] border border-black  p-8 animate-pulse"
                     >
                       <div className="flex items-start gap-4 mb-4">
-                        <div className="bg-gray-200 rounded-full p-3 w-10 h-10" />
+                        <div className="bg-gray-200  p-3 w-10 h-10" />
                         <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-gray-200 rounded w-1/2" />
-                          <div className="h-3 bg-gray-100 rounded w-3/4" />
+                          <div className="h-4 bg-gray-200 w-1/2" />
+                          <div className="h-3 bg-gray-100 w-3/4" />
                         </div>
                       </div>
-                      <div className="h-3 bg-gray-100 rounded w-2/3" />
+                      <div className="h-3 bg-gray-100 w-2/3" />
                     </div>
                   ))}
                 </>
               )}
               {!loadingShops &&
-                shops.map((shop) => (
-                  <button
-                    key={shop.id}
-                    type="button"
-                  onClick={() => {
-                    handleShopSelect(shop.id);
-                  }}
-                    className={`text-left bg-white border-2 rounded-2xl p-8 cursor-pointer transition-all shadow-sm hover:shadow-lg ${
-                      selectedShop === shop.id ? 'border-black scale-[1.01]' : 'border-gray-200 hover:border-gray-400'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4 mb-2">
-                      <div className="bg-black text-white rounded-full p-3">
-                        <span className="material-symbols-outlined">location_on</span>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-black mb-1">{shop.name}</h3>
-                        <p className="text-gray-600 text-sm">{shop.address}</p>
-                      </div>
-                      {selectedShop === shop.id && (
-                        <div className="bg-black text-white rounded-full p-1">
-                          <span className="material-symbols-outlined text-sm">check</span>
+                shops.map((shop) => {
+                  const isSelected = selectedShop === shop.id;
+                  return (
+                    <button
+                      key={shop.id}
+                      type="button"
+                      onClick={() => {
+                        handleShopSelect(shop.id);
+                      }}
+                      className={`text-left border border-black p-8 cursor-pointer transition-all ${
+                        isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start gap-4 mb-2">
+                        {/* <div className={`p-3 ${isSelected ? 'bg-white text-black' : 'bg-black text-white'}`}>
+                          <span className="material-symbols-outlined">location_on</span>
+                        </div> */}
+                        <div className="flex-1">
+                          <h3
+                            className={`text-xl font-light mb-1 uppercase ${
+                              isSelected ? 'text-white' : 'text-black'
+                            }`}
+                          >
+                            {shop.name}
+                          </h3>
+                          <p className={`text-sm ${isSelected ? 'text-gray-200' : 'text-gray-600'}`}>
+                            {shop.address}
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                      </div>
+                    </button>
+                  );
+                })}
             </div>
           </section>
         )}
@@ -785,42 +745,47 @@ export default function BookingPage() {
             ref={designerSectionRef}
             className="transition-all duration-500 space-y-6"
           >
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 border-b border-gray-200 pb-4">
-              <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-                <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">03</span>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 pb-4 border-b border-black">
+              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+                <span className="bg-black text-white text-sm font-bold px-2 py-1">03</span>
                 Select Designer
-              </h3>
+              </h1>
             </div>
             {loadingDesigners ? (
               <div className="text-center py-8">
-                <div className="inline-block w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin"></div>
+                <div className="inline-block w-8 h-8 border border-black border-t-black  animate-spin"></div>
                 <p className="text-gray-500 text-sm mt-4">Loading available designers...</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {designers.map((designer) => (
-                  <button
-                    key={designer.id}
-                    type="button"
-                    onClick={() => handleDesignerSelect(designer)}
-                    className={`bg-white border-2 rounded-2xl p-6 text-left flex flex-col gap-2 transition-all shadow-sm hover:shadow-md ${
-                      designer.selected ? 'border-black' : 'border-gray-200 hover:border-gray-400'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3 mb-1">
-                      <div>
-                        <h4 className="text-lg font-bold text-black">{designer.name}</h4>
-                        <p className="text-sm text-gray-500">{designer.title}</p>
-                      </div>
-                      {designer.selected && (
-                        <div className="rounded-full bg-black text-white px-2 py-1 text-xs font-semibold flex items-center gap-1">
-                          <span className="material-symbols-outlined text-xs">check</span>
-                          Selected
+                {designers.map((designer) => {
+                  const isSelected = designer.selected;
+                  return (
+                    <button
+                      key={designer.id}
+                      type="button"
+                      onClick={() => handleDesignerSelect(designer)}
+                      className={`border border-black p-8 text-left flex flex-col gap-2 transition-all ${
+                        isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <div>
+                          <h4
+                            className={`text-lg font-bold ${
+                              isSelected ? 'text-white' : 'text-black'
+                            }`}
+                          >
+                            {designer.name}
+                          </h4>
+                          <p className={`text-sm ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
+                            {designer.title}
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                      </div>
+                    </button>
+                  );
+                })}
                 {designers.length === 0 && !loadingDesigners && (
                   <p className="text-gray-500 text-sm col-span-full">
                     No designers available for this date and location. Please try a different date or location.
@@ -837,11 +802,11 @@ export default function BookingPage() {
             ref={serviceSectionRef}
             className="transition-all duration-500"
           >
-            <div className="flex items-center justify-between gap-6 mb-8 border-b border-gray-200 pb-4">
-              <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-                <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">04</span>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 pb-4 border-b border-black">
+              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+                <span className="bg-black text-white text-sm font-bold px-2 py-1">04</span>
                 Select Service
-              </h3>
+              </h1>
             </div>
             {services.length === 0 ? (
               <p className="text-gray-500 text-sm">
@@ -853,26 +818,28 @@ export default function BookingPage() {
                   const categoryServices = servicesByCategory[category];
                   if (!categoryServices || categoryServices.length === 0) return null;
                   
-                  const hasSelectedService = selectedService && getServiceCategory(selectedService.name) === category;
+                  const isSelected =
+                    selectedService && getServiceCategory(selectedService.name) === category;
                   
                   return (
                     <button
                       key={category}
                       type="button"
                       onClick={() => handleCategoryClick(category)}
-                      className={`bg-white border-2 rounded-2xl p-6 hover:border-black hover:shadow-md transition-all text-center ${
-                        hasSelectedService ? 'border-black bg-gray-50' : 'border-gray-200'
+                      className={`border border-black p-6 transition-all text-center ${
+                        isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
                       }`}
                     >
-                      <h4 className="text-lg font-bold text-black mb-2">{category}</h4>
-                      <p className="text-sm text-gray-500">{categoryServices.length} services</p>
-                      {hasSelectedService && (
-                        <div className="mt-2">
-                          <span className="inline-flex items-center justify-center rounded-full bg-black text-white text-xs px-2 py-1">
-                            Selected
-                          </span>
-                        </div>
-                      )}
+                      <h4
+                        className={`text-lg font-bold mb-2 ${
+                          isSelected ? 'text-white' : 'text-black'
+                        }`}
+                      >
+                        {category}
+                      </h4>
+                      <p className={`text-sm ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
+                        {categoryServices.length} services
+                      </p>
                     </button>
                   );
                 })}
@@ -882,9 +849,9 @@ export default function BookingPage() {
             {/* Service Selection Modal */}
             {isServiceModalOpen && selectedCategory && (
               <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
-                <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                  <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                    <h3 className="text-2xl font-bold text-black">{selectedCategory}</h3>
+                <div className="bg-[#F4F4F4]  max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-black" onClick={(e) => e.stopPropagation()}>
+                  <div className="sticky top-0 bg-[#F4F4F4] border-b border-black px-6 py-4 flex items-center justify-between">
+                    <h1 className="text-3xl font-light text-black uppercase">{selectedCategory}</h1>
                     <button
                       type="button"
                       onClick={() => setIsServiceModalOpen(false)}
@@ -893,51 +860,62 @@ export default function BookingPage() {
                       <span className="material-symbols-outlined">close</span>
                     </button>
                   </div>
-                  <div className="p-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {servicesByCategory[selectedCategory]?.map((service) => (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => handleServiceSelect(service)}
-                          className={`text-left bg-white border-2 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all shadow-sm hover:shadow-md ${
-                            service.selected ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-400'
-                          }`}
-                        >
-                          <div>
-                            <h4 className="text-black text-base font-bold mb-1">{service.name}</h4>
-                            <p className="text-xs text-gray-500">
-                              Duration: <span className="font-medium text-gray-800">{service.duration}</span>
-                            </p>
-                          </div>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-sm font-semibold text-gray-900">
-                              From ${service.price.toFixed(0)}
-                            </span>
-                            {service.selected && (
-                              <span className="inline-flex items-center justify-center rounded-full bg-black text-white text-xs px-2 py-1">
-                                Selected
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      ))}
+                    <div className="p-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {servicesByCategory[selectedCategory]?.map((service) => {
+                          const isSelected = service.selected;
+                          return (
+                            <button
+                              key={service.id}
+                              type="button"
+                              onClick={() => handleServiceSelect(service)}
+                              className={`text-left border border-black p-4 flex flex-col justify-between gap-3 transition-all ${
+                                isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
+                              }`}
+                            >
+                              <div>
+                                <h4
+                                  className={`text-base font-bold mb-1 ${
+                                    isSelected ? 'text-white' : 'text-black'
+                                  }`}
+                                >
+                                  {service.name}
+                                </h4>
+                                <p className={`text-xs ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
+                                  Duration:{' '}
+                                  <span className="font-medium">
+                                    {service.duration}
+                                  </span>
+                                </p>
+                              </div>
+                              <div className="flex items-center justify-between mt-2">
+                                <span
+                                  className={`text-sm font-semibold ${
+                                    isSelected ? 'text-white' : 'text-gray-900'
+                                  }`}
+                                >
+                                  From ${service.price.toFixed(0)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
                 </div>
               </div>
             )}
           </section>
         )}
 
-        {/* 05. Time Selection + Customer Details + Continue (only after service is chosen) */}
+        {/* 05. Time Selection + Continue (only after service is chosen) */}
         {selectedDate && selectedShop && selectedDesigner && selectedService && (
           <section ref={timeSectionRef} className="space-y-6">
-            <div className="flex items-center justify-between gap-6 mb-2 border-b border-gray-200 pb-4">
-              <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-                <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">05</span>
+            <div className="flex items-center justify-between gap-6 mb-2 border-b border-black pb-4">
+              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+                <span className="bg-black text-white text-sm font-bold px-2 py-1">05</span>
                 Select Time
-              </h3>
+              </h1>
             </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -953,12 +931,12 @@ export default function BookingPage() {
                               if (isDisabled) return;
                               setSelectedTime(time);
                             }}
-                            className={`py-2 px-2 rounded-lg border text-xs md:text-sm transition-all ${
+                            className={`py-2 px-2  border text-xs md:text-sm transition-all ${
                               isDisabled
-                                ? 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50'
+                                ? 'border-black text-gray-400 cursor-not-allowed bg-[#F4F4F4]'
                                 : isSelected
-                                ? 'bg-linear-to-br from-gray-800 to-black text-white font-bold shadow-md shadow-gray-900/20 transform scale-105 border border-transparent'
-                                : 'border-gray-200 text-slate-900 hover:border-black hover:text-black bg-white'
+                                ? 'bg-black text-white font-light uppercase border border-black'
+                                : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
                             }`}
                             disabled={isDisabled}
                           >
@@ -982,12 +960,12 @@ export default function BookingPage() {
                               if (isDisabled) return;
                               setSelectedTime(time);
                             }}
-                            className={`py-2 px-2 rounded-lg border text-xs md:text-sm transition-all ${
+                            className={`py-2 px-2  border text-xs md:text-sm transition-all ${
                               isDisabled
-                                ? 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50'
+                                ? 'border-black text-gray-400 cursor-not-allowed bg-[#F4F4F4]'
                                 : isSelected
-                                ? 'bg-linear-to-br from-gray-800 to-black text-white font-bold shadow-md shadow-gray-900/20 transform scale-105 border border-transparent'
-                                : 'border-gray-200 text-slate-900 hover:border-black hover:text-black bg-white'
+                                ? 'bg-black text-white font-light uppercase border border-black'
+                                : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
                             }`}
                             disabled={isDisabled}
                           >
@@ -1009,10 +987,10 @@ export default function BookingPage() {
                             onClick={() => {
                               setSelectedTime(time);
                             }}
-                            className={`py-2 px-2 rounded-lg border text-xs md:text-sm transition-all ${
+                            className={`py-2 px-2  border text-xs md:text-sm transition-all ${
                               isSelected
-                                ? 'bg-linear-to-br from-gray-800 to-black text-white font-bold shadow-md shadow-gray-900/20 transform scale-105 border border-transparent'
-                                : 'border-gray-200 text-slate-900 hover:border-black hover:text-black bg-white'
+                                ? 'bg-black text-white font-light uppercase border border-black'
+                                : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
                             }`}
                           >
                             {time}
@@ -1022,57 +1000,16 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  {/* 06. Customer Details */}
-                  <div className="space-y-4 pt-6 border-t border-gray-200 mt-4">
-                    <div className="flex items-center justify-between gap-6 mb-2">
-                      <h3 className="text-2xl font-bold text-black flex items-center gap-2">
-                        <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">06</span>
-                        Customer Details
-                      </h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700" htmlFor="customer-name">
-                          Name
-                        </label>
-                        <input
-                          id="customer-name"
-                          type="text"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                          placeholder="Your name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700" htmlFor="customer-phone">
-                          Mobile number
-                        </label>
-                        <input
-                          id="customer-phone"
-                          type="tel"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                          placeholder="e.g. 0422 966 123"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-6 flex justify-end">
+                  <div className="pt-24 flex justify-end">
                     <button
                       type="button"
-                      onClick={handleContinueToPayment}
-                      className="bg-black hover:bg-gray-800 text-white font-semibold px-8 py-3 rounded-xl shadow-md flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
+                        goToDeposit();
+                      }}
+                      className="bg-black hover:bg-gray-800 text-white font-light uppercase tracking-widest px-8 py-3  flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                       disabled={
-                        !selectedDate ||
-                        !selectedTime ||
-                        !selectedService ||
-                        !selectedDesigner ||
-                        !selectedShop ||
-                        !customerName ||
-                        !customerPhone
+                        !selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop
                       }
                     >
                       <span>Continue to Payment</span>
@@ -1082,6 +1019,8 @@ export default function BookingPage() {
                 </div>
               </section>
             )}
+        </div>
+
       </main>
       {/* Sticky summary bar removed: UX now advances automatically on selection */}
     </div>
