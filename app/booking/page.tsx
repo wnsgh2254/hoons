@@ -54,6 +54,11 @@ export default function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
+  const [customerName, setCustomerName] = useState<string>(''); // Comment: Customer name for booking
+  const [customerPhone, setCustomerPhone] = useState<string>(''); // Comment: Customer phone number for booking
+  const [customerGreeting, setCustomerGreeting] = useState<string | null>(null); // Comment: Greeting text based on existing/new customer
+  const [existingCustomerId, setExistingCustomerId] = useState<number | null>(null); // Comment: Existing customer id if found
+  const [loadingCustomer, setLoadingCustomer] = useState<boolean>(false); // Comment: Loading state when resolving customer
 
   // Comment: Refs to enable smooth scrolling to each step section
   const dateSectionRef = useRef<HTMLElement | null>(null);
@@ -61,6 +66,7 @@ export default function BookingPage() {
   const designerSectionRef = useRef<HTMLElement | null>(null);
   const serviceSectionRef = useRef<HTMLElement | null>(null);
   const timeSectionRef = useRef<HTMLElement | null>(null);
+  const contactSectionRef = useRef<HTMLElement | null>(null); // Comment: Ref for customer contact step
 
   // Comment: Helper to smoothly scroll to a section
   const scrollToSection = (ref: { current: HTMLElement | null }) => {
@@ -186,7 +192,8 @@ export default function BookingPage() {
   // Map designers loaded from API into UI Designer objects
   const designers: Designer[] = designersForShop.map((d: any) => ({
     id: String(d.id),
-    name: d.name as string,
+    // Comment: Use english_name for display in booking flow
+    name: (d.english_name as string) || (d.name as string),
     title: (d.role as string) || '',
     image: '',
     available: true,
@@ -341,6 +348,12 @@ export default function BookingPage() {
     }
   }, [selectedService]);
 
+  useEffect(() => {
+    if (selectedTime) {
+      scrollToSection(contactSectionRef);
+    }
+  }, [selectedTime]);
+
   // Comment: When moving to deposit step, smoothly scroll to top
   useEffect(() => {
     if (step === 'deposit' || step === 'confirmed') {
@@ -351,6 +364,60 @@ export default function BookingPage() {
   // Comment: Move to deposit UI step (no DB write yet)
   const goToDeposit = () => {
     setStep('deposit');
+  };
+
+  // Comment: Resolve customer (existing or new) before moving to deposit step
+  const resolveCustomerAndGoToDeposit = async () => {
+    if (
+      !selectedDate ||
+      !selectedTime ||
+      !selectedService ||
+      !selectedDesigner ||
+      !selectedShop ||
+      !customerName.trim() ||
+      !customerPhone.trim()
+    ) {
+      return;
+    }
+
+    try {
+      setLoadingCustomer(true);
+      setCustomerGreeting(null);
+
+      // Comment: First, try to look up existing customer by phone (read-only)
+      const lookupRes = await fetch('/api/customers/lookup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: customerPhone,
+        }),
+      });
+
+      if (lookupRes.ok) {
+        const lookupJson = await lookupRes.json();
+        if (lookupJson.exists && lookupJson.customer?.id) {
+          // Comment: Existing customer found – remember id and show welcome-back greeting
+          setExistingCustomerId(lookupJson.customer.id as number);
+          const displayName = lookupJson.customer.name || customerName;
+          setCustomerGreeting(`Welcome back ${displayName}`);
+          setStep('deposit');
+          return;
+        }
+      }
+
+      // Comment: No existing customer – show welcome for new customer only (DB insert will happen on Pay Deposit)
+      setCustomerGreeting(`Welcome ${customerName}`);
+      setStep('deposit');
+    } catch (error) {
+      console.error('Error resolving customer before deposit step:', error);
+      // Comment: Fallback – still allow progressing without greeting
+      setCustomerGreeting(null);
+      setStep('deposit');
+    } finally {
+      setLoadingCustomer(false);
+    }
   };
 
   // Comment: Create booking in DB when deposit is paid (simulated)
@@ -382,6 +449,9 @@ export default function BookingPage() {
           totalAmount: selectedService?.price ?? null,
           depositAmount,
           fullDate: selectedDate, // Comment: Pass full date in YYYY-MM-DD format
+          customerName, // Comment: Optional customer name field
+          customerPhone, // Comment: Optional customer phone field
+          existingCustomerId, // Comment: Optional existing customer ID if already resolved
         }),
       });
       // TODO: Optionally show a success toast or redirect
@@ -402,6 +472,19 @@ export default function BookingPage() {
     }
   };
 
+  // Comment: Reset all selections to start a new booking
+  const resetBookingFlow = () => {
+    setStep('service');
+    setSelectedDate(getSydneyToday());
+    setSelectedShop(null);
+    setSelectedDesigner(null);
+    setSelectedService(null);
+    setSelectedTime('2:00 PM');
+    setCustomerName('');
+    setCustomerPhone('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const totalPrice = selectedService ? selectedService.price : 0;
   const depositAmount = totalPrice * 0.2; // 20% deposit
 
@@ -420,32 +503,22 @@ export default function BookingPage() {
             <section className="lg:col-span-8 space-y-8">
               <div>
                 <h1 className="text-3xl md:text-4xl font-light tracking-tight text-slate-900 mb-2 uppercase">Secure Your Booking</h1>
-                <p className="text-gray-500">Pay your deposit to confirm your appointment.</p>
+                <p className="text-gray-500">Pay your deposit by card to confirm your appointment.</p>
+                {customerGreeting && (
+                  <div className="mt-4 inline-flex items-center gap-3 border border-black px-4 py-2 bg-[#F4F4F4]">
+                    <span className="material-symbols-outlined text-base">person</span>
+                    <span className="text-sm font-light tracking-widest uppercase">{customerGreeting}</span>
+                  </div>
+                )}
               </div>
-                <div className="bg-[#F4F4F4]  border border-black p-8">
-                <h3 className="text-lg font-light text-slate-900 mb-6 uppercase">Payment Method</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                  {['Card', 'Cash', 'Transfer'].map((method) => (
-                    <button
-                      key={method}
-                      className="p-4 border border-black  hover:bg-black hover:text-white transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-2xl text-gray-400">
-                          {method === 'Card' ? 'credit_card' : method === 'Cash' ? 'payments' : 'account_balance'}
-                        </span>
-                        <span className="font-medium text-slate-900">{method}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+              <div className="bg-[#F4F4F4] border border-black p-8">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-600" htmlFor="card-number">
                       Card Number
                     </label>
                     <input
-                      className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                      className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                       id="card-number"
                       placeholder="1234 5678 9012 3456"
                       type="text"
@@ -457,7 +530,7 @@ export default function BookingPage() {
                         Expiry Date
                       </label>
                       <input
-                        className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                        className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                         id="expiry"
                         placeholder="MM/YY"
                         type="text"
@@ -468,7 +541,7 @@ export default function BookingPage() {
                         CVV
                       </label>
                       <input
-                        className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                        className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                         id="cvv"
                         placeholder="123"
                         type="text"
@@ -480,7 +553,7 @@ export default function BookingPage() {
                       Cardholder Name
                     </label>
                     <input
-                      className="w-full bg-white border border-black  px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                      className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                       id="card-name"
                       placeholder="John Doe"
                       type="text"
@@ -617,12 +690,13 @@ export default function BookingPage() {
               </div>
             </div>
             <div className="flex justify-center gap-4 pt-4">
-              <Link
-                href="/booking"
-                className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
+              <button
+                type="button"
+                onClick={resetBookingFlow}
+                className="px-6 py-3 text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
               >
                 Make another booking
-              </Link>
+              </button>
               <Link
                 href="/"
                 className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
@@ -999,26 +1073,69 @@ export default function BookingPage() {
                       })}
                     </div>
                   </div>
-
-                  <div className="pt-24 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
-                        goToDeposit();
-                      }}
-                      className="bg-black hover:bg-gray-800 text-white font-light uppercase tracking-widest px-8 py-3  flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                      disabled={
-                        !selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop
-                      }
-                    >
-                      <span>Continue to Payment</span>
-                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                    </button>
-                  </div>
                 </div>
               </section>
             )}
+
+        {/* 06. Customer Details (only after time is chosen) */}
+        {selectedDate && selectedShop && selectedDesigner && selectedService && selectedTime && (
+          <section ref={contactSectionRef} className="space-y-6">
+            <div className="flex items-center justify-between gap-6 mb-2 border-b border-black pb-4">
+              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+                <span className="bg-black text-white text-sm font-bold px-2 py-1">06</span>
+                Your Details
+              </h1>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label htmlFor="customer-name" className="text-sm font-medium text-gray-600">
+                  Full Name
+                </label>
+                <input
+                  id="customer-name"
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="customer-phone" className="text-sm font-medium text-gray-600">
+                  Mobile Number
+                </label>
+                <input
+                  id="customer-phone"
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="e.g. 0400 000 000"
+                  className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
+                />
+              </div>
+            </div>
+            <div className="pt-10 flex justify-end">
+              <button
+                type="button"
+                onClick={resolveCustomerAndGoToDeposit}
+                className="bg-black hover:bg-gray-800 text-white font-light uppercase tracking-widest px-8 py-3 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={
+                  !selectedDate ||
+                  !selectedTime ||
+                  !selectedService ||
+                  !selectedDesigner ||
+                  !selectedShop ||
+                  !customerName.trim() ||
+                  !customerPhone.trim() ||
+                  loadingCustomer
+                }
+              >
+                <span>{loadingCustomer ? 'Checking customer...' : 'Continue to Payment'}</span>
+                {!loadingCustomer && <span className="material-symbols-outlined text-sm">arrow_forward</span>}
+              </button>
+            </div>
+          </section>
+        )}
         </div>
 
       </main>

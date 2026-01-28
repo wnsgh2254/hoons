@@ -132,26 +132,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Comment: Get the next customer number (auto-increment)
-    const { data: lastCustomer, error: lastError } = await supabase
-      .from('customers')
-      .select('customer_number')
-      .order('customer_number', { ascending: false })
-      .limit(1)
-      .single();
-
-    let nextCustomerNumber = 1;
-    if (!lastError && lastCustomer?.customer_number) {
-      nextCustomerNumber = Number(lastCustomer.customer_number) + 1;
-    }
-
-    // Comment: Insert new customer
+    // Comment: Insert new customer (customer_number is no longer used here)
     const { data, error } = await supabase
       .from('customers')
       .insert({
         name: name.trim(),
         phone: phone.trim().replace(/\D/g, ''), // Comment: Remove non-digits
-        customer_number: nextCustomerNumber,
         created_at: new Date().toISOString(),
         assigned_designer_id: assigned_designer_id ? Number(assigned_designer_id) : null,
       })

@@ -66,7 +66,7 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
       service_id: serviceId,
       booking_date: bookingDate,
       booking_time: bookingTime,
-      status: 'confirmed', // Comment: Booking is created only after deposit is paid
+      status: 'pending', // Comment: Public booking starts as pending after deposit step
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
     })
