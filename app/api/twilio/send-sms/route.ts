@@ -38,8 +38,7 @@ export async function POST(request: NextRequest) {
         customerPhone,
         booking.booking_date,
         booking.booking_time,
-        (booking.service as any)?.name,
-        (booking.designer as any)?.name
+        (booking.service as any)?.name
       );
 
       return NextResponse.json(result, { status: result.success ? 200 : 500 });

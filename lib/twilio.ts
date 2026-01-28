@@ -3,32 +3,48 @@ import twilio from 'twilio';
 // Comment: Get Twilio credentials from environment variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromNumber = process.env.TWILIO_PHONE_NUMBER; // Comment: Your Twilio phone number
+const fromNumberEnv = process.env.TWILIO_PHONE_NUMBER; // Comment: Your Twilio phone number
 
 // Comment: Initialize Twilio client
 const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
-// Comment: Send SMS message using Twilio
-// Comment: TEST MODE - Using fixed phone numbers for testing
-export async function sendSMS(to: string, body: string): Promise<{ success: boolean; messageSid?: string; error?: string }> {
+// Comment: Normalize Australian mobile numbers to E.164 (+61)
+function toE164Au(phone: string): string {
+  const digits = phone.replace(/[^0-9+]/g, '');
+  if (digits.startsWith('+')) return digits;
+  if (digits.startsWith('61') && digits.length === 11) {
+    return `+${digits}`;
+  }
+  if (digits.startsWith('0') && digits.length === 10) {
+    return `+61${digits.slice(1)}`;
+  }
+  return phone;
+}
+
+// Comment: Send SMS message using Twilio (used for manual/admin sends)
+export async function sendSMS(
+  to: string,
+  body: string,
+): Promise<{ success: boolean; messageSid?: string; error?: string }> {
   if (!client) {
-    console.error('Twilio client not initialized. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.');
+    console.error(
+      'Twilio client not initialized. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.',
+    );
     return { success: false, error: 'Twilio client not initialized' };
   }
 
-  // Comment: TEST MODE - Fixed phone numbers
-  const testFromNumber = '+17624383149';
-  const testToNumber = '+18777804236';
+  const fromNumber = fromNumberEnv || '+61485038002';
+  const toNumber = toE164Au(to);
 
   try {
     const message = await client.messages.create({
       body,
-      from: testFromNumber,
-      to: testToNumber, // Comment: Always send to test number
+      from: fromNumber,
+      to: toNumber,
     });
 
     console.log(`SMS sent successfully. Message SID: ${message.sid}`);
-    console.log(`Test mode: From ${testFromNumber} to ${testToNumber}`);
+    console.log(`From ${fromNumber} to ${toNumber}`);
     return { success: true, messageSid: message.sid };
   } catch (error: any) {
     console.error('Error sending SMS:', error);
@@ -36,51 +52,65 @@ export async function sendSMS(to: string, body: string): Promise<{ success: bool
   }
 }
 
-// Comment: Send booking reminder SMS (24 hours before booking)
+// Comment: Send booking reminder SMS (legacy helper for manual/admin use)
+// Comment: Build human-readable date/time like "18/12 (Thursday) at 6:15pm"
+function formatDisplayDateTime(bookingDate: string, bookingTime: string | null): string {
+  try {
+    const [year, month, day] = bookingDate.split('-').map((v) => Number(v));
+    const [hStr, mStr] = (bookingTime ?? '00:00:00').split(':');
+    const hour = Number(hStr);
+    const minute = Number(mStr);
+
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const weekday = weekdays[date.getUTCDay()];
+
+    const dd = String(day).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+
+    let displayHour = date.getUTCHours();
+    const displayMinute = String(date.getUTCMinutes()).padStart(2, '0');
+    const ampm = displayHour >= 12 ? 'pm' : 'am';
+    displayHour = displayHour % 12;
+    if (displayHour === 0) displayHour = 12;
+
+    return `${dd}/${mm} (${weekday}) at ${displayHour}:${displayMinute}${ampm}`;
+  } catch {
+    // Comment: Fallback to raw values if parsing fails
+    return `${bookingDate} ${bookingTime ?? ''}`.trim();
+  }
+}
+
+// Comment: Send booking reminder SMS matching Edge Function template
 export async function sendBookingReminder(
   phoneNumber: string,
   bookingDate: string,
   bookingTime: string,
   serviceName?: string,
-  designerName?: string
 ): Promise<{ success: boolean; messageSid?: string; error?: string }> {
-  // Comment: Format booking date and time for Korean format
-  // bookingTime is in format "HH:MM:SS" or "HH:MM"
-  const [hours, minutes] = bookingTime.split(':').map(Number);
-  const date = new Date(bookingDate);
-  date.setHours(hours, minutes || 0, 0, 0);
-  
-  const formattedDate = date.toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  const formattedTime = `${hours.toString().padStart(2, '0')}:${(minutes || 0).toString().padStart(2, '0')}`;
+  const displayText = formatDisplayDateTime(bookingDate, bookingTime);
+  const serviceLabel = serviceName || 'cut';
 
-  let message = `[HAEYOOM] 예약 확인 알림\n\n`;
-  message += `예약 날짜: ${formattedDate} ${formattedTime}\n`;
-  if (serviceName) {
-    message += `서비스: ${serviceName}\n`;
-  }
-  if (designerName) {
-    message += `디자이너: ${designerName}\n`;
-  }
-  message += `\n예약 확인을 위해 미리 연락드립니다. 문의사항이 있으시면 연락주세요.`;
+  const message = `📌 Reminder:
+Your appointment is at **HAEYOOM HAYMARKET STORE (혜윰 헤이마켓)**
+
+Hello, this is Haeyoom Salon.
+This is a confirmation message for your upcoming appointment:
+
+📅 On ${displayText}
+💇‍♀️ Service: ${serviceLabel}
+📍 **HAEYOOM HAYMARKET STORE (혜윰 헤이마켓)**  
+770 George st, Sydney NSW 2000
+
+Please confirm your reservation by replying with ❗️YES❗️ or let us know if you have any questions.
+
+⚠️ Please note: If you are more than 10 minutes late, your appointment may be automatically CANCELED.
+
+Thank you and we look forward to seeing you soon ❤️  
+Best Regards,  
+Team Haeyoom`;
 
   return sendSMS(phoneNumber, message);
 }
 
-// Comment: Calculate when to send reminder (24 hours before booking)
-export function calculateReminderTime(bookingDate: string, bookingTime: string): Date {
-  const bookingDateTime = new Date(`${bookingDate}T${bookingTime}`);
-  const reminderTime = new Date(bookingDateTime);
-  reminderTime.setHours(reminderTime.getHours() - 24);
-  return reminderTime;
-}
-
-// Comment: Check if reminder should be sent now (for testing or immediate sending)
-export function shouldSendReminderNow(bookingDate: string, bookingTime: string): boolean {
-  const reminderTime = calculateReminderTime(bookingDate, bookingTime);
-  const now = new Date();
-  return now >= reminderTime;
-}

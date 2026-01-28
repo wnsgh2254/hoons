@@ -11,6 +11,8 @@ export interface PublicBookingPayload {
   depositAmount: number | null;
   // Comment: Optional full date override (YYYY-MM-DD). When provided, 'day' is ignored.
   fullDate?: string;
+   // Comment: Optional customer ID to link booking to a customer
+  customerId?: number | null;
 }
 
 // Comment: Convert display time like "2:00 PM" to 24h "14:00:00" string for DB
@@ -35,7 +37,17 @@ function buildBookingDateFromDay(day: number): string {
 
 // Comment: Create a simple booking record in Supabase based on public booking payload
 export async function createPublicBooking(payload: PublicBookingPayload) {
-  const { shopId, designerId, serviceId, day, timeLabel, totalAmount, depositAmount, fullDate } =
+  const {
+    shopId,
+    designerId,
+    serviceId,
+    day,
+    timeLabel,
+    totalAmount,
+    depositAmount,
+    fullDate,
+    customerId,
+  } =
     payload;
 
   const bookingDate = fullDate || buildBookingDateFromDay(day);
@@ -45,48 +57,16 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
     throw new Error(`Invalid time format: ${timeLabel}`);
   }
 
-  // Comment: Check if booking end time exceeds 21:00 (9 PM)
-  // Maximum end time is 21:00, so if start time is 20:00 or later, duration must be 1 hour or less
-  const [startHour, startMin] = bookingTime.split(':').map(Number);
-  const startMinutes = startHour * 60 + startMin;
-  
-  // Comment: Get service duration if serviceId is provided
-  if (serviceId) {
-    const { data: service, error: serviceError } = await supabase
-      .from('services')
-      .select('duration_minutes')
-      .eq('id', serviceId)
-      .single();
-
-    if (!serviceError && service) {
-      const durationMinutes = service.duration_minutes || 60;
-      const endMinutes = startMinutes + durationMinutes;
-      const endHour = Math.floor(endMinutes / 60);
-      
-      // Comment: If end time exceeds 21:00, throw error
-      if (endHour > 21 || (endHour === 21 && (endMinutes % 60) > 0)) {
-        throw new Error(`예약 종료 시간이 21시를 넘을 수 없습니다. 시작 시간 ${startHour}:${String(startMin).padStart(2, '0')}에 ${durationMinutes}분 예약은 불가능합니다.`);
-      }
-    }
-  } else {
-    // Comment: If no service, assume 1 hour duration and check
-    const endMinutes = startMinutes + 60;
-    const endHour = Math.floor(endMinutes / 60);
-    if (endHour > 21 || (endHour === 21 && (endMinutes % 60) > 0)) {
-      throw new Error(`예약 종료 시간이 21시를 넘을 수 없습니다. 시작 시간 ${startHour}:${String(startMin).padStart(2, '0')}에 예약은 불가능합니다.`);
-    }
-  }
-
   const { data, error } = await supabase
     .from('bookings')
     .insert({
       shop_id: shopId,
       designer_id: designerId,
-      customer_id: null,
+      customer_id: customerId ?? null,
       service_id: serviceId,
       booking_date: bookingDate,
       booking_time: bookingTime,
-      status: 'pending', // Comment: Start as pending, will be confirmed via SMS
+      status: 'confirmed', // Comment: Booking is created only after deposit is paid
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
     })
@@ -237,13 +217,17 @@ export async function updateDesigner(
 
   const updateData: any = {
     name: updates.name.trim(),
-    english_name: updates.english_name !== undefined ? updates.english_name?.trim() || null : undefined,
+    english_name:
+      updates.english_name !== undefined
+        ? updates.english_name?.trim() || null
+        : undefined,
     role: updates.role.trim(),
     shop_id: updates.shop_id || null,
     wage_type: updates.wage_type,
     percent_rate: updates.wage_type === 'percent' ? updates.percent_rate : null,
     hourly_rate: updates.wage_type === 'hourly' ? updates.hourly_rate : null,
-    instagramLink: updates.instagramLink !== undefined ? updates.instagramLink || null : undefined,
+    instagramLink:
+      updates.instagramLink !== undefined ? updates.instagramLink || null : undefined,
     is_active: updates.is_active !== undefined ? updates.is_active : true,
   };
 

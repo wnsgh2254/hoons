@@ -55,6 +55,12 @@ export default function BookingPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
 
+  // Comment: Customer information state for step 6
+  const [customerName, setCustomerName] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [existingCustomerId, setExistingCustomerId] = useState<number | null>(null);
+  const [isExistingCustomer, setIsExistingCustomer] = useState<boolean | null>(null);
+
   // Comment: Refs to enable smooth scrolling to each step section
   const dateSectionRef = useRef<HTMLElement | null>(null);
   const venueSectionRef = useRef<HTMLElement | null>(null);
@@ -197,77 +203,34 @@ export default function BookingPage() {
   }));
 
   // Comment: Helper function to determine service category based on name
-  // Remove (card) or (cash) from name for category detection
   const getServiceCategory = (name: string): string => {
-    const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
-    const lowerName = cleanName.toLowerCase();
-    
-    // Check for category suffix first (e.g., "- Perm", "- Magic", "- Hot Perm", "- Color", "- Clinic", "- Package")
-    if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
-    if (lowerName.includes('- magic')) return 'Magic';
-    if (lowerName.includes('- hot perm')) return 'Hot Perm';
-    if (lowerName.includes('- color')) return 'Color';
-    if (lowerName.includes('- clinic')) return 'Clinic';
-    if (lowerName.includes('- package')) return 'Package';
-    
-    // Check for specific patterns
-    // Package category - includes packages and design additions (without category suffix)
-    if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
-    if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek') || lowerName.includes('clinic')) return 'Clinic';
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('package')) return 'Package';
+    if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek')) return 'Clinic';
     if (lowerName.includes('color') || lowerName.includes('bleach') || lowerName.includes('toning')) return 'Color';
     if (lowerName.includes('special perm') || lowerName.includes('setting perm') || lowerName.includes('design setting perm')) return 'Hot Perm';
-    if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
-    if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
+    if (lowerName.includes('magic')) return 'Magic';
+    if (lowerName.includes('perm')) return 'Perm';
     if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
-    
-    // Cut category - includes all cut-related services and additions (without category suffix)
-    if (lowerName.includes('cut') || 
-        (lowerName.includes('length addition') && !lowerName.includes('-')) || 
-        lowerName.includes('hair extension') || 
-        (lowerName.includes('director level') && !lowerName.includes('-')) || 
-        (lowerName.includes('manager level') && !lowerName.includes('-')) ||
-        lowerName.includes('kids cut') ||
-        lowerName.includes('bangs cut')) {
-      return 'Cut';
-    }
-    
+    if (lowerName.includes('cut')) return 'Cut';
     return 'Other';
   };
 
   // Map services loaded from API into UI Service objects
-  // Remove "(card)" or "(cash)" from name for display in booking page
-  // Only show card services to customers (filter out cash services)
-  // Hide services that are admin-only (additional fees like Length Addition)
-  const services: Service[] = servicesForShop
-    .filter((s: any) => {
-      const name = (s.name as string).toLowerCase();
-      // Only show card services, hide cash services from customers
-      const isCardService = name.includes('(card)') || (!name.includes('(cash)') && !name.includes('(card)'));
-      // Hide admin-only services (additional fees)
-      const visibleTo = s.visible_to || 'customer';
-      const isVisibleToCustomer = visibleTo === 'customer' || visibleTo === 'both';
-      return isCardService && isVisibleToCustomer;
-    })
-    .map((s: any) => {
-      const displayName = (s.name as string).replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
-      return {
-        id: String(s.id),
-        name: displayName,
-        price: Number(s.price),
-        priceLabel: 'Standard',
-        duration: `${s.duration_minutes} mins`,
-        description: '',
-        image: '',
-        selected: selectedService ? selectedService.id === String(s.id) : false,
-      };
-    });
+  const services: Service[] = servicesForShop.map((s: any) => ({
+    id: String(s.id),
+    name: s.name as string,
+    price: Number(s.price),
+    priceLabel: 'Standard',
+    duration: `${s.duration_minutes} mins`,
+    description: '',
+    image: '',
+    selected: selectedService ? selectedService.id === String(s.id) : false,
+  }));
 
-  // Group services by category (use DB category if available, otherwise fallback to name-based detection)
-  // Note: services from API may not have category field, so we need to check the original service data
+  // Group services by category
   const servicesByCategory = services.reduce((acc, service) => {
-    // Get original service data to check category
-    const originalService = servicesForShop.find((s: any) => String(s.id) === service.id);
-    const category = (originalService?.category as string) || getServiceCategory(service.name);
+    const category = getServiceCategory(service.name);
     if (!acc[category]) {
       acc[category] = [];
     }
@@ -285,6 +248,10 @@ export default function BookingPage() {
     setSelectedDesigner(null);
     setSelectedService(null);
     setSelectedTime(null);
+    setCustomerName('');
+    setCustomerPhone('');
+    setExistingCustomerId(null);
+    setIsExistingCustomer(null);
   };
 
   const handleShopSelect = (shopId: string) => {
@@ -293,6 +260,10 @@ export default function BookingPage() {
     setSelectedDesigner(null);
     setSelectedService(null);
     setSelectedTime(null);
+    setCustomerName('');
+    setCustomerPhone('');
+    setExistingCustomerId(null);
+    setIsExistingCustomer(null);
   };
 
   const handleDesignerSelect = (designer: Designer) => {
@@ -300,12 +271,20 @@ export default function BookingPage() {
     // Comment: When designer changes, clear downstream selections
     setSelectedService(null);
     setSelectedTime(null);
+    setCustomerName('');
+    setCustomerPhone('');
+    setExistingCustomerId(null);
+    setIsExistingCustomer(null);
   };
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
-    // Comment: When service changes, clear time selection
+    // Comment: When service changes, clear time and customer info
     setSelectedTime(null);
+    setCustomerName('');
+    setCustomerPhone('');
+    setExistingCustomerId(null);
+    setIsExistingCustomer(null);
     // Close modal after selection
     setIsServiceModalOpen(false);
     setSelectedCategory(null);
@@ -348,8 +327,45 @@ export default function BookingPage() {
     }
   }, [step]);
 
-  // Comment: Move to deposit UI step (no DB write yet)
-  const goToDeposit = () => {
+  // Comment: Resolve customer (existing vs new) right before moving to deposit step
+  const handleContinueToPayment = async () => {
+    if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
+    if (!customerName || !customerPhone) {
+      // Comment: Require customer name and phone before moving to payment step
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/customers/lookup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone: customerPhone.trim() }),
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.exists && json.customer) {
+        setExistingCustomerId(json.customer.id);
+        // Comment: Keep the name entered by the customer instead of overwriting with DB value
+        setIsExistingCustomer(true);
+      } else if (res.ok) {
+        // Comment: No existing customer, treat as new
+        setExistingCustomerId(null);
+        setIsExistingCustomer(false);
+      } else {
+        console.error('Error looking up customer:', json.error);
+        setExistingCustomerId(null);
+        setIsExistingCustomer(false);
+      }
+    } catch (error) {
+      console.error('Unexpected error looking up customer:', error);
+      setExistingCustomerId(null);
+      setIsExistingCustomer(false);
+    }
+
+    // Comment: Move to deposit step after lookup
     setStep('deposit');
   };
 
@@ -382,6 +398,9 @@ export default function BookingPage() {
           totalAmount: selectedService?.price ?? null,
           depositAmount,
           fullDate: selectedDate, // Comment: Pass full date in YYYY-MM-DD format
+          customerName,
+          customerPhone,
+          existingCustomerId,
         }),
       });
       // TODO: Optionally show a success toast or redirect
@@ -407,6 +426,13 @@ export default function BookingPage() {
 
   // Step 4: Deposit Payment
   if (step === 'deposit') {
+    const welcomeText =
+      isExistingCustomer === true
+        ? `Welcome back ${customerName}`
+        : isExistingCustomer === false
+        ? `Welcome ${customerName}`
+        : '';
+
     return (
       <div className="bg-white text-slate-900 font-display min-h-screen flex flex-col overflow-x-hidden antialiased selection:bg-gray-200 selection:text-black pt-20">
         <main className="flex-grow w-full max-w-[1280px] mx-auto px-4 md:px-6 py-8">
@@ -470,7 +496,12 @@ export default function BookingPage() {
             </aside>
             <section className="lg:col-span-8 space-y-8">
               <div>
-                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900 mb-2">Secure Your Booking</h1>
+                {welcomeText && (
+                  <p className="text-sm font-semibold text-gray-800 mb-2">{welcomeText}</p>
+                )}
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900 mb-2">
+                  Secure Your Booking
+                </h1>
                 <p className="text-gray-500">Pay your deposit to confirm your appointment.</p>
               </div>
               <div className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
@@ -899,7 +930,7 @@ export default function BookingPage() {
           </section>
         )}
 
-        {/* 05. Time Selection + Continue (only after service is chosen) */}
+        {/* 05. Time Selection + Customer Details + Continue (only after service is chosen) */}
         {selectedDate && selectedShop && selectedDesigner && selectedService && (
           <section ref={timeSectionRef} className="space-y-6">
             <div className="flex items-center justify-between gap-6 mb-2 border-b border-gray-200 pb-4">
@@ -991,16 +1022,57 @@ export default function BookingPage() {
                     </div>
                   </div>
 
-                  <div className="pt-4 flex justify-end">
+                  {/* 06. Customer Details */}
+                  <div className="space-y-4 pt-6 border-t border-gray-200 mt-4">
+                    <div className="flex items-center justify-between gap-6 mb-2">
+                      <h3 className="text-2xl font-bold text-black flex items-center gap-2">
+                        <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">06</span>
+                        Customer Details
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700" htmlFor="customer-name">
+                          Name
+                        </label>
+                        <input
+                          id="customer-name"
+                          type="text"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                          placeholder="Your name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700" htmlFor="customer-phone">
+                          Mobile number
+                        </label>
+                        <input
+                          id="customer-phone"
+                          type="tel"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                          placeholder="e.g. 0422 966 123"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 flex justify-end">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
-                        goToDeposit();
-                      }}
+                      onClick={handleContinueToPayment}
                       className="bg-black hover:bg-gray-800 text-white font-semibold px-8 py-3 rounded-xl shadow-md flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                       disabled={
-                        !selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop
+                        !selectedDate ||
+                        !selectedTime ||
+                        !selectedService ||
+                        !selectedDesigner ||
+                        !selectedShop ||
+                        !customerName ||
+                        !customerPhone
                       }
                     >
                       <span>Continue to Payment</span>

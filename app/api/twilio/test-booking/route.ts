@@ -37,8 +37,7 @@ export async function POST(request: NextRequest) {
       phoneNumber,
       bookingDate,
       bookingTime24h,
-      serviceName,
-      designerName
+      serviceName
     );
 
     return NextResponse.json(result, { status: result.success ? 200 : 500 });
