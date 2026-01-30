@@ -61,6 +61,7 @@ export default function AdminTopNav() {
   const router = useRouter();
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Comment: Fetch user session to determine role
   useEffect(() => {
@@ -98,22 +99,37 @@ export default function AdminTopNav() {
     return hasAccess(userRole, basePath);
   });
 
+  // Comment: Keep admin top nav above other overlays so inventory menu is always visible on hover
   return (
-    <header className="h-16 flex items-center px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-10 sticky top-0">
+    <header className="h-16 flex items-center px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-[12000] sticky top-0">
       <div className="container mx-auto flex items-center justify-between w-full">
         {/* Logo */}
-        <Link href="/" className="flex items-center hover:opacity-70 transition-opacity">
+        <Link href="/admin/appointments" className="flex items-center hover:opacity-70 transition-opacity">
           <Image
             src="/images/image3.png"
             alt="HAEYOOM Logo"
-            width={130}
-            height={28}
-            className="h-7 w-auto object-contain"
+            width={105}
+            height={22}
+            className="h-5.5 w-auto object-contain"
           />
         </Link>
 
-        {/* Navigation Items - Centered */}
-        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+        {/* Hamburger - tablet/mobile only */}
+        <div className="flex md:hidden items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="flex items-center justify-center w-12 h-12 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
+            aria-label="Open menu"
+          >
+            <span className="material-symbols-outlined text-2xl">
+              {mobileMenuOpen ? 'close' : 'menu'}
+            </span>
+          </button>
+        </div>
+
+        {/* Navigation Items - Centered, desktop only */}
+        <nav className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-2">
           {filteredNavItems.map((item) => {
             const active = isActive(item.href.split('?')[0]);
 
@@ -183,8 +199,8 @@ export default function AdminTopNav() {
           })}
         </nav>
 
-        {/* Right side - Logout button */}
-        <div className="w-[130px] flex justify-end">
+        {/* Right side - Logout button, desktop only when nav visible */}
+        <div className="hidden md:flex w-[130px] justify-end">
           {!loading && userRole && (
             <button
               onClick={handleLogout}
@@ -197,6 +213,85 @@ export default function AdminTopNav() {
           )}
         </div>
       </div>
+
+      {/* Mobile/tablet menu overlay */}
+      {mobileMenuOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-[11998] md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="fixed top-16 left-0 right-0 bottom-0 z-[11999] md:hidden overflow-y-auto bg-white border-t border-gray-200">
+            <nav className="p-4 flex flex-col gap-1">
+              {filteredNavItems.map((item) => {
+                const active = isActive(item.href.split('?')[0]);
+                if (item.submenu) {
+                  return (
+                    <div key={item.href} className="flex flex-col gap-1">
+                      <Link
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                          active ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-xl">{item.icon}</span>
+                        <span className="font-medium">{item.label}</span>
+                      </Link>
+                      {item.submenu.map((section) => (
+                        <div key={section.title} className="pl-4 flex flex-col gap-1">
+                          <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            {section.title}
+                          </p>
+                          {section.items.map((subItem) => (
+                            <Link
+                              key={subItem.href}
+                              href={subItem.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-lg text-gray-500">
+                                {subItem.icon}
+                              </span>
+                              <span className="text-sm">{subItem.label}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                      active ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-xl">{item.icon}</span>
+                    <span className="font-medium">{item.label}</span>
+                  </Link>
+                );
+              })}
+              {!loading && userRole && (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-100 transition-colors w-full text-left"
+                >
+                  <span className="material-symbols-outlined text-xl">logout</span>
+                  <span className="font-medium">Logout</span>
+                </button>
+              )}
+            </nav>
+          </div>
+        </>
+      )}
     </header>
   );
 }

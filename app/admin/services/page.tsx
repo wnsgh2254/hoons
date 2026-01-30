@@ -190,12 +190,11 @@ export default function ServiceMenuSettingPage() {
       )}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
-          <div className="max-w-7xl mx-auto flex flex-col gap-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-black mb-2">Service Menu Settings</h1>
-                <p className="text-gray-600">Manage your service menu and pricing</p>
+          <div className="max-w-7xl mx-auto flex flex-col gap-8">
+            {/* Page header: unified admin style */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-3xl font-bold tracking-tight text-black">서비스 메뉴 설정</h2>
               </div>
             </div>
 
@@ -234,8 +233,8 @@ export default function ServiceMenuSettingPage() {
             {/* Service Management Modal */}
             {isServiceModalOpen && selectedCategory && (
               <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
-                <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                  <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4 flex items-center justify-between">
                     <h3 className="text-2xl font-bold text-black">{selectedCategory}</h3>
                     <div className="flex items-center gap-3">
                       <button
@@ -246,7 +245,7 @@ export default function ServiceMenuSettingPage() {
                         className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2 text-sm"
                       >
                         <span className="material-symbols-outlined text-sm">add</span>
-                        Add Service
+                        시술 추가
                       </button>
                       <button
                         type="button"
@@ -260,34 +259,33 @@ export default function ServiceMenuSettingPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="p-6">
+                  <div className="flex-1 min-h-0 flex flex-col p-6 overflow-hidden">
                     {/* Search */}
-                    <div className="mb-4">
+                    <div className="flex-shrink-0 mb-4">
                       <input
                         type="text"
-                        placeholder="Search services..."
+                        placeholder="시술 검색..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
                       />
                     </div>
-                    {/* Services Table */}
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
+                    {/* Services Table - scrollable area only */}
+                    <div className="flex-1 min-h-0 rounded-xl border border-gray-200 shadow-sm overflow-auto">
+                      <table className="w-full">
                           <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
                               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Service Name
+                                시술 이름
                               </th>
                               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Price ($)
+                                가격 ($)
                               </th>
                               <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Duration (mins)
+                                시간 (분)
                               </th>
                               <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Actions
+                                액션
                               </th>
                             </tr>
                           </thead>
@@ -317,12 +315,12 @@ export default function ServiceMenuSettingPage() {
                                       <div className="text-sm font-medium text-black">{displayName}</div>
                                       {isCard && (
                                         <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                                          Card
+                                          카드
                                         </span>
                                       )}
                                       {isCash && (
                                         <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
-                                          Cash
+                                          현금
                                         </span>
                                       )}
                                     </div>
@@ -358,14 +356,14 @@ export default function ServiceMenuSettingPage() {
                                           setIsServiceModalOpen(false);
                                         }}
                                         className="text-gray-500 hover:text-black transition-colors"
-                                        title="Edit"
+                                        title="수정"
                                       >
                                         <span className="material-symbols-outlined text-lg">edit</span>
                                       </button>
                                       <button
                                         onClick={() => handleDeleteService(service.id)}
                                         className="text-gray-500 hover:text-red-600 transition-colors"
-                                        title="Delete"
+                                        title="삭제"
                                       >
                                         <span className="material-symbols-outlined text-lg">delete</span>
                                       </button>
@@ -376,7 +374,6 @@ export default function ServiceMenuSettingPage() {
                               })}
                           </tbody>
                         </table>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -429,6 +426,7 @@ function AddServiceModal({
   const [price, setPrice] = useState<string>('');
   const [duration, setDuration] = useState<string>('');
   const [serviceType, setServiceType] = useState<'card' | 'cash'>('card');
+  // Comment: Visibility is derived from service type (card -> both, cash -> admin)
   const [visibleTo, setVisibleTo] = useState<'admin' | 'both'>('both');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -478,7 +476,7 @@ function AddServiceModal({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-black">Add New Service</h2>
+          <h2 className="text-2xl font-bold text-black">새 시술 추가</h2>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
@@ -488,11 +486,11 @@ function AddServiceModal({
           )}
           {category && (
             <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
-              Adding service to <strong>{category}</strong> category
+              <strong>{category}</strong> 카테고리에 시술을 추가합니다.
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Service Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">시술 이름</label>
             <input
               type="text"
               value={name}
@@ -501,10 +499,10 @@ function AddServiceModal({
               placeholder="e.g., Men's Cut"
               required
             />
-            <p className="text-xs text-gray-500 mt-1">(card) or (cash) will be added automatically</p>
+            
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">시술 유형</label>
             <div className="flex gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -512,10 +510,13 @@ function AddServiceModal({
                   name="serviceType"
                   value="card"
                   checked={serviceType === 'card'}
-                  onChange={(e) => setServiceType('card')}
+                  onChange={() => {
+                    setServiceType('card');
+                    setVisibleTo('both'); // Comment: card services are visible to both customer & admin
+                  }}
                   className="w-4 h-4 text-black border-gray-300 focus:ring-black"
                 />
-                <span className="text-sm">Card</span>
+                <span className="text-sm">카드</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -523,42 +524,18 @@ function AddServiceModal({
                   name="serviceType"
                   value="cash"
                   checked={serviceType === 'cash'}
-                  onChange={(e) => setServiceType('cash')}
+                  onChange={() => {
+                    setServiceType('cash');
+                    setVisibleTo('admin'); // Comment: cash-only services are visible to admin only
+                  }}
                   className="w-4 h-4 text-black border-gray-300 focus:ring-black"
                 />
-                <span className="text-sm">Cash</span>
+                <span className="text-sm">현금</span>
               </label>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Visibility</label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="visibleTo"
-                  value="both"
-                  checked={visibleTo === 'both'}
-                  onChange={(e) => setVisibleTo('both')}
-                  className="w-4 h-4 text-black border-gray-300 focus:ring-black"
-                />
-                <span className="text-sm">Both (visible to customers on booking page and admins)</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="visibleTo"
-                  value="admin"
-                  checked={visibleTo === 'admin'}
-                  onChange={(e) => setVisibleTo('admin')}
-                  className="w-4 h-4 text-black border-gray-300 focus:ring-black"
-                />
-                <span className="text-sm">Admin (only visible to admins, e.g., additional fees)</span>
-              </label>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Price ($)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">가격 ($)</label>
             <input
               type="number"
               value={price}
@@ -571,7 +548,7 @@ function AddServiceModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">시간 (분)</label>
             <input
               type="number"
               value={duration}
@@ -588,14 +565,14 @@ function AddServiceModal({
               onClick={onClose}
               className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              취소
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Create Service'}
+              {loading ? '생성 중...' : '시술 생성'}
             </button>
           </div>
         </form>
@@ -666,7 +643,7 @@ function EditServiceModal({
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Service Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">시술 이름</label>
             <input
               type="text"
               value={name}
@@ -676,7 +653,7 @@ function EditServiceModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Price ($)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">가격 ($)</label>
             <input
               type="number"
               value={price}
@@ -688,7 +665,7 @@ function EditServiceModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">시간 (분)</label>
             <input
               type="number"
               value={duration}

@@ -211,29 +211,31 @@ export default function WagesPage() {
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
       <AdminTopNav />
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-8">
-              <h1 className="text-3xl font-bold text-black">급여 명세서</h1>
+        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
+          <div className="max-w-7xl mx-auto flex flex-col gap-8">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-3xl font-bold tracking-tight text-black">급여 명세서</h2>
+              </div>
               <div className="flex gap-2">
                 <button 
                   onClick={() => setViewingIncentives(true)}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors"
                 >
                   직원별 인센티브
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                <button className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors">
                   급여 명세서 작성
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                <button className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors">
                   급여 설정
                 </button>
               </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 mb-6">
-              <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2">
                     <input
@@ -313,7 +315,7 @@ export default function WagesPage() {
 
                 <button
                   onClick={handleSearch}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined text-sm">search</span>
                   검색
@@ -437,7 +439,7 @@ function WagesTable({ wagesData, dateMode, onViewPayslip, onViewDetail }: {
                           designer: wage,
                           period: { startDate: periodStart, endDate: periodEnd },
                         })}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                        className="px-3 py-1 bg-black text-white text-xs font-medium rounded hover:bg-gray-900 transition-colors"
                       >
                         보기
                       </button>
@@ -450,7 +452,7 @@ function WagesTable({ wagesData, dateMode, onViewPayslip, onViewDetail }: {
                           startDate: periodStart,
                           endDate: periodEnd,
                         })}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                        className="px-3 py-1 bg-black text-white text-xs font-medium rounded hover:bg-gray-900 transition-colors"
                       >
                         보기
                       </button>
@@ -518,7 +520,7 @@ function WagesTable({ wagesData, dateMode, onViewPayslip, onViewDetail }: {
                           designer: wage,
                           period: { startDate: wagesData.startDate, endDate: wagesData.endDate },
                         })}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                        className="px-3 py-1 bg-black text-white text-xs font-medium rounded hover:bg-gray-900 transition-colors"
                       >
                         보기
                       </button>
@@ -531,7 +533,7 @@ function WagesTable({ wagesData, dateMode, onViewPayslip, onViewDetail }: {
                           startDate: wagesData.startDate,
                           endDate: wagesData.endDate,
                         })}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                        className="px-3 py-1 bg-black text-white text-xs font-medium rounded hover:bg-gray-900 transition-colors"
                       >
                         보기
                       </button>
@@ -790,7 +792,7 @@ function PayslipModal({ payslip, onClose, onViewDetail }: {
                   endDate: period.endDate,
                 });
               }}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors"
             >
               상세 내역 보기
             </button>
@@ -869,7 +871,7 @@ function DetailHistoryModal({ detail, onClose }: {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+            <button className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors">
               엑셀 다운로드
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
@@ -1165,7 +1167,7 @@ function IncentivesModal({ onClose }: { onClose: () => void }) {
 
         {/* Filters */}
         <div className="bg-gray-50 p-4 border-b border-gray-200">
-          <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
             <div className="flex gap-4">
               <label className="flex items-center gap-2">
                 <input
@@ -1234,17 +1236,17 @@ function IncentivesModal({ onClose }: { onClose: () => void }) {
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               >
                 <option value="">전체</option>
-                {designers.map((designer) => (
-                  <option key={designer.id} value={designer.id}>
-                    {designer.name}
-                  </option>
-                ))}
+                  {designers.map((designer) => (
+                    <option key={designer.id} value={designer.id}>
+                      {designer.name}
+                    </option>
+                  ))}
               </select>
             </div>
 
             <button
               onClick={handleSearch}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-sm">search</span>
               검색
@@ -1362,7 +1364,7 @@ function IncentivesModal({ onClose }: { onClose: () => void }) {
                           <td className="px-4 py-3 text-center">
                             <button
                               onClick={() => handleExcelDownload(item.designerId, item.name)}
-                              className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                              className="px-3 py-1 bg-black text-white text-xs font-medium rounded hover:bg-gray-900 transition-colors"
                             >
                               엑셀
                             </button>

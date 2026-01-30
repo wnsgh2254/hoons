@@ -95,6 +95,9 @@ export async function PATCH(
     if (typeof body.custom_service_duration === 'number' || typeof body.custom_service_duration === 'string') {
       updates.custom_service_duration = Number(body.custom_service_duration);
     }
+    if (typeof body.memo === 'string' || body.memo === null) {
+      updates.memo = body.memo === null ? null : body.memo;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: '업데이트할 필드가 없습니다.' }, { status: 400 });

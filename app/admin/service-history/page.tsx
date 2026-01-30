@@ -108,14 +108,13 @@ export default function ServiceHistoryPage() {
           <div className="max-w-7xl mx-auto flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">Service History</h2>
-                <p className="text-gray-500 text-sm">View and manage service history records.</p>
+                <h2 className="text-3xl font-bold tracking-tight text-black">시술 내역</h2>
               </div>
             </div>
 
             {/* Filters */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-              <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                   <input

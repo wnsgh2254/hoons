@@ -136,8 +136,8 @@ export default function StaffManagementPage() {
           <div className="max-w-7xl mx-auto flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">Staff Management</h2>
-                <p className="text-gray-500 text-sm">Manage stylists, track hours, and process payroll.</p>
+                <h2 className="text-3xl font-bold tracking-tight text-black">직원 관리</h2>
+                
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <button 
@@ -145,14 +145,14 @@ export default function StaffManagementPage() {
                   className="flex items-center gap-2 bg-linear-to-r from-black to-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg"
                 >
                   <span className="material-symbols-outlined text-lg">add</span>
-                  Add Staff
+                  직원 추가
                 </button>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Staff</p>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">전체 직원 수</p>
                   <h3 className="text-2xl font-bold text-black mt-1">{loading ? '...' : stats.totalStaff}</h3>
                 </div>
                 <div className="size-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
@@ -176,14 +176,9 @@ export default function StaffManagementPage() {
                   return (
                     <div key={member.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition-all">
                       <div className="p-6 flex items-start justify-between">
-                        <div className="flex gap-4">
-                          <div className="size-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shadow-sm">
-                            <span className="material-symbols-outlined text-2xl">person</span>
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-lg text-black">{member.name}</h3>
-                            <p className="text-xs text-gray-500 font-medium">{formatRoleWithVenue(member)}</p>
-                          </div>
+                        <div>
+                          <h3 className="font-bold text-lg text-black">{member.name}</h3>
+                          <p className="text-xs text-gray-500 font-medium">{formatRoleWithVenue(member)}</p>
                         </div>
                         {/* Don't show pay type badge for Director */}
                         {member.role !== 'Director' && member.role !== 'director' && (

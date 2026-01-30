@@ -8,6 +8,15 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const brandParam = searchParams.get('brand');
+
+    // Comment: Load brand list for fallback and filtering
+    const { data: brandsData } = await supabase
+      .from('inventory_brands')
+      .select('id, name')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true });
+    const brandNames: string[] = (brandsData ?? []).map((b: { name: string }) => String(b.name));
 
     let query = supabase.from('inventory_items').select('*').order('name');
 
@@ -35,12 +44,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const items =
-      (data || []).map((item: any) => ({
+    let items = (data || []).map((item: any) => {
+      const brand =
+        item.brand != null && String(item.brand).trim() !== ''
+          ? String(item.brand).trim()
+          : brandNames.length > 0
+            ? brandNames[Math.abs(item.id) % brandNames.length]
+            : null;
+      return {
         ...item,
         price: Number(item.price ?? 0),
         stock: Number(item.stock ?? 0),
-      })) ?? [];
+        brand: brand ?? item.brand ?? null,
+      };
+    });
+
+    if (brandParam && brandParam !== '전체' && brandParam.trim() !== '') {
+      items = items.filter((item: { brand?: string | null }) => item.brand === brandParam);
+    }
 
     return NextResponse.json({ items }, { status: 200 });
   } catch (error) {
@@ -160,7 +181,7 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, size, sku, category, price, icon } = body;
+    const { id, name, size, sku, category, price, icon, stock } = body;
 
     const numericId = Number(id);
     if (!numericId) {
@@ -174,6 +195,7 @@ export async function PATCH(request: NextRequest) {
     if (category !== undefined) updates.category = String(category).trim();
     if (price !== undefined) updates.price = Number(price);
     if (icon !== undefined) updates.icon = icon ? String(icon).trim() : null;
+    if (stock !== undefined) updates.stock = Math.max(0, Number(stock));
 
     const { data, error } = await supabase
       .from('inventory_items')

@@ -84,7 +84,7 @@ export default function CustomersPage() {
       <AdminTopNav />
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
-          <div className="max-w-7xl mx-auto flex flex-col gap-6">
+          <div className="max-w-7xl mx-auto flex flex-col gap-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="flex flex-col gap-1">
@@ -100,7 +100,7 @@ export default function CustomersPage() {
             </div>
 
             {/* Search and Info */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-start md:justify-between items-start md:items-center">
               <div className="relative flex-1 max-w-md">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-lg">
                   search

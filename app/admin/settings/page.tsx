@@ -134,8 +134,7 @@ export default function SettingsPage() {
           <div className="max-w-5xl mx-auto flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">Settings</h2>
-                <p className="text-gray-500 text-sm">Manage your salon configuration, services, and team preferences.</p>
+                <h2 className="text-3xl font-bold tracking-tight text-black">설정</h2>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

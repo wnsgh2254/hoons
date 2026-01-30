@@ -66,6 +66,37 @@ function labelToDbTime(label: string): string | null {
   return `${hStr}:${mm}:${'00'}`;
 }
 
+// Comment: Time options for From/To (30-min steps, 8:00 AM - 9:00 PM)
+const EDIT_TIME_OPTIONS = [
+  '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+  '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
+  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
+  '8:00 PM', '8:30 PM', '9:00 PM',
+];
+
+// Comment: Group service name into category (for service picker modal, same logic as services page)
+function getServiceCategoryForPicker(name: string): string {
+  const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+  const lowerName = cleanName.toLowerCase();
+  if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
+  if (lowerName.includes('- magic')) return 'Magic';
+  if (lowerName.includes('- hot perm')) return 'Hot Perm';
+  if (lowerName.includes('- color')) return 'Color';
+  if (lowerName.includes('- clinic')) return 'Clinic';
+  if (lowerName.includes('- package')) return 'Package';
+  if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
+  if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek') || lowerName.includes('clinic')) return 'Clinic';
+  if (lowerName.includes('color') || lowerName.includes('bleach') || lowerName.includes('toning')) return 'Color';
+  if (lowerName.includes('special perm') || lowerName.includes('setting perm') || lowerName.includes('design setting perm')) return 'Hot Perm';
+  if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
+  if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
+  if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
+  if (lowerName.includes('cut') || lowerName.includes('length addition') || lowerName.includes('hair extension') || lowerName.includes('director level') || lowerName.includes('manager level') || lowerName.includes('kids cut') || lowerName.includes('bangs cut')) return 'Cut';
+  return 'Others';
+}
+
+const SERVICE_PICKER_CATEGORY_ORDER = ['Cut', 'Dry', 'Perm', 'Magic', 'Hot Perm', 'Color', 'Clinic', 'Package', 'Others'];
+
 export default function AppointmentsManagementPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
@@ -98,6 +129,11 @@ export default function AppointmentsManagementPage() {
   const [editingBooking, setEditingBooking] = useState<BookingWithRelations | null>(null);
   const [editDate, setEditDate] = useState<string>(selectedDate);
   const [editTime, setEditTime] = useState<string>('10:00 AM');
+  const [editServiceId, setEditServiceId] = useState<number | null>(null);
+  const [editServices, setEditServices] = useState<{ id: number; name: string; duration_minutes?: number | null }[]>([]);
+  const [isServicePickerOpen, setIsServicePickerOpen] = useState(false);
+  const [servicePickerCategory, setServicePickerCategory] = useState<string | null>(null);
+  const [editMemo, setEditMemo] = useState<string>('');
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
 
@@ -109,6 +145,8 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Track booking focused from Schedule to highlight in Upcoming
   const [focusedBookingId, setFocusedBookingId] = useState<number | null>(null);
+  // Comment: Appointment detail modal (click card in schedule grid)
+  const [viewingBookingDetail, setViewingBookingDetail] = useState<BookingWithRelations | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
   const dateButtonWrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -170,8 +208,8 @@ export default function AppointmentsManagementPage() {
   // Comment: Booking restrictions state
   const [bookingRestrictions, setBookingRestrictions] = useState<any[]>([]);
 
-  // Comment: Calendar view mode - show booking count instead of green dot
-  const [showBookingCount, setShowBookingCount] = useState(false);
+  // Comment: Calendar view mode - always show booking count instead of green dot
+  const [showBookingCount] = useState(true);
 
   // Comment: Refs and handlers for click-drag scrolling on schedule grid
   const scheduleRef = useRef<HTMLDivElement | null>(null);
@@ -446,6 +484,40 @@ export default function AppointmentsManagementPage() {
       isMounted = false;
     };
   }, [monthKey]);
+
+  // Comment: Sync edit modal fields when opening edit (from detail or Upcoming)
+  useEffect(() => {
+    if (editingBooking) {
+      setEditDate(editingBooking.booking_date);
+      setEditTime(bookingTimeToLabel(editingBooking.booking_time));
+      setEditServiceId(editingBooking.service_id ?? editingBooking.service?.id ?? null);
+      setEditMemo(editingBooking.memo ?? '');
+    }
+  }, [editingBooking?.id]);
+
+  // Comment: Load all services for edit modal service picker (card only)
+  useEffect(() => {
+    if (!editingBooking) {
+      setEditServices([]);
+      return;
+    }
+    let isMounted = true;
+    fetch('/api/services')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted || !data.services) return;
+        const cardOnly = (data.services as { id: number; name: string; duration_minutes?: number | null }[]).filter(
+          (s) => !s.name.toLowerCase().includes('(cash)')
+        );
+        setEditServices(cardOnly);
+      })
+      .catch(() => {
+        if (isMounted) setEditServices([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [editingBooking?.id]);
 
   // Comment: Load admin memo on mount
   useEffect(() => {
@@ -852,39 +924,6 @@ export default function AppointmentsManagementPage() {
         </div>
       )}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <header className="h-16 flex items-center justify-between px-6 md:px-10 py-4 bg-gray-100 text-gray-900 z-10">
-          <div className="flex items-center gap-4 flex-1">
-            {/* Shop Filter Dropdown */}
-            <select
-              value={selectedShopFilter}
-              onChange={(e) => setSelectedShopFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-400 focus:border-transparent bg-gray-100 text-gray-900"
-            >
-              <option value="전체">전체</option>
-            </select>
-            {/* Today Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedDate(getSydneyToday())}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-200 text-gray-900"
-            >
-              오늘
-            </button>
-          </div>
-          <div className="flex items-center justify-center flex-1">
-            {/* Date Navigation - Centered */}
-            <div className="flex items-center gap-2">
-              {dateRangeStart && dateRangeEnd ? (
-                <span className="text-sm text-gray-900">
-                  {dateRangeStart} ~ {dateRangeEnd}
-              </span>
-              ) : (
-                <span className="text-sm text-gray-900">{selectedDate}</span>
-              )}
-            </div>
-          </div>
-          <div className="flex-1" />
-        </header>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
           <div className="max-w-full mx-auto flex flex-col gap-6 h-full">
@@ -919,20 +958,7 @@ export default function AppointmentsManagementPage() {
                       <span className="material-symbols-outlined text-lg">chevron_right</span>
                       </button>
                           </div>
-                  {/* Toggle button for showing booking count */}
-                  <div className="mb-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setShowBookingCount(!showBookingCount)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                        showBookingCount
-                          ? 'bg-black text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {showBookingCount ? '점 표시' : '개수 표시'}
-                    </button>
-                  </div>
+                  {/* Comment: Always show booking count - toggle removed */}
                   <div className="grid grid-cols-7 gap-2 text-sm text-gray-500 mb-2 font-medium">
                     {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
                               <span key={d} className="text-center">
@@ -1477,6 +1503,7 @@ export default function AppointmentsManagementPage() {
                                         e.stopPropagation();
                                         if (b.id) {
                                           setFocusedBookingId(b.id);
+                                          setViewingBookingDetail(b);
                                         }
                                       }}
                                     >
@@ -1602,19 +1629,20 @@ export default function AppointmentsManagementPage() {
                                   >
                                     <div
                                       className={`h-full w-full bg-white border-l-4 ${color.border} rounded shadow-sm hover:shadow-md transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         if (b.id) {
                                           setFocusedBookingId(b.id);
+                                          setViewingBookingDetail(b);
                                         }
                                       }}
                                     >
-                                  <div>
+                                      <div>
                                         <p className="text-xs font-bold text-[#0d121b] mb-0.5">
-                                      {serviceName}
-                                    </p>
+                                          {serviceName}
+                                        </p>
                                         <p className="text-[11px] text-[#64748b]">{designerName}</p>
-                                  </div>
+                                      </div>
                                       <div className="flex items-center justify-between mt-1">
                                         <span className="text-[10px] font-mono text-[#94a3b8]">
                                           {timeLabel}
@@ -1962,6 +1990,89 @@ export default function AppointmentsManagementPage() {
         </div>
       )}
 
+      {/* Appointment Detail Modal (from schedule grid card click) */}
+      {viewingBookingDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+            <button
+              type="button"
+              onClick={() => setViewingBookingDetail(null)}
+              className="absolute right-4 top-4 text-gray-400 hover:text-black"
+            >
+              <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+            <h2 className="text-lg font-bold text-black mb-4">예약 상세</h2>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">예약 번호</span>
+                <span className="font-semibold text-gray-800">#{viewingBookingDetail.id}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">시술</span>
+                <span className="font-medium text-gray-900">
+                  {viewingBookingDetail.service?.name || '—'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">디자이너</span>
+                <span className="font-medium text-gray-900">
+                  {viewingBookingDetail.designer?.name || '—'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">날짜</span>
+                <span className="font-medium text-gray-900">{viewingBookingDetail.booking_date}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">시간</span>
+                <span className="font-medium text-gray-900">
+                  {viewingBookingDetail.booking_time
+                    ? bookingTimeToLabel(viewingBookingDetail.booking_time)
+                    : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">금액</span>
+                <span className="font-medium text-gray-900">
+                  {(viewingBookingDetail.total_amount ?? 0) > 0
+                    ? `AU$${Number(viewingBookingDetail.total_amount).toFixed(0)}`
+                    : 'Free'}
+                </span>
+              </div>
+              <div className="pt-3 border-t border-gray-100">
+                <span className="text-xs text-gray-500">메모</span>
+                <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">
+                  {viewingBookingDetail.memo != null && viewingBookingDetail.memo !== ''
+                    ? viewingBookingDetail.memo
+                    : '—'}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setViewingBookingDetail(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewingBookingDetail.booking_date && viewingBookingDetail.booking_time) {
+                    setEditingBooking(viewingBookingDetail);
+                    setViewingBookingDetail(null);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-black text-white hover:bg-gray-800"
+              >
+                수정
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Booking Modal */}
       {editingBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -1973,19 +2084,17 @@ export default function AppointmentsManagementPage() {
             >
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
-            <h2 className="text-lg font-bold text-black mb-2">Edit Booking</h2>
+            <h2 className="text-lg font-bold text-black mb-2">예약 수정</h2>
             <p className="text-xs text-gray-500 mb-4">
-              날짜와 시간을 수정할 수 있습니다. 디자이너/서비스를 변경해야 한다면, 취소 후 새로 예약을 만들어 주세요.
+              기존 예약의 날짜·시작 시간·시술·메모를 한 번에 수정합니다. 시술을 바꾸면 캘린더에서 예약 높이가 해당 시술 시간에 맞게 바뀝니다.
             </p>
             <div className="space-y-4 text-sm">
               <div className="flex justify-between text-xs text-gray-500">
-                <span>Booking ID</span>
+                <span>예약 번호</span>
                 <span className="font-semibold text-gray-800">#{editingBooking.id}</span>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">
-                  Date (Sydney)
-                </label>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">날짜</label>
                 <input
                   type="date"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
@@ -1994,35 +2103,131 @@ export default function AppointmentsManagementPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Time</label>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">시작 시간</label>
                 <select
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                   value={editTime}
                   onChange={(e) => setEditTime(e.target.value)}
                 >
-                  {[
-                    '9:00 AM',
-                    '9:30 AM',
-                    '10:00 AM',
-                    '10:30 AM',
-                    '11:00 AM',
-                    '11:30 AM',
-                    '12:00 PM',
-                    '1:00 PM',
-                    '2:00 PM',
-                    '3:00 PM',
-                    '4:00 PM',
-                    '5:00 PM',
-                    '6:00 PM',
-                    '7:00 PM',
-                    '8:00 PM',
-                    '9:00 PM',
-                  ].map((t) => (
+                  {EDIT_TIME_OPTIONS.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">시술</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServicePickerCategory(null);
+                    setIsServicePickerOpen(true);
+                  }}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between bg-white hover:bg-gray-50"
+                >
+                  <span className="text-gray-800">
+                    {editServiceId != null
+                      ? (() => {
+                          const s = editServices.find((x) => x.id === editServiceId);
+                          if (!s) return '시술 선택';
+                          const name = s.name.replace(/\s*\(card\)\s*/gi, '').trim();
+                          const dur = s.duration_minutes != null ? `${s.duration_minutes}분` : '';
+                          return dur ? `${name} · ${dur}` : name;
+                        })()
+                      : '시술 선택'}
+                  </span>
+                  <span className="material-symbols-outlined text-gray-400 text-lg">expand_more</span>
+                </button>
+              </div>
+              {/* Service picker modal: category blocks → then service list (card only, duration only display) */}
+              {isServicePickerOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+                    <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="text-base font-bold text-black">
+                        {servicePickerCategory == null ? '카테고리 선택' : servicePickerCategory}
+                      </h3>
+                      {servicePickerCategory != null ? (
+                        <button
+                          type="button"
+                          onClick={() => setServicePickerCategory(null)}
+                          className="text-sm text-gray-600 hover:text-black"
+                        >
+                          뒤로
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsServicePickerOpen(false)}
+                          className="text-gray-400 hover:text-black"
+                        >
+                          <span className="material-symbols-outlined">close</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="p-4 overflow-y-auto flex-1">
+                      {servicePickerCategory == null ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {SERVICE_PICKER_CATEGORY_ORDER.map((cat) => {
+                            const list = editServices.filter(
+                              (s) => getServiceCategoryForPicker(s.name) === cat
+                            );
+                            if (list.length === 0) return null;
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setServicePickerCategory(cat)}
+                                className="border-2 border-gray-200 rounded-xl p-4 text-center hover:border-black hover:bg-gray-50 transition-colors"
+                              >
+                                <span className="font-semibold text-gray-900">{cat}</span>
+                                <p className="text-xs text-gray-500 mt-1">{list.length}개</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {editServices
+                            .filter((s) => getServiceCategoryForPicker(s.name) === servicePickerCategory)
+                            .map((s) => {
+                              const name = s.name.replace(/\s*\(card\)\s*/gi, '').trim();
+                              const dur = s.duration_minutes != null ? `${s.duration_minutes}분` : '';
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditServiceId(s.id);
+                                    setIsServicePickerOpen(false);
+                                    setServicePickerCategory(null);
+                                  }}
+                                  className={`w-full text-left border rounded-xl px-4 py-3 text-sm transition-colors ${
+                                    editServiceId === s.id
+                                      ? 'border-black bg-black text-white'
+                                      : 'border-gray-200 hover:border-black hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {dur ? `${name} · ${dur}` : name}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">메모</label>
+                <textarea
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  placeholder="예약 메모"
+                  rows={3}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                />
               </div>
             </div>
             <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
@@ -2031,7 +2236,7 @@ export default function AppointmentsManagementPage() {
                 onClick={() => setEditingBooking(null)}
                 className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50"
               >
-                Cancel
+                취소
               </button>
               <button
                 type="button"
@@ -2048,6 +2253,8 @@ export default function AppointmentsManagementPage() {
                       body: JSON.stringify({
                         booking_date: editDate,
                         booking_time: dbTime,
+                        ...(editServiceId != null && { service_id: editServiceId }),
+                        memo: editMemo,
                       }),
                     });
                     setEditingBooking(null);
@@ -2066,7 +2273,7 @@ export default function AppointmentsManagementPage() {
                   editSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-black hover:bg-gray-800'
                 }`}
               >
-                {editSubmitting ? 'Saving...' : 'Save Changes'}
+                {editSubmitting ? '저장 중...' : '변경 저장'}
               </button>
             </div>
           </div>

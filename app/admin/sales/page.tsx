@@ -48,11 +48,12 @@ export default function SalesPage() {
       <AdminTopNav />
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
-          <div className="max-w-7xl mx-auto flex flex-col gap-6">
-            {/* Header */}
-            <div className="flex flex-col gap-1">
-              <h2 className="text-3xl font-bold tracking-tight text-black">매출 관리</h2>
-              <p className="text-gray-500 text-sm">전체 매출, 직원별 매출, 항목별 매출을 확인하세요.</p>
+          <div className="max-w-7xl mx-auto flex flex-col gap-8">
+            {/* Page header: unified admin style */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-3xl font-bold tracking-tight text-black">매출 관리</h2>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -232,7 +233,7 @@ function TotalSalesTab({
     <div className="flex flex-col gap-6">
       {/* Filters */}
       <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
           <div className="flex gap-4">
             <label className="flex items-center gap-2">
               <input
@@ -833,7 +834,7 @@ function ByStaffSalesTab({
     <div className="flex flex-col gap-6">
       {/* Filters */}
       <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
           <div className="flex gap-4">
             <label className="flex items-center gap-2">
               <input
@@ -896,13 +897,12 @@ function ByStaffSalesTab({
           )}
 
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">직원</label>
             <select
               value={selectedDesignerId}
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
             >
-              <option value="">전체</option>
+              <option value="">전체 직원</option>
               {designers.map((designer) => (
                 <option key={designer.id} value={designer.id}>
                   {designer.name}
@@ -1121,7 +1121,9 @@ function ByItemSalesTab({
         if (selectedDesignerId) {
           params.append('designer_id', selectedDesignerId);
         }
-        params.append('item_type', selectedItemType);
+        if (selectedItemType) {
+          params.append('item_type', selectedItemType);
+        }
         params.append('aggregation_mode', aggregationMode);
 
         const res = await fetch(`/api/sales/by-item?${params.toString()}`);
@@ -1161,7 +1163,7 @@ function ByItemSalesTab({
     <div className="flex flex-col gap-6">
       {/* Filters */}
       <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
           <div className="flex gap-4">
             <label className="flex items-center gap-2">
               <input
@@ -1224,13 +1226,12 @@ function ByItemSalesTab({
           )}
 
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">직원</label>
             <select
               value={selectedDesignerId}
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
             >
-              <option value="">전체</option>
+              <option value="">전체 직원</option>
               {designers.map((designer) => (
                 <option key={designer.id} value={designer.id}>
                   {designer.name}
@@ -1240,12 +1241,12 @@ function ByItemSalesTab({
           </div>
 
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">항목</label>
             <select
               value={selectedItemType}
               onChange={(e) => setSelectedItemType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
             >
+              <option value="">전체 서비스 항목</option>
               <option value="service">서비스</option>
               <option value="product">제품</option>
               <option value="membership">정액권</option>
@@ -1653,7 +1654,7 @@ function SalesHistoryModal({
         <div className="flex-1 overflow-y-auto p-6">
           {/* Filters */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
-            <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
               <div className="flex gap-4">
                 <label className="flex items-center gap-2">
                   <input

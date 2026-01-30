@@ -71,8 +71,7 @@ export default function PrepaidPassManagementPage() {
           <div className="max-w-7xl mx-auto flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">Prepaid Pass Management</h2>
-                <p className="text-gray-500 text-sm">Manage prepaid pass members and track membership status.</p>
+                <h2 className="text-3xl font-bold tracking-tight text-black">선불권 관리</h2>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -80,12 +79,12 @@ export default function PrepaidPassManagementPage() {
                   className="flex items-center gap-2 bg-linear-to-r from-black to-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg hover:brightness-110"
                 >
                   <span className="material-symbols-outlined text-lg">add</span>
-                  Add Member
+                  회원 추가
                 </button>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-start md:justify-between items-start md:items-center">
               <div className="relative w-full md:w-96">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
                   search
@@ -137,27 +136,20 @@ export default function PrepaidPassManagementPage() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                          <th className="px-6 py-4">Member</th>
-                          <th className="px-6 py-4">Contact</th>
-                          <th className="px-6 py-4">Points</th>
-                          <th className="px-6 py-4">Expires</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
+                          <th className="px-6 py-4">회원</th>
+                          <th className="px-6 py-4">연락처</th>
+                          <th className="px-6 py-4">포인트</th>
+                          <th className="px-6 py-4">만료일</th>
+                          <th className="px-6 py-4 text-right">액션</th>
                         </tr>
                       </thead>
                       <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
                         {members.map((member) => (
                         <tr key={member.id} className="hover:bg-gray-50/50 transition-colors group">
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="size-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                                <span className="material-symbols-outlined">person</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="font-medium text-black">
-                                  {member.name || 'Unknown'}
-                                </span>
-                              </div>
-                            </div>
+                            <span className="font-medium text-black">
+                              {member.name || 'Unknown'}
+                            </span>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-0.5">
@@ -171,7 +163,7 @@ export default function PrepaidPassManagementPage() {
                           </td>
                           <td className="px-6 py-4">
                             <span className="font-medium text-black">
-                              {member.points !== undefined ? `${member.points} points` : '0 points'}
+                              {`$${Number(member.points || 0).toLocaleString()}`}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -187,7 +179,7 @@ export default function PrepaidPassManagementPage() {
                                 type="button"
                                 onClick={() => setEditingMember(member)}
                                 className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                                title="Edit"
+                                title="수정"
                               >
                                 <span className="material-symbols-outlined text-[1.1rem]">edit</span>
                               </button>
@@ -195,7 +187,7 @@ export default function PrepaidPassManagementPage() {
                                 type="button"
                                 onClick={() => setViewingMember(member)}
                                 className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                                title="View Details"
+                                title="상세 보기"
                               >
                                 <span className="material-symbols-outlined text-[1.1rem]">
                                   visibility
@@ -224,7 +216,7 @@ export default function PrepaidPassManagementPage() {
                             disabled={currentPage === 1}
                             className="px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-black"
                           >
-                            Previous
+                            이전
                           </button>
                           <div className="flex items-center gap-1">
                             {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
@@ -274,7 +266,7 @@ export default function PrepaidPassManagementPage() {
                             disabled={currentPage === totalPages}
                             className="px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-black"
                           >
-                            Next
+                            다음
                           </button>
                         </div>
                       </div>
@@ -382,7 +374,7 @@ function AddMemberModal({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">Add Prepaid Pass Member</h2>
+          <h2 className="text-xl font-bold text-black">선불권 회원 추가</h2>
           <button
             type="button"
             onClick={onClose}
@@ -399,7 +391,7 @@ function AddMemberModal({
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Name <span className="text-red-500">*</span>
+              이름 <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -407,32 +399,32 @@ function AddMemberModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="Enter member name"
+              placeholder="회원 이름 입력"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">연락처</label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="Enter phone number"
+              placeholder="연락처 입력"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="Enter email address"
+              placeholder="이메일 입력"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Points <span className="text-red-500">*</span>
+              포인트 <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -441,12 +433,12 @@ function AddMemberModal({
               value={points}
               onChange={(e) => setPoints(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="Enter prepaid points"
+              placeholder="선불권 포인트 입력"
             />
             <p className="text-xs text-gray-500 mt-1">정액제 포인트를 입력하세요.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Expires At</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">만료일</label>
             <input
               type="date"
               value={expiresAt}
@@ -461,14 +453,14 @@ function AddMemberModal({
               onClick={onClose}
               className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black"
             >
-              Cancel
+              취소
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-60 transition-colors"
             >
-              {loading ? 'Adding...' : 'Add Member'}
+              {loading ? '추가 중...' : '회원 추가'}
             </button>
           </div>
         </form>
@@ -544,7 +536,7 @@ function EditMemberModal({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">Edit Prepaid Pass Member</h2>
+          <h2 className="text-xl font-bold text-black">선불권 회원 수정</h2>
           <button
             type="button"
             onClick={onClose}
@@ -561,7 +553,7 @@ function EditMemberModal({
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Name <span className="text-red-500">*</span>
+              이름 <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -569,7 +561,7 @@ function EditMemberModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="Enter member name"
+              placeholder="회원 이름 입력"
             />
           </div>
           <div>
@@ -594,7 +586,7 @@ function EditMemberModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Points <span className="text-red-500">*</span>
+              포인트 <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -603,7 +595,7 @@ function EditMemberModal({
               value={points}
               onChange={(e) => setPoints(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="Enter prepaid points"
+              placeholder="선불권 포인트 입력"
             />
           </div>
           <div>
@@ -671,12 +663,8 @@ function ViewMemberModal({
           </button>
         </div>
         <div className="p-6 space-y-4">
-          <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-            <div className="size-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-              <span className="material-symbols-outlined text-3xl">person</span>
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-black">{member.name || 'Unknown'}</h3>
+          <div className="pb-4 border-b border-gray-100">
+            <h3 className="text-lg font-bold text-black">{member.name || 'Unknown'}</h3>
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
                   member.is_active
@@ -686,29 +674,28 @@ function ViewMemberModal({
               >
                 {member.is_active ? 'Active' : 'Inactive'}
               </span>
-            </div>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Phone</span>
+              <span className="text-sm text-gray-500">연락처</span>
               <span className="text-sm font-medium text-black">
                 {member.phone || '—'}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Email</span>
+              <span className="text-sm text-gray-500">이메일</span>
               <span className="text-sm font-medium text-black">
                 {member.email || '—'}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Points</span>
+              <span className="text-sm text-gray-500">포인트</span>
               <span className="text-sm font-bold text-black">
                 {member.points !== undefined ? `${member.points} points` : '0 points'}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Expires At</span>
+              <span className="text-sm text-gray-500">만료일</span>
               <span className="text-sm font-medium text-black">
                 {member.expires_at
                   ? new Date(member.expires_at).toLocaleDateString('ko-KR', {
@@ -720,7 +707,7 @@ function ViewMemberModal({
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">Created At</span>
+              <span className="text-sm text-gray-500">생성일</span>
               <span className="text-sm font-medium text-black">
                 {member.created_at
                   ? new Date(member.created_at).toLocaleDateString('ko-KR', {
@@ -738,7 +725,7 @@ function ViewMemberModal({
               onClick={onClose}
               className="w-full px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 transition-colors"
             >
-              Close
+              닫기
             </button>
           </div>
         </div>

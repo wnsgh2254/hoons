@@ -56,6 +56,7 @@ export interface Booking {
   status: 'pending' | 'confirmed' | 'cancelled' | 'noshow';
   deposit_amount: number;
   total_amount: number | null;
+  memo?: string | null;
   created_at: string;
 }
 
@@ -71,6 +72,7 @@ export interface Payment {
 export interface InventoryItem {
   id: number;
   name: string;
+  brand?: string | null;
   size: string | null;
   sku: string | null;
   category: string;

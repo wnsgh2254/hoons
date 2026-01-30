@@ -19,6 +19,17 @@ const ICON_OPTIONS = [
 
 type IconName = (typeof ICON_OPTIONS)[number];
 
+// Comment: Format date/time to YYYY-MM-DD HH:mm for display
+function formatDateTime(dateStr: string | null | undefined): string {
+  if (dateStr == null || dateStr === '') return '';
+  const s = String(dateStr).trim();
+  if (s.length >= 16 && s[10] === 'T') {
+    return s.slice(0, 10) + ' ' + s.slice(11, 16);
+  }
+  if (s.length >= 10) return s.slice(0, 10);
+  return s;
+}
+
 type InventoryView = {
   title: string;
   subtitle: string;
@@ -150,8 +161,8 @@ const INVENTORY_VIEWS: Record<string, InventoryView> = {
 };
 
 function InventoryContent() {
-  const [category, setCategory] = useState('All Categories');
-  const [status, setStatus] = useState('All Status');
+  const [category, setCategory] = useState('전체 카테고리');
+  const [status, setStatus] = useState('전체 상태');
   const [brand, setBrand] = useState<string>('전체');
   const [brandOptions, setBrandOptions] = useState<string[]>(['전체']);
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,7 +178,7 @@ function InventoryContent() {
   const viewKey = searchParams.get('view') ?? 'overview';
   const activeView = INVENTORY_VIEWS[viewKey] ?? INVENTORY_VIEWS.overview;
 
-  // Comment: Load inventory items from API using current filters
+  // Comment: Load full inventory once on overview; stats always use this, table is filtered client-side
   useEffect(() => {
     if (viewKey !== 'overview') {
       return;
@@ -179,19 +190,7 @@ function InventoryContent() {
         setLoading(true);
         setError(null);
 
-        const params = new URLSearchParams();
-        if (category !== 'All Categories') {
-          params.append('category', category);
-        }
-        if (status !== 'All Status') {
-          params.append('status', status);
-        }
-        if (searchQuery.trim()) {
-          params.append('search', searchQuery.trim());
-        }
-
-        const queryString = params.toString();
-        const res = await fetch(`/api/inventory${queryString ? `?${queryString}` : ''}`);
+        const res = await fetch('/api/inventory');
         const data = await res.json();
 
         if (isMounted) {
@@ -225,7 +224,7 @@ function InventoryContent() {
     return () => {
       isMounted = false;
     };
-  }, [category, status, searchQuery, viewKey]);
+  }, [viewKey]);
 
   // Comment: Load brand options from database
   useEffect(() => {
@@ -295,6 +294,29 @@ function InventoryContent() {
   const hasChanges = products.some((p) => (stockDrafts[p.id] ?? p.stock) !== p.stock);
   const isOverview = viewKey === 'overview';
 
+  // Comment: Filter table by category, status, search, brand on the client; stats always use full products
+  const filteredProducts = (() => {
+    let list = products;
+    if (category !== '전체 카테고리') {
+      list = list.filter((p) => p.category === category);
+    }
+    if (status !== '전체 상태') {
+      list = list.filter((p) => p.status === status);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          (p.name?.toLowerCase().includes(q) ?? false) ||
+          (p.sku?.toLowerCase().includes(q) ?? false)
+      );
+    }
+    if (brand !== '전체') {
+      list = list.filter((p) => (p.brand ?? '') === brand);
+    }
+    return list;
+  })();
+
   // Comment: Save all changed stock quantities to the database
   const handleSaveInventory = async () => {
     if (!hasChanges) return;
@@ -328,12 +350,12 @@ function InventoryContent() {
         }))
       );
 
-      setSuccessMessage('Inventory saved successfully.');
+      setSuccessMessage('재고가 성공적으로 저장되었습니다.');
       setTimeout(() => {
         setSuccessMessage(null);
       }, 3000);
     } catch (err: any) {
-      setError(err.message || 'Failed to save inventory');
+      setError(err.message || '재고 저장에 실패했습니다.');
     } finally {
       setSaving(false);
     }
@@ -351,7 +373,6 @@ function InventoryContent() {
                 <h2 className="text-3xl font-bold tracking-tight text-black">
                   {activeView.title}
                 </h2>
-                <p className="text-gray-500 text-sm">{activeView.subtitle}</p>
               </div>
               {isOverview && (
                 <div className="flex items-center gap-3">
@@ -361,14 +382,14 @@ function InventoryContent() {
                     className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm disabled:opacity-60 disabled:hover:bg-white"
                   >
                     <span className="material-symbols-outlined text-lg">save</span>
-                    {saving ? 'Saving...' : 'Save Inventory'}
+                    {saving ? '저장 중...' : '재고 저장'}
                   </button>
                   <button
                     onClick={() => setShowAddProductModal(true)}
                     className="flex items-center gap-2 bg-linear-to-br from-[#111111] to-[#333333] hover:from-black hover:to-[#222222] text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg"
                   >
                     <span className="material-symbols-outlined text-lg">add</span>
-                    Add Product
+                    상품 추가
                   </button>
                 </div>
               )}
@@ -382,7 +403,7 @@ function InventoryContent() {
                         <span className="material-symbols-outlined">inventory</span>
                       </div>
                     </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">Total Products</p>
+                    <p className="text-gray-500 text-sm font-medium mb-1">총 상품 수</p>
                     <h3 className="text-2xl font-bold text-black">
                       {loading ? '...' : totalProducts}
                     </h3>
@@ -393,10 +414,10 @@ function InventoryContent() {
                         <span className="material-symbols-outlined">warning</span>
                       </div>
                       <span className="bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                        Action Needed
+                        조치 필요
                       </span>
                     </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">Low Stock Items</p>
+                    <p className="text-gray-500 text-sm font-medium mb-1">재고 부족 상품</p>
                     <h3 className="text-2xl font-bold text-black">
                       {loading ? '...' : lowStockItems}
                     </h3>
@@ -407,7 +428,7 @@ function InventoryContent() {
                         <span className="material-symbols-outlined">attach_money</span>
                       </div>
                     </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">Inventory Value</p>
+                    <p className="text-gray-500 text-sm font-medium mb-1">재고 금액</p>
                     <h3 className="text-2xl font-bold text-black">
                       {loading ? (
                         '...'
@@ -424,9 +445,9 @@ function InventoryContent() {
                       <div className="bg-gray-50 p-2 rounded-lg text-gray-500 group-hover:text-black transition-colors">
                         <span className="material-symbols-outlined">water_drop</span>
                       </div>
-                      <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">This Month</span>
+                      <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">이번 달</span>
                     </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">Internal Usage</p>
+                    <p className="text-gray-500 text-sm font-medium mb-1">내부 소모</p>
                     <h3 className="text-2xl font-bold text-black">
                       142 <span className="text-sm font-normal text-gray-500">units</span>
                     </h3>
@@ -442,7 +463,7 @@ function InventoryContent() {
                     {successMessage}
                   </div>
                 )}
-                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-start md:justify-between items-start md:items-center">
                   <div className="relative w-full md:w-96">
                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
                       search
@@ -478,11 +499,11 @@ function InventoryContent() {
                         onChange={(e) => setCategory(e.target.value)}
                         className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:border-black cursor-pointer"
                       >
-                        <option>All Categories</option>
-                        <option>Hair Care</option>
-                        <option>Coloring</option>
-                        <option>Styling</option>
-                        <option>Treatment</option>
+                        <option value="전체 카테고리">전체 카테고리</option>
+                        <option value="Hair Care">헤어 케어</option>
+                        <option value="Coloring">염색</option>
+                        <option value="Styling">스타일링</option>
+                        <option value="Treatment">트리트먼트</option>
                       </select>
                       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
                         <span className="material-symbols-outlined text-lg">expand_more</span>
@@ -494,10 +515,10 @@ function InventoryContent() {
                         onChange={(e) => setStatus(e.target.value)}
                         className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:border-black cursor-pointer"
                       >
-                        <option>All Status</option>
-                        <option>In Stock</option>
-                        <option>Low Stock</option>
-                        <option>Out of Stock</option>
+                        <option value="전체 상태">전체 상태</option>
+                        <option value="In Stock">재고 있음</option>
+                        <option value="Low Stock">재고 부족</option>
+                        <option value="Out of Stock">재고 없음</option>
                       </select>
                       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
                         <span className="material-symbols-outlined text-lg">expand_more</span>
@@ -510,30 +531,37 @@ function InventoryContent() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                          <th className="px-6 py-4">Product Name</th>
+                          <th className="px-6 py-4">상품명</th>
+                          <th className="px-6 py-4">브랜드</th>
                           <th className="px-6 py-4">SKU</th>
-                          <th className="px-6 py-4">Category</th>
-                          <th className="px-6 py-4">Price (AUD)</th>
-                          <th className="px-6 py-4">Stock Qty</th>
-                          <th className="px-6 py-4">Status</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
+                          <th className="px-6 py-4">카테고리</th>
+                          <th className="px-6 py-4">가격 (AUD)</th>
+                          <th className="px-6 py-4">재고 수량</th>
+                          <th className="px-6 py-4">상태</th>
+                          <th className="px-6 py-4 text-right">작업</th>
                         </tr>
                       </thead>
                       <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
                         {loading ? (
                           <tr>
-                            <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                              Loading inventory...
+                            <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                              재고를 불러오는 중입니다...
                             </td>
                           </tr>
                         ) : products.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                              No inventory items found.
+                            <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                              등록된 재고가 없습니다.
+                            </td>
+                          </tr>
+                        ) : filteredProducts.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                              선택한 브랜드에 해당하는 재고가 없습니다.
                             </td>
                           </tr>
                         ) : (
-                          products.map((product) => (
+                          filteredProducts.map((product) => (
                             <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
@@ -546,6 +574,7 @@ function InventoryContent() {
                                   </div>
                                 </div>
                               </td>
+                              <td className="px-6 py-4 text-gray-600">{product.brand ?? '—'}</td>
                               <td className="px-6 py-4 text-gray-500">{product.sku}</td>
                               <td className="px-6 py-4">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
@@ -709,7 +738,7 @@ function InventorySubView({ view }: InventorySubViewProps) {
           </div>
         ))}
       </div>
-      <div className="mt-6 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+      <div className="mt-6 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
         상세 화면은 요구사항을 확인한 뒤 이 영역에 구성됩니다.
       </div>
     </div>
@@ -775,22 +804,22 @@ function InternalUsageView() {
   }, [startDate, endDate, type, productSearch, staff]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
-      <div className="flex flex-wrap gap-3 items-center">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 md:p-6 flex flex-col gap-4">
+      <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">기간</span>
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
           />
           <span className="text-gray-400">~</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -798,7 +827,7 @@ function InternalUsageView() {
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[100px]"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
           >
             <option>전체</option>
           </select>
@@ -810,7 +839,7 @@ function InternalUsageView() {
             placeholder="제품코드 또는 제품명"
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[200px]"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[200px] focus:ring-2 focus:ring-black focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -818,75 +847,74 @@ function InternalUsageView() {
           <select
             value={staff}
             onChange={(e) => setStaff(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[100px]"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
           >
             <option>전체</option>
           </select>
         </div>
         <div className="ml-auto flex gap-2">
-          <button className="px-4 py-1.5 rounded-md border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50">
-            검색
-          </button>
           <button
             type="button"
             onClick={() => setShowRegisterModal(true)}
-            className="px-4 py-1.5 rounded-md bg-slate-900 text-sm text-white hover:bg-black"
+            className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900"
           >
             내부 소모 등록
           </button>
         </div>
       </div>
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
-      <div className="text-xs text-gray-500">
+      <div className="text-sm text-gray-500">
         총 <span className="font-semibold">{rows.length}</span>건
       </div>
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="border border-gray-200 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr className="text-gray-600">
-                <th className="px-4 py-2 text-left">날짜</th>
-                <th className="px-4 py-2 text-left">담당자</th>
-                <th className="px-4 py-2 text-left">제품코드</th>
-                <th className="px-4 py-2 text-left">제품명</th>
-                <th className="px-4 py-2 text-right">단가</th>
-                <th className="px-4 py-2 text-right">수량</th>
-                <th className="px-4 py-2 text-right">금액</th>
-                <th className="px-4 py-2 text-left">메모</th>
-                <th className="px-4 py-2 text-center">수정</th>
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                <th className="px-6 py-4">날짜</th>
+                <th className="px-6 py-4">담당자</th>
+                <th className="px-6 py-4">제품코드</th>
+                <th className="px-6 py-4">제품명</th>
+                <th className="px-6 py-4 text-right">단가</th>
+                <th className="px-6 py-4 text-right">수량</th>
+                <th className="px-6 py-4 text-right">금액</th>
+                <th className="px-6 py-4">메모</th>
+                <th className="px-6 py-4 text-right">수정</th>
               </tr>
             </thead>
-            <tbody>
-              {loading && (
+            <tbody className="text-gray-700 divide-y divide-gray-100">
+              {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
                     불러오는 중입니다...
                   </td>
                 </tr>
-              )}
-              {!loading &&
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    내역이 없습니다.
+                  </td>
+                </tr>
+              ) : (
                 rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-t border-gray-100 even:bg-gray-50/40 text-gray-800"
-                  >
-                    <td className="px-4 py-2">{row.used_at}</td>
-                    <td className="px-4 py-2">{row.staff_name ?? ''}</td>
-                    <td className="px-4 py-2">{row.product_code ?? ''}</td>
-                    <td className="px-4 py-2">{row.product_name ?? ''}</td>
-                    <td className="px-4 py-2 text-right">
+                  <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4">{formatDateTime(row.used_at)}</td>
+                    <td className="px-6 py-4">{row.staff_name ?? ''}</td>
+                    <td className="px-6 py-4">{row.product_code ?? ''}</td>
+                    <td className="px-6 py-4">{row.product_name ?? ''}</td>
+                    <td className="px-6 py-4 text-right">
                       {row.unit_price != null ? row.unit_price.toLocaleString() : ''}
                     </td>
-                    <td className="px-4 py-2 text-right">{row.quantity}</td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-6 py-4 text-right">{row.quantity}</td>
+                    <td className="px-6 py-4 text-right">
                       {row.amount != null ? row.amount.toLocaleString() : ''}
                     </td>
-                    <td className="px-4 py-2">{row.memo ?? ''}</td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-6 py-4">{row.memo ?? ''}</td>
+                    <td className="px-6 py-4 text-right">
                       <button
                         type="button"
                         onClick={() =>
@@ -896,21 +924,13 @@ function InternalUsageView() {
                             quantity: row.quantity,
                           })
                         }
-                        className="rounded-md border border-gray-400 px-3 py-1 text-xs text-gray-800 hover:bg-gray-100"
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
                         수정
                       </button>
                     </td>
                   </tr>
-                ))}
-              {!loading && rows.length === 0 && (
-                <tr
-                  className="border-t border-gray-100 text-gray-800"
-                >
-                  <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
-                    내역이 없습니다.
-                  </td>
-                </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -983,21 +1003,21 @@ function PurchasesView() {
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
-      <div className="flex flex-wrap gap-3 items-center">
+      <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">기간</span>
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
           />
           <span className="text-gray-400">~</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1007,7 +1027,7 @@ function PurchasesView() {
             value={supplier}
             onChange={(e) => setSupplier(e.target.value)}
             placeholder="전체"
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[160px]"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[160px] focus:ring-2 focus:ring-black focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1015,7 +1035,7 @@ function PurchasesView() {
           <select
             value={type}
             onChange={(e) => setType(e.target.value as typeof type)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[100px]"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
           >
             <option value="all">전체</option>
             <option value="purchase">매입</option>
@@ -1026,18 +1046,18 @@ function PurchasesView() {
           <button
             type="button"
             onClick={() => setEditMode('purchase')}
-            className="px-4 py-1.5 rounded-md border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50"
+            className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             매입 등록
           </button>
           <button
             type="button"
             onClick={() => setEditMode('return')}
-            className="px-4 py-1.5 rounded-md border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50"
+            className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             반품 등록
           </button>
-          <button className="px-4 py-1.5 rounded-md bg-slate-900 text-sm text-white hover:bg-black">
+          <button className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900">
             검색
           </button>
         </div>
@@ -1053,23 +1073,23 @@ function PurchasesView() {
           {totalAmount.toLocaleString()}
         </span>
       </div>
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="border border-gray-200 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr className="text-gray-600">
-                <th className="px-4 py-2 text-left">구분</th>
-                <th className="px-4 py-2 text-left">날짜</th>
-                <th className="px-4 py-2 text-left">공급처</th>
-                <th className="px-4 py-2 text-right">금액</th>
-                <th className="px-4 py-2 text-left">메모</th>
-                <th className="px-4 py-2 text-center">상세보기</th>
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                <th className="px-6 py-4 text-left">구분</th>
+                <th className="px-6 py-4 text-left">날짜</th>
+                <th className="px-6 py-4 text-left">공급처</th>
+                <th className="px-6 py-4 text-right">금액</th>
+                <th className="px-6 py-4 text-left">메모</th>
+                <th className="px-6 py-4 text-center">상세보기</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     불러오는 중입니다...
                   </td>
                 </tr>
@@ -1078,20 +1098,20 @@ function PurchasesView() {
                 rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-t border-gray-100 even:bg-gray-50/40 text-gray-800"
+                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
                   >
-                    <td className="px-4 py-2">{row.type === 'purchase' ? '매입' : '반품'}</td>
-                    <td className="px-4 py-2">{row.purchase_date}</td>
-                    <td className="px-4 py-2">{row.supplier_name ?? ''}</td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-6 py-4">{row.type === 'purchase' ? '매입' : '반품'}</td>
+                    <td className="px-6 py-4">{formatDateTime(row.purchase_date)}</td>
+                    <td className="px-6 py-4">{row.supplier_name ?? ''}</td>
+                    <td className="px-6 py-4 text-right">
                       {Number(row.total_amount ?? 0).toLocaleString()}
                     </td>
-                    <td className="px-4 py-2">{row.memo ?? ''}</td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-6 py-4">{row.memo ?? ''}</td>
+                    <td className="px-6 py-4 text-center">
                       <button
                         type="button"
                         onClick={() => setDetailId(row.id)}
-                        className="rounded-md border border-gray-400 px-3 py-1 text-xs text-gray-800 hover:bg-gray-100"
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
                         보기
                       </button>
@@ -1100,7 +1120,7 @@ function PurchasesView() {
                 ))}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     내역이 없습니다.
                   </td>
                 </tr>
@@ -1227,14 +1247,14 @@ function SuppliersView() {
             type="checkbox"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
-            className="rounded border-gray-300"
+            className="rounded-lg border border-gray-200"
           />
           미사용 보기
         </label>
         <button
           type="button"
           onClick={openCreate}
-          className="px-4 py-1.5 rounded-md border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50"
+          className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
         >
           매입처 등록
         </button>
@@ -1244,25 +1264,25 @@ function SuppliersView() {
           {error}
         </div>
       )}
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="border border-gray-200 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr className="text-gray-600">
-                <th className="px-4 py-2 text-left">매입처</th>
-                <th className="px-4 py-2 text-left">담당자</th>
-                <th className="px-4 py-2 text-left">전화 번호</th>
-                <th className="px-4 py-2 text-left">휴대폰 번호</th>
-                <th className="px-4 py-2 text-left">팩스</th>
-                <th className="px-4 py-2 text-left">이메일</th>
-                <th className="px-4 py-2 text-left">메모</th>
-                <th className="px-4 py-2 text-center">수정</th>
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                <th className="px-6 py-4 text-left">매입처</th>
+                <th className="px-6 py-4 text-left">담당자</th>
+                <th className="px-6 py-4 text-left">전화 번호</th>
+                <th className="px-6 py-4 text-left">휴대폰 번호</th>
+                <th className="px-6 py-4 text-left">팩스</th>
+                <th className="px-6 py-4 text-left">이메일</th>
+                <th className="px-6 py-4 text-left">메모</th>
+                <th className="px-6 py-4 text-center">수정</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     불러오는 중입니다...
                   </td>
                 </tr>
@@ -1271,27 +1291,27 @@ function SuppliersView() {
                 rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-t border-gray-100 even:bg-gray-50/40 text-gray-800"
+                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
                   >
-                    <td className="px-4 py-2">
+                    <td className="px-6 py-4">
                       {row.name}{' '}
                       {!row.is_active && (
-                        <span className="ml-1 inline-flex rounded-full border border-gray-300 px-2 text-[10px] text-gray-500">
+                        <span className="ml-1 inline-flex rounded-full border border-gray-200 px-2 text-[10px] text-gray-500">
                           미사용
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2">{row.contact_name ?? ''}</td>
-                    <td className="px-4 py-2">{row.phone ?? ''}</td>
-                    <td className="px-4 py-2">{row.mobile_phone ?? ''}</td>
-                    <td className="px-4 py-2">{row.fax ?? ''}</td>
-                    <td className="px-4 py-2">{row.email ?? ''}</td>
-                    <td className="px-4 py-2">{row.memo ?? ''}</td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-6 py-4">{row.contact_name ?? ''}</td>
+                    <td className="px-6 py-4">{row.phone ?? ''}</td>
+                    <td className="px-6 py-4">{row.mobile_phone ?? ''}</td>
+                    <td className="px-6 py-4">{row.fax ?? ''}</td>
+                    <td className="px-6 py-4">{row.email ?? ''}</td>
+                    <td className="px-6 py-4">{row.memo ?? ''}</td>
+                    <td className="px-6 py-4 text-center">
                       <button
                         type="button"
                         onClick={() => openEdit(row)}
-                        className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
                         수정
                       </button>
@@ -1300,7 +1320,7 @@ function SuppliersView() {
                 ))}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     내역이 없습니다.
                   </td>
                 </tr>
@@ -1441,7 +1461,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="text"
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -1450,7 +1470,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="text"
               value={form.contact_name}
               onChange={(e) => handleChange('contact_name', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -1459,7 +1479,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="text"
               value={form.mobile_phone}
               onChange={(e) => handleChange('mobile_phone', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -1468,7 +1488,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="text"
               value={form.phone}
               onChange={(e) => handleChange('phone', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -1477,7 +1497,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="text"
               value={form.fax}
               onChange={(e) => handleChange('fax', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -1486,7 +1506,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="email"
               value={form.email}
               onChange={(e) => handleChange('email', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-start gap-3">
@@ -1494,7 +1514,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
             <textarea
               value={form.memo}
               onChange={(e) => handleChange('memo', e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1 min-h-[80px]"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[80px] focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3 pt-1">
@@ -1504,7 +1524,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
                 type="checkbox"
                 checked={form.is_active}
                 onChange={(e) => handleChange('is_active', e.target.checked)}
-                className="rounded border-gray-300"
+                className="rounded-lg border border-gray-200"
               />
               사용
             </label>
@@ -1516,7 +1536,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
               type="button"
               onClick={handleDelete}
               disabled={loading}
-              className="rounded-md border border-red-500 px-4 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60"
+              className="rounded-lg border border-red-500 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
             >
               삭제
             </button>
@@ -1524,7 +1544,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             취소
           </button>
@@ -1532,7 +1552,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
             type="button"
             onClick={handleSave}
             disabled={loading}
-            className="rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
           >
             {loading ? '저장 중...' : '저장'}
           </button>
@@ -1589,21 +1609,21 @@ function AdjustmentHistoryView() {
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
-      <div className="flex flex-wrap gap-3 items-center">
+      <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">기간</span>
           <input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
           />
           <span className="text-gray-400">~</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1613,18 +1633,18 @@ function AdjustmentHistoryView() {
             placeholder="제품코드 또는 제품명"
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[200px]"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[200px] focus:ring-2 focus:ring-black focus:border-transparent"
           />
         </div>
         <div className="ml-auto flex gap-2">
           <button
             type="button"
             onClick={() => setShowAdjustModal(true)}
-            className="px-4 py-1.5 rounded-md border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50"
+            className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             재고 임의 조정
           </button>
-          <button className="px-4 py-1.5 rounded-md bg-slate-900 text-sm text-white hover:bg-black">
+          <button className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900">
             검색
           </button>
         </div>
@@ -1637,24 +1657,24 @@ function AdjustmentHistoryView() {
       <div className="text-xs text-gray-500">
         총 <span className="font-semibold">{rows.length}</span> 건
       </div>
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="border border-gray-200 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr className="text-gray-600">
-                <th className="px-4 py-2 text-left">날짜</th>
-                <th className="px-4 py-2 text-left">제품코드</th>
-                <th className="px-4 py-2 text-left">제품명</th>
-                <th className="px-4 py-2 text-right">변경 전</th>
-                <th className="px-4 py-2 text-right">변경 후</th>
-                <th className="px-4 py-2 text-right">변동 수량</th>
-                <th className="px-4 py-2 text-left">메모</th>
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                <th className="px-6 py-4 text-left">날짜</th>
+                <th className="px-6 py-4 text-left">제품코드</th>
+                <th className="px-6 py-4 text-left">제품명</th>
+                <th className="px-6 py-4 text-right">변경 전</th>
+                <th className="px-6 py-4 text-right">변경 후</th>
+                <th className="px-6 py-4 text-right">변동 수량</th>
+                <th className="px-6 py-4 text-left">메모</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                     불러오는 중입니다...
                   </td>
                 </tr>
@@ -1663,26 +1683,26 @@ function AdjustmentHistoryView() {
                 rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-t border-gray-100 even:bg-gray-50/40 text-gray-800"
+                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
                   >
-                    <td className="px-4 py-2">{row.adjusted_at}</td>
-                    <td className="px-4 py-2">{row.product_code ?? ''}</td>
-                    <td className="px-4 py-2">{row.product_name ?? ''}</td>
+                    <td className="px-6 py-4">{formatDateTime(row.adjusted_at)}</td>
+                    <td className="px-6 py-4">{row.product_code ?? ''}</td>
+                    <td className="px-6 py-4">{row.product_name ?? ''}</td>
                     <td className="px-4 py-2 text-right text-red-600">
                       {row.before_stock.toLocaleString()}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-6 py-4 text-right">
                       {row.after_stock.toLocaleString()}
                     </td>
-                    <td className="px-4 py-2 text-right">{row.diff.toLocaleString()}</td>
-                    <td className="px-4 py-2">{row.memo ?? ''}</td>
+                    <td className="px-6 py-4 text-right">{row.diff.toLocaleString()}</td>
+                    <td className="px-6 py-4">{row.memo ?? ''}</td>
                   </tr>
                 ))}
               {!loading && rows.length === 0 && (
                 <tr
-                  className="border-t border-gray-100 text-gray-800"
+                  className="text-gray-700"
                 >
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                     내역이 없습니다.
                   </td>
                 </tr>
@@ -1758,21 +1778,21 @@ function InventoryMovementHistoryView() {
   return (
     <>
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">기간</span>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
             <span className="text-gray-400">~</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -1782,7 +1802,7 @@ function InventoryMovementHistoryView() {
               placeholder="제품코드"
               value={productCode}
               onChange={(e) => setProductCode(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[140px]"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[140px] focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -1790,13 +1810,13 @@ function InventoryMovementHistoryView() {
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm min-w-[100px]"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
             >
               <option>전체</option>
             </select>
           </div>
           <div className="ml-auto flex gap-2">
-            <button className="px-4 py-1.5 rounded-md bg-slate-900 text-sm text-white hover:bg-black">
+            <button className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900">
               검색
             </button>
           </div>
@@ -1804,25 +1824,25 @@ function InventoryMovementHistoryView() {
         <div className="text-xs text-gray-500">
           총 <span className="font-semibold">{rows.length}</span> 건
         </div>
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr className="text-gray-600">
-                  <th className="px-4 py-2 text-left">생성일</th>
-                  <th className="px-4 py-2 text-left">사용자 ID</th>
-                  <th className="px-4 py-2 text-left">제품코드</th>
-                  <th className="px-4 py-2 text-left">제품명</th>
-                  <th className="px-4 py-2 text-left">구분</th>
-                  <th className="px-4 py-2 text-right">변동 수량</th>
-                  <th className="px-4 py-2 text-right">현 재고</th>
-                  <th className="px-4 py-2 text-center">상세</th>
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                  <th className="px-6 py-4 text-left">생성일</th>
+                  <th className="px-6 py-4 text-left">사용자 ID</th>
+                  <th className="px-6 py-4 text-left">제품코드</th>
+                  <th className="px-6 py-4 text-left">제품명</th>
+                  <th className="px-6 py-4 text-left">구분</th>
+                  <th className="px-6 py-4 text-right">변동 수량</th>
+                  <th className="px-6 py-4 text-right">현 재고</th>
+                  <th className="px-6 py-4 text-center">상세</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                       불러오는 중입니다...
                     </td>
                   </tr>
@@ -1831,24 +1851,24 @@ function InventoryMovementHistoryView() {
                   rows.map((row, idx) => (
                   <tr
                     key={idx}
-                    className="border-t border-gray-100 even:bg-gray-50/40 text-gray-800"
+                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
                   >
-                    <td className="px-4 py-2">{row.createdAt}</td>
-                    <td className="px-4 py-2">{row.userId}</td>
-                    <td className="px-4 py-2">{row.productCode}</td>
-                    <td className="px-4 py-2">{row.productName}</td>
-                    <td className="px-4 py-2">{row.type}</td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-6 py-4">{row.createdAt}</td>
+                    <td className="px-6 py-4">{row.userId}</td>
+                    <td className="px-6 py-4">{row.productCode}</td>
+                    <td className="px-6 py-4">{row.productName}</td>
+                    <td className="px-6 py-4">{row.type}</td>
+                    <td className="px-6 py-4 text-right">
                       {row.diff > 0 ? `+${row.diff}` : row.diff}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-6 py-4 text-right">
                       {row.currentStock.toLocaleString()}
                     </td>
-                    <td className="px-4 py-2 text-center">
+                    <td className="px-6 py-4 text-center">
                       <button
                         type="button"
                         onClick={() => setSelected(row)}
-                        className="px-3 py-1 text-xs rounded-md border border-sky-500 text-sky-600 hover:bg-sky-50"
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
                       >
                         보기
                       </button>
@@ -1857,7 +1877,7 @@ function InventoryMovementHistoryView() {
                   ))}
                 {!loading && rows.length === 0 && (
                   <tr className="border-t border-gray-100">
-                    <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                       내역이 없습니다.
                     </td>
                   </tr>
@@ -1891,12 +1911,12 @@ function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-sky-600 text-white">
-          <h3 className="text-base font-semibold">판매 상세</h3>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
+          <h3 className="text-xl font-bold text-black">판매 상세</h3>
           <button
             type="button"
             onClick={onClose}
-            className="text-white/80 hover:text-white material-symbols-outlined text-xl"
+            className="text-gray-400 hover:text-black material-symbols-outlined text-xl transition-colors"
           >
             close
           </button>
@@ -1909,32 +1929,32 @@ function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailM
                 {row.createdAt} · {row.userId}
               </div>
             </div>
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-gray-200 rounded-2xl overflow-hidden">
               <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-4 py-2 text-left">판매 항목</th>
-                    <th className="px-4 py-2 text-right">단가</th>
-                    <th className="px-4 py-2 text-right">수량</th>
-                    <th className="px-4 py-2 text-right">할인</th>
-                    <th className="px-4 py-2 text-right">금액</th>
-                    <th className="px-4 py-2 text-left">담당자</th>
-                    <th className="px-4 py-2 text-left">영업 구분</th>
-                    <th className="px-4 py-2 text-right">포인트 차감</th>
-                    <th className="px-4 py-2 text-right">정액권 차감</th>
+                    <th className="px-6 py-4 text-left">판매 항목</th>
+                    <th className="px-6 py-4 text-right">단가</th>
+                    <th className="px-6 py-4 text-right">수량</th>
+                    <th className="px-6 py-4 text-right">할인</th>
+                    <th className="px-6 py-4 text-right">금액</th>
+                    <th className="px-6 py-4 text-left">담당자</th>
+                    <th className="px-6 py-4 text-left">영업 구분</th>
+                    <th className="px-6 py-4 text-right">포인트 차감</th>
+                    <th className="px-6 py-4 text-right">정액권 차감</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-t border-gray-100">
-                    <td className="px-4 py-2">{row.productName}</td>
-                    <td className="px-4 py-2 text-right">6,500</td>
-                    <td className="px-4 py-2 text-right">1</td>
-                    <td className="px-4 py-2 text-right">0</td>
-                    <td className="px-4 py-2 text-right">6,500</td>
-                    <td className="px-4 py-2">winter 선생님</td>
-                    <td className="px-4 py-2">매출</td>
-                    <td className="px-4 py-2 text-right">0</td>
-                    <td className="px-4 py-2 text-right">0</td>
+                    <td className="px-6 py-4">{row.productName}</td>
+                    <td className="px-6 py-4 text-right">6,500</td>
+                    <td className="px-6 py-4 text-right">1</td>
+                    <td className="px-6 py-4 text-right">0</td>
+                    <td className="px-6 py-4 text-right">6,500</td>
+                    <td className="px-6 py-4">winter 선생님</td>
+                    <td className="px-6 py-4">매출</td>
+                    <td className="px-6 py-4 text-right">0</td>
+                    <td className="px-6 py-4 text-right">0</td>
                   </tr>
                 </tbody>
               </table>
@@ -1957,7 +1977,7 @@ function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailM
               </div>
               <div className="border border-gray-200 rounded-xl p-4 text-sm space-y-2">
                 <div className="font-semibold text-gray-800 mb-1">메모</div>
-                <div className="min-h-[60px] rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700 text-sm">
+                <div className="min-h-[60px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700 text-sm">
                   7Cb + mint
                 </div>
                 <div className="text-xs text-gray-500">
@@ -1971,7 +1991,7 @@ function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailM
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-md bg-sky-600 text-white text-sm font-medium hover:bg-sky-700"
+            className="px-4 py-2 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-900"
           >
             닫기
           </button>
@@ -2032,7 +2052,7 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
           <div className="mb-3 flex items-center gap-3 text-sm">
             <div className="flex items-center gap-2">
               <span className="font-medium text-gray-700">분류</span>
-              <select className="min-w-[100px] rounded-md border border-gray-300 px-2 py-1 text-sm">
+              <select className="min-w-[100px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent">
                 <option>전체</option>
               </select>
             </div>
@@ -2041,28 +2061,28 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
               <input
                 type="text"
                 placeholder="제품코드 또는 제품명"
-                className="min-w-[200px] rounded-md border border-gray-300 px-2 py-1 text-sm"
+                className="min-w-[200px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               />
             </div>
             <label className="ml-4 inline-flex cursor-pointer items-center gap-2 text-xs text-gray-600">
-              <input type="checkbox" className="rounded border-gray-300" />
+              <input type="checkbox" className="rounded-lg border border-gray-200" />
               판매용 제품 포함
             </label>
           </div>
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="w-full border-collapse text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-gray-600">
+              <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-2 text-left">제품코드</th>
-                  <th className="px-4 py-2 text-left">제품명</th>
-                  <th className="px-4 py-2 text-right">현 재고</th>
-                  <th className="px-4 py-2 text-center">추가</th>
+                  <th className="px-6 py-4 text-left">제품코드</th>
+                  <th className="px-6 py-4 text-left">제품명</th>
+                  <th className="px-6 py-4 text-right">현 재고</th>
+                  <th className="px-6 py-4 text-center">추가</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                       불러오는 중입니다...
                     </td>
                   </tr>
@@ -2070,16 +2090,16 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
                 {!loading &&
                   items.map((item) => (
                     <tr key={item.id} className="border-t border-gray-100">
-                      <td className="px-4 py-2">{item.sku ?? item.id}</td>
-                      <td className="px-4 py-2">{item.name}</td>
-                      <td className="px-4 py-2 text-right">
+                      <td className="px-6 py-4">{item.sku ?? item.id}</td>
+                      <td className="px-6 py-4">{item.name}</td>
+                      <td className="px-6 py-4 text-right">
                         {Number(item.stock ?? 0).toLocaleString()}
                       </td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-6 py-4 text-center">
                         <button
                           type="button"
                           onClick={() => setSelectedItem(item)}
-                          className="rounded-md border border-sky-500 px-3 py-1 text-xs text-sky-600 hover:bg-sky-50"
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                         >
                           추가
                         </button>
@@ -2088,7 +2108,7 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
                   ))}
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                       등록된 재고가 없습니다.
                     </td>
                   </tr>
@@ -2101,7 +2121,7 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             닫기
           </button>
@@ -2209,7 +2229,7 @@ function InternalUsageEntryModal({
               type="text"
               value={productName}
               readOnly
-              className="flex-1 rounded-md border border-gray-300 bg-gray-50 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -2221,7 +2241,7 @@ function InternalUsageEntryModal({
               min={1}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -2229,7 +2249,7 @@ function InternalUsageEntryModal({
             <select
               value={staff}
               onChange={(e) => setStaff(e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             >
               <option value="">선택</option>
             </select>
@@ -2240,7 +2260,7 @@ function InternalUsageEntryModal({
               type="text"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-3">
@@ -2249,7 +2269,7 @@ function InternalUsageEntryModal({
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
         </div>
@@ -2257,7 +2277,7 @@ function InternalUsageEntryModal({
           {mode === 'edit' && (
             <button
               type="button"
-              className="rounded-md border border-red-500 px-4 py-1.5 text-sm text-red-600 hover:bg-red-50"
+              className="rounded-lg border border-red-500 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
             >
               삭제
             </button>
@@ -2265,7 +2285,7 @@ function InternalUsageEntryModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             취소
           </button>
@@ -2273,7 +2293,7 @@ function InternalUsageEntryModal({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
           >
             {saving ? '저장 중...' : '저장'}
           </button>
@@ -2381,18 +2401,18 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="w-full border-collapse text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-gray-600">
+              <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-2 text-left">제품코드</th>
-                  <th className="px-4 py-2 text-left">제품명</th>
-                  <th className="px-4 py-2 text-right">현 재고 (조정 전)</th>
-                  <th className="px-4 py-2 text-right">현 재고 (조정 후)</th>
+                  <th className="px-6 py-4 text-left">제품코드</th>
+                  <th className="px-6 py-4 text-left">제품명</th>
+                  <th className="px-6 py-4 text-right">현 재고 (조정 전)</th>
+                  <th className="px-6 py-4 text-right">현 재고 (조정 후)</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                       불러오는 중입니다...
                     </td>
                   </tr>
@@ -2403,16 +2423,16 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
                     const after = draftAfter[item.id] ?? before;
                     return (
                       <tr key={item.id} className="border-t border-gray-100">
-                        <td className="px-4 py-2">{item.sku ?? item.id}</td>
-                        <td className="px-4 py-2">{item.name}</td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4">{item.sku ?? item.id}</td>
+                        <td className="px-6 py-4">{item.name}</td>
+                        <td className="px-6 py-4 text-right">
                           {before.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4 text-right">
                           <input
                             type="number"
                             min={0}
-                            className="w-24 rounded-md border border-gray-300 px-2 py-1 text-right text-sm"
+                            className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                             value={after}
                             onChange={(e) => handleChangeAfter(item.id, e.target.value)}
                           />
@@ -2422,7 +2442,7 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
                   })}
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
                       등록된 재고가 없습니다.
                     </td>
                   </tr>
@@ -2435,7 +2455,7 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             취소
           </button>
@@ -2443,7 +2463,7 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
           >
             {saving ? '저장 중...' : '저장'}
           </button>
@@ -2535,29 +2555,29 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
                   </span>
                 </div>
                 <div className="text-xs text-gray-500">
-                  생성일: {header?.created_at ?? ''}
+                  생성일: {formatDateTime(header?.created_at) || ''}
                 </div>
               </div>
               <div className="text-gray-600 text-xs">
-                날짜: {header?.purchase_date ?? ''}{' '}
+                날짜: {formatDateTime(header?.purchase_date) || ''}{' '}
                 {header?.memo && <span className="ml-2">메모: {header.memo}</span>}
               </div>
             </div>
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-gray-200 rounded-2xl overflow-hidden">
               <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-4 py-2 text-left">제품 코드</th>
-                    <th className="px-4 py-2 text-left">상품명</th>
-                    <th className="px-4 py-2 text-right">단가</th>
-                    <th className="px-4 py-2 text-right">수량</th>
-                    <th className="px-4 py-2 text-right">금액</th>
+                    <th className="px-6 py-4 text-left">제품 코드</th>
+                    <th className="px-6 py-4 text-left">상품명</th>
+                    <th className="px-6 py-4 text-right">단가</th>
+                    <th className="px-6 py-4 text-right">수량</th>
+                    <th className="px-6 py-4 text-right">금액</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                         불러오는 중입니다...
                       </td>
                     </tr>
@@ -2565,20 +2585,20 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
                   {!loading &&
                     items.map((item) => (
                       <tr key={item.id} className="border-t border-gray-100">
-                        <td className="px-4 py-2">{item.product_code ?? ''}</td>
-                        <td className="px-4 py-2">{item.product_name ?? ''}</td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4">{item.product_code ?? ''}</td>
+                        <td className="px-6 py-4">{item.product_name ?? ''}</td>
+                        <td className="px-6 py-4 text-right">
                           {Number(item.unit_price ?? 0).toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 text-right">{item.quantity}</td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4 text-right">{item.quantity}</td>
+                        <td className="px-6 py-4 text-right">
                           {Number(item.line_amount ?? 0).toLocaleString()}
                         </td>
                       </tr>
                     ))}
                   {!loading && !items.length && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                         품목이 없습니다.
                       </td>
                     </tr>
@@ -2592,7 +2612,7 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             닫기
           </button>
@@ -2713,7 +2733,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
               <select
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
-                className="rounded-md border border-gray-300 px-2 py-1 text-sm min-w-[200px] bg-white"
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm min-w-[200px] bg-white focus:ring-2 focus:ring-black focus:border-transparent"
               >
                 <option value="">선택</option>
                 {supplierOptions.map((name) => (
@@ -2729,7 +2749,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               />
             </div>
           </div>
@@ -2738,14 +2758,14 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
             <textarea
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm min-h-[80px]"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[80px] focus:ring-2 focus:ring-black focus:border-transparent"
             />
           </div>
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setShowItemPicker(true)}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               제품 추가
             </button>
@@ -2756,17 +2776,17 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
               </span>
             </div>
           </div>
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="border border-gray-200 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr className="text-gray-600">
-                    <th className="px-4 py-2 text-left">제품 코드</th>
-                    <th className="px-4 py-2 text-left">상품명</th>
-                    <th className="px-4 py-2 text-right">단가</th>
-                    <th className="px-4 py-2 text-right">수량</th>
-                    <th className="px-4 py-2 text-right">금액</th>
-                    <th className="px-4 py-2 text-center">삭제</th>
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                    <th className="px-6 py-4 text-left">제품 코드</th>
+                    <th className="px-6 py-4 text-left">상품명</th>
+                    <th className="px-6 py-4 text-right">단가</th>
+                    <th className="px-6 py-4 text-right">수량</th>
+                    <th className="px-6 py-4 text-right">금액</th>
+                    <th className="px-6 py-4 text-center">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2775,12 +2795,12 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
                       Number(item.unitPrice ?? 0) * Number(item.quantity ?? 0);
                     return (
                       <tr key={`${item.inventoryItemId}-${idx}`} className="border-t border-gray-100">
-                        <td className="px-4 py-2">{item.code}</td>
-                        <td className="px-4 py-2">{item.name}</td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4">{item.code}</td>
+                        <td className="px-6 py-4">{item.name}</td>
+                        <td className="px-6 py-4 text-right">
                           <input
                             type="number"
-                            className="w-24 rounded-md border border-gray-300 px-2 py-1 text-right text-sm"
+                            className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                             value={item.unitPrice}
                             onChange={(e) =>
                               setItems((prev) =>
@@ -2791,10 +2811,10 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
                             }
                           />
                         </td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4 text-right">
                           <input
                             type="number"
-                            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-right text-sm"
+                            className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                             value={item.quantity}
                             onChange={(e) =>
                               setItems((prev) =>
@@ -2805,16 +2825,16 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
                             }
                           />
                         </td>
-                        <td className="px-4 py-2 text-right">
+                        <td className="px-6 py-4 text-right">
                           {lineAmount.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 text-center">
+                        <td className="px-6 py-4 text-center">
                           <button
                             type="button"
                             onClick={() =>
                               setItems((prev) => prev.filter((_, i) => i !== idx))
                             }
-                            className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                           >
                             삭제
                           </button>
@@ -2824,7 +2844,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
                   })}
                   {!items.length && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         내역이 없습니다.
                       </td>
                     </tr>
@@ -2838,7 +2858,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             취소
           </button>
@@ -2846,7 +2866,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
             type="button"
             onClick={handleSave}
             disabled={loading}
-            className="rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
           >
             {loading ? '저장 중...' : '저장'}
           </button>
@@ -2964,27 +2984,27 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="제품 코드 / 이름 / 바코드"
-                className="rounded-md border border-gray-300 px-3 py-1 text-sm min-w-[240px]"
+                className="rounded-lg border border-gray-200 px-3 py-2 text-sm min-w-[240px] focus:ring-2 focus:ring-black focus:border-transparent"
               />
             </div>
           </div>
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="border border-gray-200 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-4 py-2 text-left">제품 코드</th>
-                    <th className="px-4 py-2 text-left">상품명</th>
-                    <th className="px-4 py-2 text-right">단가</th>
-                    <th className="px-4 py-2 text-right">수량</th>
-                    <th className="px-4 py-2 text-right">금액</th>
-                    <th className="px-4 py-2 text-right">현 재고</th>
+                    <th className="px-6 py-4 text-left">제품 코드</th>
+                    <th className="px-6 py-4 text-left">상품명</th>
+                    <th className="px-6 py-4 text-right">단가</th>
+                    <th className="px-6 py-4 text-right">수량</th>
+                    <th className="px-6 py-4 text-right">금액</th>
+                    <th className="px-6 py-4 text-right">현 재고</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         불러오는 중입니다...
                       </td>
                     </tr>
@@ -2999,12 +3019,12 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
                         Number(row.unitPrice ?? 0) * Number(row.quantity ?? 0);
                       return (
                         <tr key={item.id} className="border-t border-gray-100">
-                          <td className="px-4 py-2">{item.sku ?? String(item.id)}</td>
-                          <td className="px-4 py-2">{item.name}</td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-6 py-4">{item.sku ?? String(item.id)}</td>
+                          <td className="px-6 py-4">{item.name}</td>
+                          <td className="px-6 py-4 text-right">
                             <input
                               type="number"
-                              className="w-24 rounded-md border border-gray-300 px-2 py-1 text-right text-sm"
+                              className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                               value={row.unitPrice}
                               onChange={(e) =>
                                 setDraft((prev) => ({
@@ -3017,10 +3037,10 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
                               }
                             />
                           </td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-6 py-4 text-right">
                             <input
                               type="number"
-                              className="w-20 rounded-md border border-gray-300 px-2 py-1 text-right text-sm"
+                              className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                               value={row.quantity}
                               onChange={(e) =>
                                 setDraft((prev) => ({
@@ -3033,10 +3053,10 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
                               }
                             />
                           </td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-6 py-4 text-right">
                             {amount.toLocaleString()}
                           </td>
-                          <td className="px-4 py-2 text-right">
+                          <td className="px-6 py-4 text-right">
                             {Number(item.stock ?? 0).toLocaleString()}
                           </td>
                         </tr>
@@ -3044,7 +3064,7 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
                     })}
                   {!loading && items.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         등록된 재고가 없습니다.
                       </td>
                     </tr>
@@ -3058,14 +3078,14 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             취소
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-900"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
           >
             확인
           </button>
@@ -3129,7 +3149,7 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">Add Product</h2>
+          <h2 className="text-xl font-bold text-black">상품 추가</h2>
           <button
             type="button"
             onClick={onClose}
@@ -3145,7 +3165,7 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">상품명</label>
             <input
               type="text"
               required
@@ -3155,7 +3175,7 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Size / Variant</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">용량 / 옵션</label>
             <input
               type="text"
               value={size}
@@ -3174,23 +3194,23 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               >
-                <option value="Hair Care">Hair Care</option>
-                <option value="Coloring">Coloring</option>
-                <option value="Styling">Styling</option>
-                <option value="Treatment">Treatment</option>
-                <option value="Tools">Tools</option>
+                <option value="Hair Care">헤어 케어</option>
+                <option value="Coloring">염색</option>
+                <option value="Styling">스타일링</option>
+                <option value="Treatment">트리트먼트</option>
+                <option value="Tools">도구</option>
               </select>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Price (AUD)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">가격 (AUD)</label>
               <input
                 type="number"
                 min="0"
@@ -3202,7 +3222,7 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Initial Stock</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">초기 재고</label>
               <input
                 type="number"
                 min="0"
@@ -3215,23 +3235,23 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
             <div className="grid grid-cols-5 gap-2">
               {ICON_OPTIONS.map((option) => (
                 <button
                   key={option}
                   type="button"
                   onClick={() => setIcon(option)}
-                  className={`flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs ${
+                  className={`min-w-0 w-full flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs overflow-hidden ${
                     icon === option
                       ? 'border-black bg-black text-white'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-base">
+                  <span className="material-symbols-outlined text-base shrink-0">
                     {option}
                   </span>
-                  <span className="truncate">{option}</span>
+                  <span className="truncate w-full min-w-0 text-center">{option}</span>
                 </button>
               ))}
             </div>
@@ -3242,14 +3262,14 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
             >
-              Cancel
+              취소
             </button>
             <button
               type="submit"
               disabled={loading}
               className="px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-60"
             >
-              {loading ? 'Adding...' : 'Add Product'}
+              {loading ? '추가 중...' : '상품 추가'}
             </button>
           </div>
         </form>
@@ -3273,6 +3293,7 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
   const [icon, setIcon] = useState<IconName>(
     (product.icon as IconName) || 'inventory_2'
   );
+  const [editStock, setEditStock] = useState<string>(String(product.stock ?? 0));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -3294,6 +3315,7 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
           category,
           price: Number(price || 0),
           icon,
+          stock: Number(editStock ?? 0),
         }),
       });
       const data = await res.json();
@@ -3314,7 +3336,7 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">Edit Product</h2>
+          <h2 className="text-xl font-bold text-black">상품 수정</h2>
           <button
             type="button"
             onClick={onClose}
@@ -3330,7 +3352,7 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">상품명</label>
             <input
               type="text"
               required
@@ -3340,7 +3362,7 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Size / Variant</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">용량 / 옵션</label>
             <input
               type="text"
               value={size}
@@ -3359,23 +3381,23 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               >
-                <option value="Hair Care">Hair Care</option>
-                <option value="Coloring">Coloring</option>
-                <option value="Styling">Styling</option>
-                <option value="Treatment">Treatment</option>
-                <option value="Tools">Tools</option>
+                <option value="Hair Care">헤어 케어</option>
+                <option value="Coloring">염색</option>
+                <option value="Styling">스타일링</option>
+                <option value="Treatment">트리트먼트</option>
+                <option value="Tools">도구</option>
               </select>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Price (AUD)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">가격 (AUD)</label>
               <input
                 type="number"
                 min="0"
@@ -3387,26 +3409,36 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Icon</label>
-              <div className="grid grid-cols-5 gap-2">
-                {ICON_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setIcon(option)}
-                    className={`flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs ${
-                      icon === option
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {option}
-                    </span>
-                    <span className="truncate">{option}</span>
-                  </button>
-                ))}
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">현재 재고</label>
+              <input
+                type="number"
+                min="0"
+                value={editStock}
+                onChange={(e) => setEditStock(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+            <div className="grid grid-cols-5 gap-2">
+              {ICON_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setIcon(option)}
+                  className={`min-w-0 w-full flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs overflow-hidden ${
+                    icon === option
+                      ? 'border-black bg-black text-white'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base shrink-0">
+                    {option}
+                  </span>
+                  <span className="truncate w-full min-w-0 text-center">{option}</span>
+                </button>
+              ))}
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
@@ -3415,14 +3447,14 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
             >
-              Cancel
+              취소
             </button>
             <button
               type="submit"
               disabled={loading}
               className="px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-60"
             >
-              {loading ? 'Saving...' : 'Save Changes'}
+              {loading ? '저장 중...' : '변경 저장'}
             </button>
           </div>
         </form>

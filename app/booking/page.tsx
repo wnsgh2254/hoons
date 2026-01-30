@@ -420,7 +420,7 @@ export default function BookingPage() {
     }
   };
 
-  // Comment: Create booking in DB when deposit is paid (simulated)
+  // Comment: Create Stripe Checkout session for deposit payment and create booking in DB
   const handlePayDeposit = async () => {
     if (isSubmitting) return;
     if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
@@ -431,11 +431,18 @@ export default function BookingPage() {
       const shopDbId = currentShop?._dbId ?? null;
       const designerId = selectedDesigner ? Number(selectedDesigner.id) : null;
       const serviceId = selectedService ? Number(selectedService.id) : null;
-      
       // Comment: Extract day from YYYY-MM-DD format
       const day = selectedDate ? Number(selectedDate.split('-')[2]) : null;
 
-      await fetch('/api/appointment', {
+      const formattedDateLabel = selectedDate
+        ? new Date(selectedDate).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })
+        : '';
+
+      const res = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -452,15 +459,31 @@ export default function BookingPage() {
           customerName, // Comment: Optional customer name field
           customerPhone, // Comment: Optional customer phone field
           existingCustomerId, // Comment: Optional existing customer ID if already resolved
+          serviceName: selectedService?.name ?? '',
+          shopName: currentShop?.name ?? '',
+          designerName: selectedDesigner?.name ?? '',
+          formattedDateLabel,
         }),
       });
-      // TODO: Optionally show a success toast or redirect
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error('Error creating Stripe checkout session:', data.error);
+        alert(data.error || 'Failed to start payment. Please try again.');
+        return;
+      }
+
+      if (data.url) {
+        // Comment: Redirect to hosted Stripe Checkout page
+        window.location.href = data.url as string;
+      } else {
+        alert('Payment URL was not returned from the server.');
+      }
     } catch (error) {
-      console.error('Error calling booking API:', error);
+      console.error('Error starting Stripe deposit payment:', error);
+      alert('결제를 시작하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
-      // Comment: After (simulated) payment success, move to confirmation page
-      setStep('confirmed');
     }
   };
 
@@ -492,7 +515,7 @@ export default function BookingPage() {
   if (step === 'deposit') {
     return (
       <div className="w-full bg-[#F4F4F4] font-display min-h-screen flex flex-col overflow-x-hidden antialiased pt-24">
-        <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 md:px-12 pt-8 pb-24 space-y-16">
+        <main className="grow w-full max-w-[1280px] mx-auto px-6 md:px-12 pt-8 pb-24 space-y-16">
           {/* Step indicator */}
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-400 uppercase">01. Appointment Details</span>
@@ -513,52 +536,10 @@ export default function BookingPage() {
               </div>
               <div className="bg-[#F4F4F4] border border-black p-8">
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-600" htmlFor="card-number">
-                      Card Number
-                    </label>
-                    <input
-                      className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
-                      id="card-number"
-                      placeholder="1234 5678 9012 3456"
-                      type="text"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-600" htmlFor="expiry">
-                        Expiry Date
-                      </label>
-                      <input
-                        className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
-                        id="expiry"
-                        placeholder="MM/YY"
-                        type="text"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-600" htmlFor="cvv">
-                        CVV
-                      </label>
-                      <input
-                        className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
-                        id="cvv"
-                        placeholder="123"
-                        type="text"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-600" htmlFor="card-name">
-                      Cardholder Name
-                    </label>
-                    <input
-                      className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
-                      id="card-name"
-                      placeholder="John Doe"
-                      type="text"
-                    />
-                  </div>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    Your payment will be completed on a secure Stripe checkout page. No card
+                    details are stored on HAEYOOM servers.
+                  </p>
                 </div>
               </div>
               <div className="flex items-center justify-between pt-4">
@@ -646,7 +627,7 @@ export default function BookingPage() {
   if (step === 'confirmed') {
     return (
       <div className="w-full bg-[#F4F4F4] font-display min-h-screen flex flex-col overflow-x-hidden antialiased pt-24">
-        <main className="flex-grow w-full max-w-[1280px] mx-auto px-6 md:px-12 py-10">
+        <main className="grow w-full max-w-[1280px] mx-auto px-6 md:px-12 py-10">
           <div className="max-w-3xl mx-auto text-center space-y-8">
             <div className="inline-flex items-center justify-center  bg-emerald-100 text-emerald-700 px-4 py-2 text-sm font-medium gap-2">
               <span className="material-symbols-outlined">check_circle</span>
@@ -713,7 +694,7 @@ export default function BookingPage() {
   // Step 2: Service & Designer Selection
   return (
     <div className="w-full bg-[#F4F4F4] font-display antialiased min-h-screen pt-24">
-      <main className="flex-1 w-full max-w-[1280px] mx-auto px-6 md:px-12 pt-8 pb-24 space-y-16">
+      <main className="grow w-full max-w-[1280px] mx-auto px-6 md:px-12 pt-8 pb-24 space-y-16">
         {/* Step indicator */}
         <div className="flex items-center gap-2 text-sm">
           <span className="text-black font-bold uppercase">01. Appointment Details</span>
