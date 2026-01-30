@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useSearchParams } from 'next/navigation';
 
-export default function BookingConfirmedPage() {
+function BookingConfirmedContent() {
   const searchParams = useSearchParams();
 
   const shop = searchParams.get('shop') || 'HAEYOOM';
@@ -84,3 +84,24 @@ export default function BookingConfirmedPage() {
   );
 }
 
+function ConfirmedFallback() {
+  return (
+    <div className="w-full bg-[#F4F4F4] font-display min-h-screen flex flex-col overflow-x-hidden antialiased pt-24">
+      <main className="grow w-full max-w-[1280px] mx-auto px-6 md:px-12 py-10">
+        <div className="max-w-3xl mx-auto text-center space-y-8">
+          <div className="inline-flex items-center justify-center text-gray-500 text-sm">
+            Loading...
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default function BookingConfirmedPage() {
+  return (
+    <Suspense fallback={<ConfirmedFallback />}>
+      <BookingConfirmedContent />
+    </Suspense>
+  );
+}
