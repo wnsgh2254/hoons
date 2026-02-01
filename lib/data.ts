@@ -35,6 +35,69 @@ function buildBookingDateFromDay(day: number): string {
   return `2023-10-${dayStr}`;
 }
 
+// Comment: Normalize AU phone numbers for lookup/insert (local + e164)
+export function buildPhoneVariants(phoneRaw: string | undefined | null) {
+  if (!phoneRaw) return { local: null as string | null, e164: null as string | null };
+  const digitsOnly = phoneRaw.replace(/[^0-9+]/g, '');
+  if (digitsOnly.startsWith('+61')) {
+    const withoutCountry = digitsOnly.slice(3);
+    const local =
+      withoutCountry.length === 9 && !withoutCountry.startsWith('0')
+        ? `0${withoutCountry}`
+        : digitsOnly;
+    return { local, e164: digitsOnly };
+  }
+  if (!digitsOnly.startsWith('+') && digitsOnly.startsWith('61')) {
+    const e164 = `+${digitsOnly}`;
+    const withoutCountry = digitsOnly.slice(2);
+    const local =
+      withoutCountry.length === 9 && !withoutCountry.startsWith('0')
+        ? `0${withoutCountry}`
+        : e164;
+    return { local, e164 };
+  }
+  if (digitsOnly.startsWith('0') && digitsOnly.length >= 9) {
+    const local = digitsOnly;
+    const e164 = `+61${digitsOnly.slice(1)}`;
+    return { local, e164 };
+  }
+  return { local: digitsOnly, e164: null as string | null };
+}
+
+// Comment: Look up existing customer by phone (local or e164). Returns id or null.
+export async function getCustomerIdByPhone(phone: string): Promise<number | null> {
+  const { local, e164 } = buildPhoneVariants(phone);
+  const orParts: string[] = [];
+  if (local) orParts.push(`phone.eq.${local}`);
+  if (e164) orParts.push(`phone.eq.${e164}`);
+  if (orParts.length === 0) return null;
+  const { data } = await supabase
+    .from('customers')
+    .select('id')
+    .or(orParts.join(','))
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+// Comment: Get existing customer by phone or create one with name+phone. Returns customer id.
+export async function getOrCreateCustomerByNameAndPhone(name: string, phone: string): Promise<number> {
+  const existingId = await getCustomerIdByPhone(phone);
+  if (existingId != null) return existingId;
+  const { local } = buildPhoneVariants(phone);
+  const { data, error } = await supabase
+    .from('customers')
+    .insert({
+      name: String(name).trim(),
+      phone: local ?? phone.replace(/[^0-9+]/g, ''),
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error('Failed to create customer');
+  return data.id;
+}
+
 // Comment: Create a simple booking record in Supabase based on public booking payload
 export async function createPublicBooking(payload: PublicBookingPayload) {
   const {
@@ -75,6 +138,33 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
 
   if (error) {
     // Comment: Surface a clear error for the API route to handle
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+// Comment: Update booking to confirmed and set deposit_paid after Stripe payment succeeds (called from webhook). Optionally set customer_id when created on deposit paid.
+export async function updateBookingAfterDepositPaid(
+  bookingId: number,
+  depositPaidAmount: number,
+  customerId?: number | null,
+) {
+  const updatePayload: { status: string; deposit_paid: number; customer_id?: number | null } = {
+    status: 'confirmed',
+    deposit_paid: depositPaidAmount,
+  };
+  if (customerId !== undefined) {
+    updatePayload.customer_id = customerId;
+  }
+  const { data, error } = await supabase
+    .from('bookings')
+    .update(updatePayload)
+    .eq('id', bookingId)
+    .select()
+    .single();
+
+  if (error) {
     throw new Error(error.message);
   }
 

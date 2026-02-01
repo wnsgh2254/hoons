@@ -1,36 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { createPublicBooking } from "@/lib/data";
-
-// Comment: Helper to normalize AU phone numbers (same as create-checkout-session)
-function buildPhoneVariants(phoneRaw: string | undefined | null) {
-  if (!phoneRaw) return { local: null as string | null, e164: null as string | null };
-  const digitsOnly = phoneRaw.replace(/[^0-9+]/g, "");
-  if (digitsOnly.startsWith("+61")) {
-    const withoutCountry = digitsOnly.slice(3);
-    const local =
-      withoutCountry.length === 9 && !withoutCountry.startsWith("0")
-        ? `0${withoutCountry}`
-        : digitsOnly;
-    return { local, e164: digitsOnly };
-  }
-  if (!digitsOnly.startsWith("+") && digitsOnly.startsWith("61")) {
-    const e164 = `+${digitsOnly}`;
-    const withoutCountry = digitsOnly.slice(2);
-    const local =
-      withoutCountry.length === 9 && !withoutCountry.startsWith("0")
-        ? `0${withoutCountry}`
-        : e164;
-    return { local, e164 };
-  }
-  if (digitsOnly.startsWith("0") && digitsOnly.length >= 9) {
-    const local = digitsOnly;
-    const e164 = `+61${digitsOnly.slice(1)}`;
-    return { local, e164 };
-  }
-  return { local: digitsOnly, e164: null as string | null };
-}
+import { createPublicBooking, getCustomerIdByPhone } from "@/lib/data";
 
 // Comment: Create PaymentIntent for in-page Payment Element (Salon de Jessie style)
 export async function POST(request: NextRequest) {
@@ -73,51 +44,18 @@ export async function POST(request: NextRequest) {
       apiVersion: "2026-01-28.clover",
     });
 
+    // Comment: Only look up existing customer; new customer is created in webhook after deposit is paid
     let customerId: number | null = null;
-
-    if (customerPhone && customerName) {
-      const { local, e164 } = buildPhoneVariants(customerPhone);
-
-      if (existingCustomerId) {
-        const { data: existingById } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("id", existingCustomerId)
-          .maybeSingle();
-        if (existingById?.id) {
-          customerId = existingById.id;
-        }
-      }
-
-      if (!customerId) {
-        const orFilterParts: string[] = [];
-        if (local) orFilterParts.push(`phone.eq.${local}`);
-        if (e164) orFilterParts.push(`phone.eq.${e164}`);
-        const { data: existingByPhone } = await supabase
-          .from("customers")
-          .select("id, name, phone")
-          .or(orFilterParts.join(","))
-          .limit(1)
-          .maybeSingle();
-        if (existingByPhone?.id) {
-          customerId = existingByPhone.id;
-        }
-      }
-
-      if (!customerId) {
-        const { local } = buildPhoneVariants(customerPhone);
-        const { data: createdCustomer } = await supabase
-          .from("customers")
-          .insert({
-            name: String(customerName).trim(),
-            phone: local,
-          })
-          .select("id")
-          .single();
-        if (createdCustomer?.id) {
-          customerId = createdCustomer.id;
-        }
-      }
+    if (existingCustomerId) {
+      const { data: existingById } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("id", existingCustomerId)
+        .maybeSingle();
+      if (existingById?.id) customerId = existingById.id;
+    }
+    if (!customerId && customerPhone) {
+      customerId = await getCustomerIdByPhone(customerPhone);
     }
 
     const booking = await createPublicBooking({
@@ -161,6 +99,10 @@ export async function POST(request: NextRequest) {
         designer_name: String(designerName || ""),
         formatted_date: String(formattedDateLabel || fullDate || ""),
         time_label: String(timeLabel),
+        // Comment: For new customers; webhook creates customer and sets booking.customer_id after deposit paid
+        ...(customerId == null && customerName && customerPhone
+          ? { customer_name: String(customerName).trim(), customer_phone: String(customerPhone).trim() }
+          : {}),
       },
     });
 

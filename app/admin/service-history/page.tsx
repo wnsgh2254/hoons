@@ -246,6 +246,16 @@ export default function ServiceHistoryPage() {
                                 Deposit: ₩{Number(service.deposit_amount).toLocaleString('ko-KR')}
                               </span>
                             )}
+                            {service.deposit_paid != null && Number(service.deposit_paid) >= 0 && (
+                              <>
+                                <span className="text-xs text-green-600 block">
+                                  Paid: ₩{Number(service.deposit_paid).toLocaleString('ko-KR')}
+                                </span>
+                                <span className="text-xs text-gray-700 block font-medium">
+                                  Remaining: ₩{((Number(service.total_amount) || 0) - (Number(service.deposit_paid) || 0)).toLocaleString('ko-KR')}
+                                </span>
+                              </>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
