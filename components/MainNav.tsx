@@ -25,22 +25,22 @@ export function MainNav() {
 
   return (
     <>
-      {/* Minimal Sticky Header - Design 2 Style */}
-      <header className="fixed top-0 left-0 w-full z-50 mix-blend-difference text-white pointer-events-none">
-        <div className="w-full px-6 md:px-12 py-6 flex items-center justify-between text-xs md:text-sm font-light tracking-widest uppercase leading-none pointer-events-auto">
+      {/* Minimal Sticky Header - Design 2 Style. Prevent overflow so mobile Menu is always visible. */}
+      <header className="fixed top-0 left-0 right-0 w-full max-w-[100vw] z-50 mix-blend-difference text-white pointer-events-none overflow-x-hidden">
+        <div className="w-full max-w-[100vw] px-4 sm:px-6 md:px-12 py-6 flex items-center justify-between gap-3 text-xs md:text-sm font-light tracking-widest uppercase leading-none pointer-events-auto min-w-0">
           
-          {/* Left: Brand Logo */}
-          <Link href="/" className="block z-50 group" onClick={closeMenu} style={{ isolation: 'isolate' }}>
+          {/* Left: Brand Logo - allow shrink on mobile so Menu stays visible */}
+          <Link href="/" className="block z-50 group shrink-0 min-w-0 md:shrink-0" onClick={closeMenu} style={{ isolation: 'isolate' }}>
             <Image 
               src="/images/logo-white.png" 
               alt="HAEYOOM" 
               width={140} 
               height={140}
-              className="group-hover:opacity-70 transition-opacity"
+              className="group-hover:opacity-70 transition-opacity max-h-6 w-auto"
               style={{ 
-                // mixBlendMode: 'normal',
                 height: '24px',
-                width: 'auto'
+                width: 'auto',
+                maxWidth: '120px',
               }}
               priority
             />
@@ -54,10 +54,10 @@ export function MainNav() {
             <Link href={sectionHref('#designers')} className="hover:underline">Designers</Link>
           </nav>
 
-          {/* Right: Book Now / Staff Login / Mobile Menu */}
-          <div className="flex flex-col items-end gap-1">
+          {/* Right: Book Now / Mobile Menu - never shrink so Menu is always visible on mobile */}
+          <div className="flex flex-col items-end gap-1 shrink-0">
             <div className="md:hidden">
-              <button className="uppercase" onClick={toggleMenu}>
+              <button className="uppercase whitespace-nowrap py-1 px-2 -mr-1" onClick={toggleMenu} aria-label={isOpen ? 'Close menu' : 'Open menu'}>
                 {isOpen ? 'Close' : 'Menu'}
               </button>
             </div>

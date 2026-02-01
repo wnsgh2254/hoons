@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event;
 
   try {
-    const body = await request.text();
+    // Comment: Use blob().text() so body is not modified by platform (Vercel etc.); required for signature verification
+    const body = await (await request.blob()).text();
     const signature = request.headers.get("stripe-signature");
     if (!signature) {
       return NextResponse.json(

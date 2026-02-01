@@ -122,12 +122,11 @@ const Home = () => {
   return (
     <div className="w-full bg-[#F4F4F4]">
       
-      {/* HERO SECTION: Single Large Image sticking to top */}
-      {/* Added border-b border-black */}
-      <section className="relative w-full h-screen overflow-hidden border-b border-black">
+      {/* HERO SECTION: Single Large Image - full coverage so no white gap when zoomed out */}
+      <section className="relative w-full min-h-dvh overflow-hidden border-b border-black bg-[#2a2a2a]">
         <img 
             src="/images/hero.png" 
-            className="w-full h-full object-cover object-top grayscale" 
+            className="absolute inset-0 w-full h-full object-cover object-top grayscale min-w-full min-h-full" 
             alt="Hero" 
         />
         
