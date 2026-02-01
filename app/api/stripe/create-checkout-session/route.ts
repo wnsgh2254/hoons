@@ -55,7 +55,10 @@ export async function POST(request: NextRequest) {
       shopName,
       designerName,
       formattedDateLabel,
+      embedded,
     } = body;
+
+    const useEmbedded = embedded === true;
 
     if (!shopId || !day || !timeLabel || !depositAmount || !serviceName) {
       return NextResponse.json(
@@ -143,14 +146,14 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_SITE_URL ||
       "http://localhost:3000";
 
-    const successUrl = new URL("/booking/confirmed", origin);
-    successUrl.searchParams.set("booking_id", String(booking.id));
-    successUrl.searchParams.set("shop", shopName || "");
-    successUrl.searchParams.set("designer", designerName || "");
-    successUrl.searchParams.set("service", serviceName || "");
-    successUrl.searchParams.set("date", formattedDateLabel || "");
-    successUrl.searchParams.set("time", timeLabel);
-    successUrl.searchParams.set(
+    const returnOrSuccessUrl = new URL("/booking/confirmed", origin);
+    returnOrSuccessUrl.searchParams.set("booking_id", String(booking.id));
+    returnOrSuccessUrl.searchParams.set("shop", shopName || "");
+    returnOrSuccessUrl.searchParams.set("designer", designerName || "");
+    returnOrSuccessUrl.searchParams.set("service", serviceName || "");
+    returnOrSuccessUrl.searchParams.set("date", formattedDateLabel || "");
+    returnOrSuccessUrl.searchParams.set("time", timeLabel);
+    returnOrSuccessUrl.searchParams.set(
       "deposit",
       typeof depositAmount === "number" ? depositAmount.toFixed(2) : "0.00",
     );
@@ -170,7 +173,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
       mode: "payment",
       payment_method_types: ["card"],
       line_items: [
@@ -188,15 +191,29 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: successUrl.toString(),
-      cancel_url: cancelUrl.toString(),
       metadata: {
         booking_id: String(booking.id),
         deposit_amount: amountInCents.toString(),
       },
-    });
+    };
 
-    return NextResponse.json({ url: session.url }, { status: 200 });
+    if (useEmbedded) {
+      sessionParams.ui_mode = "embedded";
+      sessionParams.return_url = returnOrSuccessUrl.toString();
+    } else {
+      sessionParams.success_url = returnOrSuccessUrl.toString();
+      sessionParams.cancel_url = cancelUrl.toString();
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    if (useEmbedded && session.client_secret) {
+      return NextResponse.json(
+        { client_secret: session.client_secret },
+        { status: 200 },
+      );
+    }
+    return NextResponse.json({ url: session.url ?? null }, { status: 200 });
   } catch (error: any) {
     console.error("Error creating Stripe checkout session:", error);
     return NextResponse.json(

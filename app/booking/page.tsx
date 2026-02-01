@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 interface Designer {
   id: string;
@@ -38,6 +40,84 @@ function getSydneyToday(): string {
   return `${year}-${month}-${day}`;
 }
 
+// Comment: In-page payment form with Payment Element (Salon de Jessie style) – must be inside Elements
+function PaymentForm({
+  returnUrl,
+  depositAmount,
+  isSubmitting,
+  setIsSubmitting,
+}: {
+  returnUrl: string;
+  depositAmount: number;
+  isSubmitting: boolean;
+  setIsSubmitting: (v: boolean) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setIsSubmitting(true);
+    try {
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: returnUrl,
+          payment_method_data: {
+            billing_details: {
+              name: undefined,
+              address: undefined,
+            },
+          },
+        },
+      });
+      if (error) {
+        console.error('Payment confirmation error:', error);
+        alert(error.message ?? 'Payment failed. Please try again.');
+      }
+    } catch (err: unknown) {
+      console.error('Payment error:', err);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 uppercase mb-2">Payment information</h3>
+        <div className="border border-black p-4 bg-[#F4F4F4] min-h-[200px]">
+          <PaymentElement
+            options={{
+              layout: 'tabs',
+              paymentMethodOrder: ['card', 'google_pay'],
+            }}
+          />
+        </div>
+      </div>
+      <button
+        type="submit"
+        disabled={!stripe || !elements || isSubmitting}
+        className="w-full font-bold text-lg px-10 py-4 shadow-lg shadow-gray-400/50 bg-black hover:bg-gray-800 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+      >
+        {isSubmitting ? (
+          <>
+            <span className="inline-block size-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <span>Processing...</span>
+          </>
+        ) : (
+          <>
+            <span>Pay & Confirm</span>
+            <span className="material-symbols-outlined">lock</span>
+          </>
+        )}
+      </button>
+    </form>
+  );
+}
+
 export default function BookingPage() {
   const [step, setStep] = useState<'service' | 'deposit' | 'confirmed'>('service');
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday()); // Comment: Date in YYYY-MM-DD format
@@ -59,6 +139,15 @@ export default function BookingPage() {
   const [customerGreeting, setCustomerGreeting] = useState<string | null>(null); // Comment: Greeting text based on existing/new customer
   const [existingCustomerId, setExistingCustomerId] = useState<number | null>(null); // Comment: Existing customer id if found
   const [loadingCustomer, setLoadingCustomer] = useState<boolean>(false); // Comment: Loading state when resolving customer
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null); // Comment: PaymentIntent client_secret for Payment Element
+  const [paymentIntentBookingId, setPaymentIntentBookingId] = useState<number | null>(null); // Comment: booking_id from create-payment-intent (for return_url)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null); // Comment: Error when creating payment intent
+  const [checkoutLoading, setCheckoutLoading] = useState<boolean>(false); // Comment: Loading state for payment intent
+  const [checkoutRetry, setCheckoutRetry] = useState<number>(0); // Comment: Increment to retry creating payment intent
+  const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false); // Comment: Delay mount to avoid multiple Elements in React Strict Mode
+
+  const paymentIntentFetchedRef = useRef(false); // Comment: Only fetch payment intent once per deposit visit (or on retry)
+  const lastFetchedCheckoutRetryRef = useRef<number>(0);
 
   // Comment: Refs to enable smooth scrolling to each step section
   const dateSectionRef = useRef<HTMLElement | null>(null);
@@ -361,6 +450,104 @@ export default function BookingPage() {
     }
   }, [step]);
 
+  // Comment: When on deposit step and using embedded checkout, create session and get client_secret
+  const stripePublishableKey = typeof process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY === 'string'
+    ? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    : null;
+  const stripePromise = useMemo(
+    () => (stripePublishableKey ? loadStripe(stripePublishableKey) : null),
+    [stripePublishableKey],
+  );
+
+  useEffect(() => {
+    if (step !== 'deposit') {
+      setCheckoutClientSecret(null);
+      setPaymentIntentBookingId(null);
+      setCheckoutError(null);
+      setShowPaymentForm(false);
+      paymentIntentFetchedRef.current = false;
+      return;
+    }
+    if (!stripePublishableKey) return;
+    if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
+    // Comment: Only fetch once per deposit visit (or when user clicks Try again)
+    if (paymentIntentFetchedRef.current && lastFetchedCheckoutRetryRef.current === checkoutRetry) {
+      return;
+    }
+    paymentIntentFetchedRef.current = true;
+    lastFetchedCheckoutRetryRef.current = checkoutRetry;
+
+    const currentShop = shopsDb.find((s) => String(s.id) === selectedShop) as { id: number; name?: string } | undefined;
+    const shopDbId = currentShop?.id ?? null;
+    const designerId = selectedDesigner ? Number(selectedDesigner.id) : null;
+    const serviceId = selectedService ? Number(selectedService.id) : null;
+    const day = selectedDate ? Number(selectedDate.split('-')[2]) : null;
+    const formattedDateLabel = selectedDate
+      ? new Date(selectedDate).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : '';
+    const depositAmt = selectedService ? selectedService.price * 0.2 : 0;
+
+    setCheckoutError(null);
+    setCheckoutLoading(true);
+    setCheckoutClientSecret(null);
+
+    fetch('/api/stripe/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shopId: shopDbId,
+        designerId,
+        serviceId,
+        day,
+        timeLabel: selectedTime,
+        totalAmount: selectedService?.price ?? null,
+        depositAmount: depositAmt,
+        fullDate: selectedDate,
+        customerName,
+        customerPhone,
+        existingCustomerId,
+        serviceName: selectedService?.name ?? '',
+        shopName: currentShop?.name ?? '',
+        designerName: selectedDesigner?.name ?? '',
+        formattedDateLabel,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setCheckoutError(data.error);
+          return;
+        }
+        if (data.client_secret) {
+          setCheckoutClientSecret(data.client_secret);
+          setPaymentIntentBookingId(data.booking_id ?? null);
+        } else {
+          setCheckoutError('Payment form could not be created.');
+        }
+      })
+      .catch((err) => {
+        console.error('Error creating payment intent:', err);
+        setCheckoutError(err?.message || 'Failed to load payment form.');
+      })
+      .finally(() => {
+        setCheckoutLoading(false);
+      });
+  }, [step, stripePublishableKey, selectedDate, selectedTime, selectedService, selectedDesigner, selectedShop, customerName, customerPhone, existingCustomerId, shopsDb, checkoutRetry]);
+
+  // Comment: Delay mounting Payment Element to avoid multiple Elements in React Strict Mode
+  useEffect(() => {
+    if (!checkoutClientSecret) {
+      setShowPaymentForm(false);
+      return;
+    }
+    const t = setTimeout(() => setShowPaymentForm(true), 150);
+    return () => clearTimeout(t);
+  }, [checkoutClientSecret]);
+
   // Comment: Move to deposit UI step (no DB write yet)
   const goToDeposit = () => {
     setStep('deposit');
@@ -535,43 +722,106 @@ export default function BookingPage() {
                 )}
               </div>
               <div className="bg-[#F4F4F4] border border-black p-8">
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    Your payment will be completed on a secure Stripe checkout page. No card
-                    details are stored on HAEYOOM servers.
-                  </p>
-                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2 uppercase">Payment</h3>
+                <p className="text-sm text-gray-600 leading-relaxed mb-6">
+                  Enter your card details below. Payment is secure and handled by Stripe. No card
+                  details are stored on HAEYOOM servers.
+                </p>
+                {stripePublishableKey && checkoutClientSecret && showPaymentForm && stripePromise && paymentIntentBookingId != null && (
+                  <Elements
+                    key={checkoutClientSecret}
+                    stripe={stripePromise}
+                    options={{
+                      clientSecret: checkoutClientSecret,
+                      appearance: {
+                        theme: 'stripe',
+                        variables: {
+                          borderRadius: '0px',
+                          colorBackground: '#F4F4F4',
+                          colorText: '#0f172a',
+                          colorPrimary: '#0f172a',
+                          colorDanger: '#dc2626',
+                        },
+                      },
+                    }}
+                  >
+                    <PaymentForm
+                      returnUrl={
+                        typeof window !== 'undefined'
+                          ? `${window.location.origin}/booking/confirmed?booking_id=${paymentIntentBookingId}&shop=${encodeURIComponent(shops.find((s) => s.id === selectedShop)?.name ?? '')}&designer=${encodeURIComponent(selectedDesigner?.name ?? '')}&service=${encodeURIComponent(selectedService?.name ?? '')}&date=${encodeURIComponent(selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '')}&time=${encodeURIComponent(selectedTime ?? '')}&deposit=${depositAmount.toFixed(2)}`
+                          : ''
+                      }
+                      depositAmount={depositAmount}
+                      isSubmitting={isSubmitting}
+                      setIsSubmitting={setIsSubmitting}
+                    />
+                  </Elements>
+                )}
+                {stripePublishableKey && checkoutLoading && (
+                  <div className="flex items-center justify-center gap-3 py-12 text-gray-600">
+                    <span className="inline-block size-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <span>Loading payment form...</span>
+                  </div>
+                )}
+                {stripePublishableKey && checkoutError && !checkoutLoading && (
+                  <div className="py-4">
+                    <p className="text-sm text-red-600 mb-4">{checkoutError}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCheckoutError(null);
+                        setCheckoutClientSecret(null);
+                        setPaymentIntentBookingId(null);
+                        setCheckoutRetry((r) => r + 1);
+                      }}
+                      className="text-sm font-medium text-black underline hover:no-underline"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+                {!stripePublishableKey && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      Your payment will be completed on a secure Stripe checkout page. No card
+                      details are stored on HAEYOOM servers.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handlePayDeposit}
+                      className={`w-full md:w-auto font-bold text-lg px-10 py-4 shadow-lg shadow-gray-400/50 transform transition-all flex items-center justify-center gap-3 ${
+                        isSubmitting
+                          ? 'bg-gray-300 text-gray-700 cursor-wait'
+                          : 'bg-black hover:bg-gray-800 text-white hover:-translate-y-0.5 active:translate-y-0'
+                      } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <span className="inline-block size-5 border border-black border-t-transparent animate-spin" />
+                          <span className="text-sm">Processing payment...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Pay Deposit ${depositAmount.toFixed(2)}</span>
+                          <span className="material-symbols-outlined">lock</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between pt-4">
                 <button
                   onClick={handleBack}
-                  className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors flex items-center gap-2"
+                  className="px-6 py-3 text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined">arrow_back</span>
                   Back
                 </button>
-                <button
-                  type="button"
-                  onClick={handlePayDeposit}
-                  className={`w-full md:w-auto font-bold text-lg px-10 py-4  shadow-lg shadow-gray-400/50 transform transition-all flex items-center justify-center gap-3 ${
-                    isSubmitting
-                      ? 'bg-gray-300 text-gray-700 cursor-wait'
-                      : 'bg-black hover:bg-gray-800 text-white hover:-translate-y-0.5 active:translate-y-0'
-                  } disabled:opacity-40 disabled:cursor-not-allowed`}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="inline-block size-5 border border-black border-t-transparent  animate-spin" />
-                      <span className="text-sm">Processing payment...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Pay Deposit ${depositAmount.toFixed(2)}</span>
-                      <span className="material-symbols-outlined">lock</span>
-                    </>
-                  )}
-                </button>
+                {!stripePublishableKey && (
+                  <div className="w-full md:w-auto" />
+                )}
               </div>
             </section>
             <aside className="lg:col-span-4 space-y-6">
