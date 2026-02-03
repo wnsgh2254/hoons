@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import Script from 'next/script';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 
 // Comment: Mock data for shops
@@ -22,14 +23,6 @@ const SHOPS = [
     googleMapLink: 'https://maps.app.goo.gl/zKKP5E6WnwyoJhUn9',
   },
 ];
-
-// Comment: Generate mock data for the gallery
-const GALLERY_ITEMS = Array.from({ length: 36 }, (_, i) => ({
-  id: i,
-  title: `Style 0${i + 1}`,
-  category: ['Cut', 'Perm', 'Color'][i % 3],
-  image: `https://picsum.photos/id/${10 + i * 2}/800/800`,
-}));
 
 // Comment: Minimal type for home page designers fetched from /api/designers
 interface HomeDesigner {
@@ -309,40 +302,18 @@ const Home = () => {
         </div>
       </section>
 
-      {/* EXPLORE SECTION - Instagram Feed */}
+      {/* EXPLORE SECTION - Elfsight Instagram Feed widget */}
       <section id="explore" className="bg-[#F4F4F4]">
-         <div className="w-full">
-             {/* Header with equal top and bottom padding to spacing */}
-            <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-                <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
-                <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
-            </div>
-
-            {/* Instagram Feed Grid - Full Width */}
-            {/* Comment: This section will display Instagram feed from designers */}
-            {/* TODO: Integrate Instagram API to fetch real posts from designers */}
-            <div className="grid grid-cols-2 md:grid-cols-4 border-t border-black">
-                {GALLERY_ITEMS.map((item, idx) => (
-                    <div 
-                        key={item.id} 
-                        className="group relative aspect-square border-r border-b border-black md:nth-child(4n):border-r-0 overflow-hidden"
-                    >
-                        <img 
-                            src={item.image} 
-                            alt={item.title} 
-                            className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" 
-                        />
-                        {/* Minimal overlay on hover */}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                            <div className="text-center text-white p-4">
-                                <span className="block font-display text-2xl uppercase tracking-tighter">{item.title}</span>
-                                <span className="text-xs font-mono uppercase tracking-widest">{item.category}</span>
-                            </div>
-                </div>
-              </div>
-            ))}
+        <Script src="https://elfsightcdn.com/platform.js" strategy="lazyOnload" />
+        <div className="w-full">
+          <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
+            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
+            <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
           </div>
-
+          <div
+            className="elfsight-app-c3f65fc0-2543-463a-b7c9-9c8f2a655e4b"
+            data-elfsight-app-lazy
+          />
         </div>
       </section>
 
