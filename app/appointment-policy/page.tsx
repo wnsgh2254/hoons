@@ -79,7 +79,7 @@ export default function AppointmentPolicyPage() {
             <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
               <p>If you have any questions regarding your appointment, please feel free to contact us.</p>
               <p className="font-bold mt-4">HAEYOOM</p>
-              <p className="font-mono">Email: info@haeyoom.com</p>
+              <p className="font-mono">Phone: +61 432 328 002</p>
             </div>
           </section>
 
