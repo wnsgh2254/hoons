@@ -39,8 +39,8 @@ export function MainNav() {
               className="group-hover:opacity-70 transition-opacity max-h-6 w-auto"
               style={{ 
                 height: '24px',
-                width: 'auto',
-                maxWidth: '120px',
+                width: 'auto'
+                
               }}
               priority
             />
