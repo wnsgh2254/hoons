@@ -6,219 +6,41 @@ import { createPortal } from 'react-dom';
 import type React from 'react';
 import type { Booking } from '@/lib/types';
 import AdminTopNav from '@/components/AdminTopNav';
+import NewBookingModal from '@/components/admin/appointments/NewBookingModal';
+import AppointmentDetailModal from '@/components/admin/appointments/AppointmentDetailModal';
+import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDrawer';
+import AppointmentCalendar from '@/components/admin/appointments/AppointmentCalendar';
+import AdminMemo from '@/components/admin/appointments/AdminMemo';
+import BookingCard from '@/components/admin/appointments/BookingCard';
+import EditBookingModal from '@/components/admin/appointments/EditBookingModal';
+import DeleteBookingModal from '@/components/admin/appointments/DeleteBookingModal';
+import ScheduleHeaderControls from '@/components/admin/appointments/ScheduleHeaderControls';
+import WeekViewBanner from '@/components/admin/appointments/WeekViewBanner';
+import ScheduleGridHeader from '@/components/admin/appointments/ScheduleGridHeader';
+import TimeColumn from '@/components/admin/appointments/TimeColumn';
+import CurrentTimeLine from '@/components/admin/appointments/CurrentTimeLine';
+import WeekViewGrid from '@/components/admin/appointments/WeekViewGrid';
+import ReservationHistoryModal from '@/components/admin/appointments/ReservationHistoryModal';
+import {
+  GRID_START_HOUR,
+  GRID_END_HOUR,
+  GRID_HOUR_HEIGHT,
+  GRID_30MIN_HEIGHT,
+  DESIGNER_COLORS,
+  getBookingStatusColor,
+  getSydneyToday,
+  getWeekStart,
+  getWeekEnd,
+  formatDateRange,
+  buildDateFromDay,
+  bookingTimeToLabel,
+  labelToDbTime,
+} from '@/lib/utils/appointment-utils';
 
 type BookingWithRelations = Booking & {
   designer?: { id: number; name: string } | null;
   service?: { id: number; name: string; duration_minutes?: number | null } | null;
 };
-
-// Comment: Grid configuration for full schedule view
-const GRID_START_HOUR = 8; // 08:00
-const GRID_END_HOUR = 21; // 21:00 (exclusive upper bound, last label 20:00)
-const GRID_HOUR_HEIGHT = 80; // px per hour (increased for better spacing and to fill container)
-const GRID_30MIN_HEIGHT = 40; // px per 30 minutes (increased for better spacing and to fill container)
-
-// Comment: Simple color palette for designers
-const DESIGNER_COLORS = [
-  { bg: 'bg-blue-100', text: 'text-blue-600', border: 'border-blue-500' },
-  { bg: 'bg-pink-100', text: 'text-pink-600', border: 'border-pink-500' },
-  { bg: 'bg-emerald-100', text: 'text-emerald-600', border: 'border-emerald-500' },
-  { bg: 'bg-amber-100', text: 'text-amber-600', border: 'border-amber-500' },
-];
-
-// Comment: Booking status enum (고정)
-type BookingStatus = 'BOOKED' | 'ARRIVED' | 'PAID' | 'NOSHOW' | 'BLOCKED' | 'UNKNOWN';
-
-// Comment: Booking status color mapping (프론트 고정)
-function getBookingStatusColor(status: string | null | undefined): {
-  bg: string;
-  border: string;
-  text: string;
-  headerBg: string;
-  headerText: string;
-  label: string;
-  statusEnum: BookingStatus;
-} {
-  const statusUpper = (status || '').toUpperCase().trim();
-  
-  // Status enum 매핑
-  if (statusUpper === 'NOSHOW' || statusUpper === 'NO_SHOW') {
-    return {
-      bg: 'bg-red-50',
-      border: 'border-red-500',
-      text: 'text-red-900',
-      headerBg: 'bg-red-500',
-      headerText: 'text-white',
-      label: '노쇼',
-      statusEnum: 'NOSHOW'
-    };
-  } else if (statusUpper === 'ARRIVED' || statusUpper === 'CUSTOMER_ENTERED' || statusUpper === 'CUSTOMER_ENTRANCE' || statusUpper === 'ENTERED') {
-    return {
-      bg: 'bg-purple-50',
-      border: 'border-purple-500',
-      text: 'text-purple-900',
-      headerBg: 'bg-purple-500',
-      headerText: 'text-white',
-      label: '고객입장',
-      statusEnum: 'ARRIVED'
-    };
-  } else if (statusUpper === 'PAID' || statusUpper === 'PAYMENT_COMPLETED' || statusUpper === 'PAYMENT_COMPLETE' || statusUpper === 'COMPLETED') {
-    return {
-      bg: 'bg-blue-50',
-      border: 'border-blue-500',
-      text: 'text-blue-900',
-      headerBg: 'bg-blue-500',
-      headerText: 'text-white',
-      label: '계산완료',
-      statusEnum: 'PAID'
-    };
-  } else if (statusUpper === 'BOOKED' || statusUpper === 'RESERVED' || statusUpper === 'CONFIRMED' || statusUpper === 'PENDING' || statusUpper === '') {
-    // Default: 예약완료 (green) - confirmed, pending도 예약완료로 처리
-    return {
-      bg: 'bg-green-50',
-      border: 'border-green-500',
-      text: 'text-green-900',
-      headerBg: 'bg-green-500',
-      headerText: 'text-white',
-      label: '예약완료',
-      statusEnum: 'BOOKED'
-    };
-  } else if (statusUpper === 'BLOCKED' || statusUpper === 'RESTRICTED') {
-    return {
-      bg: 'bg-gray-200',
-      border: 'border-gray-400',
-      text: 'text-gray-700',
-      headerBg: 'bg-gray-400',
-      headerText: 'text-white',
-      label: '예약금지',
-      statusEnum: 'BLOCKED'
-    };
-  } else if (statusUpper === 'CANCELLED' || statusUpper === 'CANCELED') {
-    // 취소된 예약은 회색으로 표시
-    return {
-      bg: 'bg-gray-100',
-      border: 'border-gray-300',
-      text: 'text-gray-600',
-      headerBg: 'bg-gray-300',
-      headerText: 'text-gray-800',
-      label: '취소됨',
-      statusEnum: 'BLOCKED'
-    };
-  } else {
-    // Unknown status 처리: 임의 색상 매핑 금지, "미정 상태" 스타일
-    console.warn('Unknown booking status:', status);
-    return {
-      bg: 'bg-gray-50',
-      border: 'border-gray-300 border-dashed',
-      text: 'text-gray-600',
-      headerBg: 'bg-gray-300',
-      headerText: 'text-gray-800',
-      label: '미정 상태',
-      statusEnum: 'UNKNOWN'
-    };
-  }
-}
-
-// Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
-function getSydneyToday(): string {
-  const sydney = new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
-  );
-  const year = sydney.getFullYear();
-  const month = String(sydney.getMonth() + 1).padStart(2, '0');
-  const day = String(sydney.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-// Comment: Get week start date (Monday) for a given date
-function getWeekStart(date: string): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-  const monday = new Date(d.setDate(diff));
-  return monday.toISOString().split('T')[0];
-}
-
-// Comment: Get week end date (Sunday) for a given date
-function getWeekEnd(date: string): string {
-  const start = getWeekStart(date);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);
-  return end.toISOString().split('T')[0];
-}
-
-// Comment: Format date range for display (YYYY-MM-DD ~ MM-DD)
-function formatDateRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const startYear = start.getFullYear();
-  const startMonth = String(start.getMonth() + 1).padStart(2, '0');
-  const startDay = String(start.getDate()).padStart(2, '0');
-  const endMonth = String(end.getMonth() + 1).padStart(2, '0');
-  const endDay = String(end.getDate()).padStart(2, '0');
-  return `${startYear}-${startMonth}-${startDay} ~ ${endMonth}-${endDay}`;
-}
-
-// Comment: Build date string using current year/month and given day
-function buildDateFromDay(baseDate: string, day: number): string {
-  const [year, month] = baseDate.split('-');
-  const dayStr = String(day).padStart(2, '0');
-  return `${year}-${month}-${dayStr}`;
-}
-
-// Comment: Convert DB time 'HH:MM:SS' to 12h label like '3:00 PM'
-function bookingTimeToLabel(dbTime: string): string {
-  const [hhStr, mmStr] = dbTime.split(':');
-  const hh = Number(hhStr);
-  if (Number.isNaN(hh)) return dbTime;
-  const isPM = hh >= 12;
-  const displayHour = hh % 12 === 0 ? 12 : hh % 12;
-  return `${displayHour}:${mmStr.padStart(2, '0')} ${isPM ? 'PM' : 'AM'}`;
-}
-
-// Comment: Convert label like '3:00 PM' to DB time '15:00:00'
-function labelToDbTime(label: string): string | null {
-  const match = label.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
-  if (!match) return null;
-  let [, hh, mm, ap] = match;
-  let hour = parseInt(hh, 10);
-  const isPM = ap.toUpperCase() === 'PM';
-  if (isPM && hour < 12) hour += 12;
-  if (!isPM && hour === 12) hour = 0;
-  const hStr = hour.toString().padStart(2, '0');
-  return `${hStr}:${mm}:${'00'}`;
-}
-
-// Comment: Time options for From/To (30-min steps, 8:00 AM - 9:00 PM)
-const EDIT_TIME_OPTIONS = [
-  '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-  '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM',
-];
-
-// Comment: Group service name into category (for service picker modal, same logic as services page)
-function getServiceCategoryForPicker(name: string): string {
-  const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
-  const lowerName = cleanName.toLowerCase();
-  if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
-  if (lowerName.includes('- magic')) return 'Magic';
-  if (lowerName.includes('- hot perm')) return 'Hot Perm';
-  if (lowerName.includes('- color')) return 'Color';
-  if (lowerName.includes('- clinic')) return 'Clinic';
-  if (lowerName.includes('- package')) return 'Package';
-  if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
-  if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek') || lowerName.includes('clinic')) return 'Clinic';
-  if (lowerName.includes('color') || lowerName.includes('bleach') || lowerName.includes('toning')) return 'Color';
-  if (lowerName.includes('special perm') || lowerName.includes('setting perm') || lowerName.includes('design setting perm')) return 'Hot Perm';
-  if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
-  if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
-  if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
-  if (lowerName.includes('cut') || lowerName.includes('length addition') || lowerName.includes('hair extension') || lowerName.includes('director level') || lowerName.includes('manager level') || lowerName.includes('kids cut') || lowerName.includes('bangs cut')) return 'Cut';
-  return 'Others';
-}
-
-const SERVICE_PICKER_CATEGORY_ORDER = ['Cut', 'Dry', 'Perm', 'Magic', 'Hot Perm', 'Color', 'Clinic', 'Package', 'Others'];
 
 export default function AppointmentsManagementPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
@@ -262,10 +84,6 @@ export default function AppointmentsManagementPage() {
   const [newBookingDirectVisit, setNewBookingDirectVisit] = useState(false);
   const [newBookingDuration, setNewBookingDuration] = useState<number>(30);
   const [newBookingServiceTab, setNewBookingServiceTab] = useState<'item' | 'service' | 'appointment'>('service');
-  const [newBookingShowMemberIcon, setNewBookingShowMemberIcon] = useState(false);
-  const [newBookingShowImportantIcon, setNewBookingShowImportantIcon] = useState(false);
-  const [newBookingShowConfirmedIcon, setNewBookingShowConfirmedIcon] = useState(false);
-  const [newBookingIconColor, setNewBookingIconColor] = useState<string>('');
   const [newBookingExcludeSms, setNewBookingExcludeSms] = useState(false);
   const [newBookingRegisterDeposit, setNewBookingRegisterDeposit] = useState(false);
   const [newBookingMemo, setNewBookingMemo] = useState<string>('');
@@ -368,7 +186,7 @@ export default function AppointmentsManagementPage() {
   const [selectedDesignerFilter, setSelectedDesignerFilter] = useState<string>('전체');
   const [isDesignerFilterOpen, setIsDesignerFilterOpen] = useState(false);
   const [designerFilterPosition, setDesignerFilterPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-  const designerFilterButtonRef = useRef<HTMLButtonElement>(null);
+  const designerFilterButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Comment: REQ_SCH_001_03~06 - Date navigation state
   const [isCalendarPopupOpen, setIsCalendarPopupOpen] = useState(false);
@@ -378,7 +196,7 @@ export default function AppointmentsManagementPage() {
   const [searchInput, setSearchInput] = useState<string>('');
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [searchDropdownPosition, setSearchDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [recentSearches, setRecentSearches] = useState<Array<{ name: string; phone?: string; id?: number }>>([]);
   const [searchCriteria, setSearchCriteria] = useState<'name' | 'phone'>('name');
   const [filteredBookings, setFilteredBookings] = useState<BookingWithRelations[]>([]);
@@ -395,7 +213,10 @@ export default function AppointmentsManagementPage() {
   // Comment: REQ_SCH_001_09 - Menu dropdown state
   const [isMenuDropdownOpen, setIsMenuDropdownOpen] = useState(false);
   const [menuDropdownPosition, setMenuDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Comment: Reservation history modal state
+  const [isReservationHistoryOpen, setIsReservationHistoryOpen] = useState(false);
 
   // Comment: Empty slot hover and context menu state
   const [hoveredEmptySlot, setHoveredEmptySlot] = useState<{
@@ -1117,7 +938,12 @@ export default function AppointmentsManagementPage() {
         const res = await fetch('/api/shops');
         const json = await res.json();
         if (res.ok) {
-          setNewBookingShops(json.shops || []);
+          const shops = json.shops || [];
+          setNewBookingShops(shops);
+          // Comment: Default to first shop if none selected yet
+          if (shops.length > 0) {
+            setNewBookingShopId((prev) => prev ?? shops[0].id);
+          }
         } else {
           console.error('Failed to load shops for new booking:', json.error);
         }
@@ -1130,10 +956,13 @@ export default function AppointmentsManagementPage() {
 
     const loadDesigners = async () => {
       try {
-        const res = await fetch('/api/staff?role=designer');
+        const targetDate = newBookingDate || selectedDate;
+        const res = await fetch(
+          `/api/working-designers?date=${encodeURIComponent(targetDate)}`
+        );
         const json = await res.json();
         if (res.ok) {
-          setNewBookingDesigners(json.staff || []);
+          setNewBookingDesigners(json.designers || []);
         } else {
           console.error('Failed to load designers for new booking:', json.error);
         }
@@ -1159,7 +988,7 @@ export default function AppointmentsManagementPage() {
     loadShops();
     loadDesigners();
     loadServices();
-  }, [isNewBookingOpen]);
+  }, [isNewBookingOpen, newBookingDate, selectedDate]);
 
   // Comment: Load designers and time off records when Time Off modal opens
   useEffect(() => {
@@ -1315,10 +1144,6 @@ export default function AppointmentsManagementPage() {
       setNewBookingMemo('');
       setNewBookingExcludeSms(false);
       setNewBookingRegisterDeposit(false);
-      setNewBookingShowMemberIcon(false);
-      setNewBookingShowImportantIcon(false);
-      setNewBookingShowConfirmedIcon(false);
-      setNewBookingIconColor('');
     }
   }, [isNewBookingOpen]);
 
@@ -1540,6 +1365,42 @@ export default function AppointmentsManagementPage() {
     }
   };
 
+  // Comment: Handlers for designer header dropdown menu (week view, restrictions, holidays)
+  const handleOpenWeekView = (designerId: number, name: string) => {
+    const date = new Date(selectedDate);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Monday 기준
+    const monday = new Date(date.setDate(diff));
+    const mondayStr = monday.toISOString().split('T')[0];
+
+    setWeekViewDesignerId(designerId);
+    setWeekViewDesignerName(name);
+    setWeekViewStartDate(mondayStr);
+    setIsWeekViewMode(true);
+  };
+
+  const handleCloseWeekView = () => {
+    setIsWeekViewMode(false);
+    setWeekViewDesignerId(null);
+    setWeekViewDesignerName('');
+    setWeekViewBookings([]);
+  };
+
+  const handleOpenRestrictionModal = (designerId: number, name: string) => {
+    setRestrictionDesignerId(designerId);
+    setRestrictionDesignerName(name);
+    setRestrictionDate(selectedDate);
+    setIsRestrictionModalOpen(true);
+  };
+
+  const handleOpenHolidayModal = (designerId: number, name: string) => {
+    setHolidayDesignerId(designerId);
+    setHolidayDesignerName(name);
+    setHolidayCurrentMonth(new Date(selectedDate));
+    setHolidaySelectedDates([]);
+    setIsHolidayModalOpen(true);
+  };
+
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
       <AdminTopNav />
@@ -1563,558 +1424,88 @@ export default function AppointmentsManagementPage() {
       )}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
         {/* REQ_SCH_001 - Top Header Controls */}
-        <div className="bg-white border-b border-gray-200 shrink-0 relative z-[100]">
-          <div className="max-w-full mx-auto px-6 md:px-10 md:py-2">
-            <div className={`grid grid-cols-1 ${isLeftPanelVisible ? 'lg:grid-cols-12' : 'lg:grid-cols-1'} gap-6`}>
-              {/* Left: Toggle panel button - matches left panel width (col-span-3) */}
-              {isLeftPanelVisible ? (
-                <div className="lg:col-span-3 flex items-center">
-                  {/* REQ_SCH_001_01 - Left panel toggle buttons */}
-                  <button
-                    type="button"
-                    onClick={() => setIsLeftPanelVisible(false)}
-                    className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
-                    title="좌측 패널 숨기기"
-                  >
-                    <span className="material-symbols-outlined text-lg">
-                      chevron_left
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-
-              {/* Center + Right: Designer filter, Date navigation, Search and Menu */}
-              <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} flex items-center gap-4`}>
-                {/* Left: Toggle button when panel is hidden */}
-                {!isLeftPanelVisible && (
-                  <button
-                    type="button"
-                    onClick={() => setIsLeftPanelVisible(true)}
-                    className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors shrink-0"
-                    title="좌측 패널 보이기"
-                  >
-                    <span className="material-symbols-outlined text-lg">
-                      chevron_right
-                    </span>
-                  </button>
-                )}
-
-                {/* Left-center: Designer filter dropdown */}
-                <div className="flex items-center gap-4">
-                  {/* REQ_SCH_001_02 - Designer filter dropdown */}
-                  <div className="relative" data-designer-filter-dropdown>
-              <button
-                ref={designerFilterButtonRef}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (designerFilterButtonRef.current) {
-                    const rect = designerFilterButtonRef.current.getBoundingClientRect();
-                    setDesignerFilterPosition({
-                      top: rect.bottom + 4,
-                      left: rect.left,
-                      width: rect.width
-                    });
-                  }
-                  setIsDesignerFilterOpen(!isDesignerFilterOpen);
-                }}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 min-w-[120px] justify-between transition-colors"
-                data-designer-filter-button
-              >
-                <span>{selectedDesignerFilter}</span>
-                <span className="material-symbols-outlined text-lg">
-                  {isDesignerFilterOpen ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
-              {isDesignerFilterOpen && designerFilterPosition && typeof window !== 'undefined' && createPortal(
-                <div 
-                  className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[200] min-w-[200px] max-h-[300px] overflow-y-auto"
-                  style={{
-                    top: `${designerFilterPosition.top}px`,
-                    left: `${designerFilterPosition.left}px`,
-                    width: `${designerFilterPosition.width}px`
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  data-designer-filter-menu
-                >
-                  {/* 전체 (default) */}
-                    <button
-                    key="전체"
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      setSelectedDesignerFilter('전체');
-                        setIsDesignerFilterOpen(false);
-                        setDesignerFilterPosition(null);
-                      }}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg transition-colors ${
-                      selectedDesignerFilter === '전체' ? 'bg-gray-100 font-medium' : ''
-                    }`}
-                  >
-                    전체
-                  </button>
-                  
-                  {/* 전체(휴무 제외) */}
-                  <button
-                    key="전체(휴무 제외)"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedDesignerFilter('전체(휴무 제외)');
-                      setIsDesignerFilterOpen(false);
-                      setDesignerFilterPosition(null);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                      selectedDesignerFilter === '전체(휴무 제외)' ? 'bg-gray-100 font-medium' : ''
-                    }`}
-                  >
-                    전체(휴무 제외)
-                  </button>
-                  
-                  {/* 디자이너 리스트 */}
-                  {allDesigners.length > 0 && (
-                    <>
-                      {allDesigners.map((designer) => (
-                        <button
-                          key={designer.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedDesignerFilter(designer.name);
-                            setIsDesignerFilterOpen(false);
-                            setDesignerFilterPosition(null);
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 last:rounded-b-lg transition-colors ${
-                            selectedDesignerFilter === designer.name ? 'bg-gray-100 font-medium' : ''
-                          }`}
-                        >
-                          {designer.name}
-                    </button>
-                  ))}
-                    </>
-                  )}
-                </div>,
-                document.body
-              )}
-                  </div>
-                </div>
-
-                {/* Center: Date navigation */}
-                <div className="flex items-center gap-2 flex-1 justify-center">
-              {/* Previous week button */}
-              <button
-                type="button"
-                onClick={() => {
-                  const prevWeek = new Date(selectedDate);
-                  prevWeek.setDate(prevWeek.getDate() - 7);
-                  setSelectedDate(prevWeek.toISOString().split('T')[0]);
-                }}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
-                title="이전 주"
-              >
-                <span className="material-symbols-outlined text-lg">chevron_left</span>
-              </button>
-
-              {/* Date range display with calendar popup */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsCalendarPopupOpen(!isCalendarPopupOpen);
-                    setCalendarPopupMonth(new Date(selectedDate));
-                  }}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-                >
-                  {(() => {
-                    const start = new Date(selectedDate);
-                    const end = new Date(selectedDate);
-                    end.setDate(end.getDate() + 6);
-                    return formatDateRange(start.toISOString().split('T')[0], end.toISOString().split('T')[0]);
-                  })()}
-                </button>
-                {isCalendarPopupOpen && (
-                  <div 
-                    className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-[200] p-4 min-w-[280px]"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const prev = new Date(calendarPopupMonth);
-                          prev.setMonth(prev.getMonth() - 1);
-                          setCalendarPopupMonth(prev);
-                        }}
-                        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-lg">chevron_left</span>
-                      </button>
-                      <span className="text-sm font-semibold text-gray-900">
-                        {calendarPopupMonth.getFullYear()}년 {calendarPopupMonth.getMonth() + 1}월
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = new Date(calendarPopupMonth);
-                          next.setMonth(next.getMonth() + 1);
-                          setCalendarPopupMonth(next);
-                        }}
-                        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-lg">chevron_right</span>
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-7 gap-1 mb-2">
-                      {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
-                        <div key={day} className="text-center text-xs font-medium text-gray-600 py-1">
-                          {day}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 gap-1">
-                      {(() => {
-                        const year = calendarPopupMonth.getFullYear();
-                        const month = calendarPopupMonth.getMonth();
-                        const firstDay = new Date(year, month, 1);
-                        const lastDay = new Date(year, month + 1, 0);
-                        const startDate = new Date(firstDay);
-                        startDate.setDate(startDate.getDate() - firstDay.getDay());
-                        const days: Date[] = [];
-                        for (let i = 0; i < 42; i++) {
-                          const date = new Date(startDate);
-                          date.setDate(startDate.getDate() + i);
-                          days.push(date);
-                        }
-                        return days.map((date, idx) => {
-                          const dateStr = date.toISOString().split('T')[0];
-                          const isCurrentMonth = date.getMonth() === month;
-                          const isSelected = dateStr === selectedDate;
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedDate(dateStr);
-                                setIsCalendarPopupOpen(false);
-                              }}
-                              disabled={!isCurrentMonth}
-                              className={`aspect-square text-xs rounded-lg transition-colors ${
-                                !isCurrentMonth ? 'text-gray-300' : 'text-gray-900 hover:bg-gray-100'
-                              } ${isSelected ? 'bg-black text-white' : ''}`}
-                            >
-                              {date.getDate()}
-                            </button>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Next week button */}
-              <button
-                type="button"
-                onClick={() => {
-                  const nextWeek = new Date(selectedDate);
-                  nextWeek.setDate(nextWeek.getDate() + 7);
-                  setSelectedDate(nextWeek.toISOString().split('T')[0]);
-                }}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
-                title="다음 주"
-              >
-                <span className="material-symbols-outlined text-lg">chevron_right</span>
-              </button>
-
-              {/* Today button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDate(getSydneyToday());
-                }}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
-              >
-                오늘
-              </button>
-                </div>
-
-                {/* Right: Search and Menu */}
-                <div className="flex items-center gap-4">
-            {/* REQ_SCH_001_07~08 - Search */}
-            <div className="relative" data-search-dropdown>
-              <div className="relative flex items-center">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-lg pointer-events-none">
-                  search
-                </span>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => {
-                    setSearchInput(e.target.value);
-                    if (!e.target.value.trim()) {
-                      // Reset filter when search is cleared
-                      setFilteredBookings(bookings);
-                    }
-                  }}
-                  onFocus={() => {
-                    if (searchInputRef.current) {
-                      const rect = searchInputRef.current.getBoundingClientRect();
-                      setSearchDropdownPosition({
-                        top: rect.bottom + 4,
-                        left: rect.left,
-                        width: rect.width
-                      });
-                    }
-                    setIsSearchDropdownOpen(true);
-                  }}
-                  placeholder="고객명 또는 휴대폰"
-                  className="w-full pl-10 pr-10 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent min-w-[200px]"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSearch();
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (searchInputRef.current) {
-                      const rect = searchInputRef.current.getBoundingClientRect();
-                      setSearchDropdownPosition({
-                        top: rect.bottom + 4,
-                        left: rect.left,
-                        width: rect.width
-                      });
-                    }
-                    setIsSearchDropdownOpen(!isSearchDropdownOpen);
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black transition-colors z-10 flex items-center justify-center"
-                >
-                  <span className="material-symbols-outlined text-lg leading-none">
-                    {isSearchDropdownOpen ? 'expand_less' : 'expand_more'}
-                  </span>
-                </button>
-              </div>
-              {isSearchDropdownOpen && searchDropdownPosition && typeof window !== 'undefined' && createPortal(
-                <div 
-                  className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[200] max-h-[400px] overflow-y-auto"
-                  style={{
-                    top: `${searchDropdownPosition.top}px`,
-                    left: `${searchDropdownPosition.left}px`,
-                    width: `${searchDropdownPosition.width}px`
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  data-search-dropdown-menu
-                >
-                  {/* Autocomplete results */}
-                  {searchInput.trim().length > 0 && (
-                  <div className="p-3 border-b border-gray-100">
-                      {isSearchAutocompleteLoading ? (
-                        <div className="text-xs text-gray-500 text-center py-2">검색 중...</div>
-                      ) : searchAutocompleteResults.length > 0 ? (
-                        <div className="space-y-1">
-                          {searchAutocompleteResults.map((customer) => (
-                            <button
-                              key={customer.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCustomerSelect(customer);
-                              }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors"
-                            >
-                              <div className="font-medium text-gray-900">{customer.name}</div>
-                              {customer.phone && (
-                                <div className="text-xs text-gray-500">{customer.phone}</div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-500 text-center py-2">검색 결과가 없습니다.</div>
-                      )}
-                    </div>
-                  )}
-                  
-                  {/* Recent searches */}
-                  <div className="p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold text-gray-700">최근 조회 고객</p>
-                      {recentSearches.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRecentSearches([]);
-                            try {
-                              localStorage.setItem('recentSearches', JSON.stringify([]));
-                            } catch (err) {
-                              console.error('Error clearing recent searches:', err);
-                            }
-                          }}
-                          className="text-xs text-gray-400 hover:text-gray-600"
-                        >
-                          전체 삭제
-                        </button>
-                      )}
-                    </div>
-                    {recentSearches.length === 0 ? (
-                      <p className="text-xs text-gray-500">내역이 없습니다.</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {recentSearches.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 group"
-                          >
-                            <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                                if (item.id) {
-                                  setViewingCustomerId(item.id);
-                                  loadCustomerInfo(item.id);
-                                } else {
-                              setSearchInput(item.name);
-                                  handleSearch();
-                                }
-                              setIsSearchDropdownOpen(false);
-                                setSearchDropdownPosition(null);
-                            }}
-                              className="flex-1 text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors"
-                          >
-                            <div className="font-medium text-gray-900">{item.name}</div>
-                            {item.phone && (
-                              <div className="text-xs text-gray-500">{item.phone}</div>
-                            )}
-                          </button>
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteRecentSearch(idx, e)}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity"
-                              title="삭제"
-                            >
-                              <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>,
-                document.body
-              )}
-            </div>
-
-            {/* REQ_SCH_001_09 - Menu dropdown */}
-            <div className="relative" data-menu-dropdown>
-              <button
-                ref={menuButtonRef}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (menuButtonRef.current) {
-                    const rect = menuButtonRef.current.getBoundingClientRect();
-                    setMenuDropdownPosition({
-                      top: rect.bottom + 4,
-                      left: rect.right,
-                      width: rect.width
-                    });
-                  }
-                  setIsMenuDropdownOpen(!isMenuDropdownOpen);
-                }}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                data-menu-button
-              >
-                MENU
-                <span className="material-symbols-outlined text-lg">
-                  {isMenuDropdownOpen ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
-              {isMenuDropdownOpen && menuDropdownPosition && typeof window !== 'undefined' && createPortal(
-                <div 
-                  className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[200] min-w-[200px]"
-                  style={{
-                    top: `${menuDropdownPosition.top}px`,
-                    right: `${window.innerWidth - menuDropdownPosition.left}px`,
-                    width: `${menuDropdownPosition.width}px`
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  data-menu-dropdown-menu
-                >
-                  <Link
-                    href="/admin/appointments"
-                    className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors"
-                    onClick={() => {
-                      setIsMenuDropdownOpen(false);
-                      setMenuDropdownPosition(null);
-                    }}
-                  >
-                    예약내역
-                  </Link>
-                  <Link
-                    href="/admin/appointments"
-                    className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
-                    onClick={() => {
-                      setIsMenuDropdownOpen(false);
-                      setMenuDropdownPosition(null);
-                    }}
-                  >
-                    대기 등록
-                  </Link>
-                  <Link
-                    href="/admin/appointments"
-                    className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
-                    onClick={() => {
-                      setIsMenuDropdownOpen(false);
-                      setMenuDropdownPosition(null);
-                    }}
-                  >
-                    예약대기내역
-                  </Link>
-                  <Link
-                    href="/admin/appointments"
-                    className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
-                    onClick={() => {
-                      setIsMenuDropdownOpen(false);
-                      setMenuDropdownPosition(null);
-                    }}
-                  >
-                    예약금 내역
-                  </Link>
-                  <Link
-                    href="/admin/appointments"
-                    className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
-                    onClick={() => {
-                      setIsMenuDropdownOpen(false);
-                      setMenuDropdownPosition(null);
-                    }}
-                  >
-                    휴일 및 특근 현황
-                  </Link>
-                  <Link
-                    href="/admin/settings"
-                    className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 last:rounded-b-lg transition-colors"
-                    onClick={() => {
-                      setIsMenuDropdownOpen(false);
-                      setMenuDropdownPosition(null);
-                    }}
-                  >
-                    설정
-                  </Link>
-                </div>,
-                document.body
-              )}
-            </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ScheduleHeaderControls
+          isLeftPanelVisible={isLeftPanelVisible}
+          selectedDate={selectedDate}
+          selectedDesignerFilter={selectedDesignerFilter}
+          allDesigners={allDesigners}
+          searchInput={searchInput}
+          isSearchDropdownOpen={isSearchDropdownOpen}
+          searchDropdownPosition={searchDropdownPosition}
+          isDesignerFilterOpen={isDesignerFilterOpen}
+          designerFilterPosition={designerFilterPosition}
+          isCalendarPopupOpen={isCalendarPopupOpen}
+          calendarPopupMonth={calendarPopupMonth}
+          isMenuDropdownOpen={isMenuDropdownOpen}
+          menuDropdownPosition={menuDropdownPosition}
+          searchAutocompleteResults={searchAutocompleteResults}
+          isSearchAutocompleteLoading={isSearchAutocompleteLoading}
+          recentSearches={recentSearches}
+          searchInputRef={searchInputRef}
+          designerFilterButtonRef={designerFilterButtonRef}
+          menuButtonRef={menuButtonRef}
+          onToggleLeftPanel={() => setIsLeftPanelVisible(!isLeftPanelVisible)}
+          onDateChange={setSelectedDate}
+          onDesignerFilterChange={setSelectedDesignerFilter}
+          onSearchInputChange={(value) => {
+            setSearchInput(value);
+            if (!value.trim()) {
+              setFilteredBookings(bookings);
+            }
+          }}
+          onSearchFocus={() => {
+            if (searchInputRef.current) {
+              const rect = searchInputRef.current.getBoundingClientRect();
+              setSearchDropdownPosition({
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width
+              });
+            }
+            setIsSearchDropdownOpen(true);
+          }}
+          onSearchToggle={() => {
+            if (searchInputRef.current) {
+              const rect = searchInputRef.current.getBoundingClientRect();
+              setSearchDropdownPosition({
+                top: rect.bottom + 4,
+                left: rect.left,
+                width: rect.width
+              });
+            }
+            setIsSearchDropdownOpen(!isSearchDropdownOpen);
+          }}
+          onSearch={handleSearch}
+          onCustomerSelect={handleCustomerSelect}
+          onDeleteRecentSearch={handleDeleteRecentSearch}
+          onCalendarPopupToggle={() => {
+            setIsCalendarPopupOpen(!isCalendarPopupOpen);
+            setCalendarPopupMonth(new Date(selectedDate));
+          }}
+          onCalendarMonthChange={setCalendarPopupMonth}
+          onMenuToggle={() => {
+            if (menuButtonRef.current) {
+              const rect = menuButtonRef.current.getBoundingClientRect();
+              setMenuDropdownPosition({
+                top: rect.bottom + 4,
+                left: rect.right,
+                width: rect.width
+              });
+            }
+            setIsMenuDropdownOpen(!isMenuDropdownOpen);
+          }}
+          onSetSearchDropdownPosition={setSearchDropdownPosition}
+          onSetDesignerFilterPosition={setDesignerFilterPosition}
+          onSetMenuDropdownPosition={setMenuDropdownPosition}
+          onSetIsSearchDropdownOpen={setIsSearchDropdownOpen}
+          onSetIsDesignerFilterOpen={setIsDesignerFilterOpen}
+          onSetIsCalendarPopupOpen={setIsCalendarPopupOpen}
+          onSetIsMenuDropdownOpen={setIsMenuDropdownOpen}
+          onSetRecentSearches={setRecentSearches}
+          onSetViewingCustomerId={setViewingCustomerId}
+          onLoadCustomerInfo={loadCustomerInfo}
+          onOpenReservationHistory={() => setIsReservationHistoryOpen(true)}
+        />
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
           <div className="max-w-full mx-auto flex flex-col gap-6 h-full">
@@ -2124,146 +1515,44 @@ export default function AppointmentsManagementPage() {
               {/* Left: Large Calendar */}
               {isLeftPanelVisible && (
               <div className="lg:col-span-3 flex flex-col gap-6 min-h-0">
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shrink-0">
-                  <div className="flex items-center justify-between mb-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                        const date = new Date(selectedDate);
-                        date.setMonth(date.getMonth() - 1);
-                        setSelectedDate(date.toISOString().split('T')[0]);
-                  }}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                      <span className="material-symbols-outlined text-lg">chevron_left</span>
-                </button>
-                    <span className="text-lg font-semibold text-gray-800">{monthLabel}</span>
-                      <button
-                        type="button"
-                      onClick={() => {
-                        const date = new Date(selectedDate);
-                        date.setMonth(date.getMonth() + 1);
-                        setSelectedDate(date.toISOString().split('T')[0]);
-                      }}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                      <span className="material-symbols-outlined text-lg">chevron_right</span>
-                      </button>
-                          </div>
-                  {/* Comment: Always show booking count - toggle removed */}
-                  <div className="grid grid-cols-7 gap-2 text-sm text-gray-500 mb-2 font-medium">
-                    {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
-                              <span key={d} className="text-center">
-                                {d}
-                              </span>
-                            ))}
-                          </div>
-                  <div className="grid grid-cols-7 gap-2">
-                            {(() => {
-                              const [year, month] = monthKey.split('-').map((v) => Number(v));
-                              const daysInMonth = new Date(year, month, 0).getDate();
-                              const firstDay = new Date(`${monthKey}-01`).getDay();
-                              const cells: (number | null)[] = [
-                                ...Array(firstDay).fill(null),
-                                ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-                              ];
-                              return cells.map((day, idx) => {
-                                if (!day) {
-                          return <div key={idx} className="h-12" />;
-                                }
-                                const isSelected = day === selectedDayNumber;
-                                const hasBookings = !!dayCounts[day];
-                                const bookingCount = dayCounts[day] || 0;
-                        const cellDate = buildDateFromDay(selectedDate, day);
-                                return (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => {
-                              setSelectedDate(cellDate);
-                                    }}
-                            className={`h-12 w-full rounded-lg flex flex-col items-center justify-center text-sm transition-all font-medium
-                                      ${
-                                        isSelected
-                                          ? 'bg-black text-white shadow-md'
-                                          : 'bg-white text-gray-800 hover:bg-gray-100 border border-transparent hover:border-gray-200'
-                                      }`}
-                                  >
-                                    <span>{day}</span>
-                                    {hasBookings && (
-                                      showBookingCount ? (
-                                        <span className={`mt-0.5 text-[10px] font-bold ${isSelected ? 'text-white' : 'text-emerald-600'}`}>
-                                          {bookingCount}
-                                        </span>
-                                      ) : (
-                                        <span className="mt-1 h-1 w-4 rounded-full bg-emerald-500" />
-                                      )
-                                    )}
-                                  </button>
-                                );
-                              });
-                            })()}
-                          </div>
-                        </div>
+                <AppointmentCalendar
+                  selectedDate={selectedDate}
+                  dayCounts={dayCounts}
+                  showBookingCount={showBookingCount}
+                  onDateSelect={setSelectedDate}
+                />
 
                 {/* Memo below calendar */}
-                <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden min-h-0">
-                  <div className="p-5 border-b border-gray-100 shrink-0 flex items-center justify-between">
-                    <h3 className="font-bold text-black">전달사항 (Memo)</h3>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setMemoSaving(true);
-                        try {
-                          const res = await fetch('/api/admin-memo', {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: memo }),
-                          });
-                          const data = await res.json();
-                          if (!res.ok) {
-                            throw new Error(data.error || 'Failed to save memo');
-                          }
-                          // Success message
-                          setMemoSuccessMessage('전달사항이 저장되었습니다.');
-                          setTimeout(() => {
-                            setMemoSuccessMessage(null);
-                          }, 3000);
-                        } catch (err) {
-                          console.error('Error saving memo:', err);
-                          alert('전달사항 저장에 실패했습니다.');
-                        } finally {
-                          setMemoSaving(false);
-                        }
-                      }}
-                      disabled={memoSaving || memoLoading}
-                      className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                    >
-                      {memoSaving ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>저장 중...</span>
-                        </>
-                      ) : (
-                        '저장하기'
-                      )}
-                    </button>
-                  </div>
-                  <div className="flex-1 p-5 min-h-0 flex flex-col">
-                    {memoLoading ? (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
-                      </div>
-                    ) : (
-                      <textarea
-                        value={memo}
-                        onChange={(e) => setMemo(e.target.value)}
-                        placeholder="전달사항을 입력하세요..."
-                        className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-gray-300 text-sm"
-                      />
-                    )}
-                  </div>
-                </div>
+                <AdminMemo
+                  memo={memo}
+                  memoLoading={memoLoading}
+                  memoSaving={memoSaving}
+                  onMemoChange={setMemo}
+                  onSave={async () => {
+                    setMemoSaving(true);
+                    try {
+                      const res = await fetch('/api/admin-memo', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: memo }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        throw new Error(data.error || 'Failed to save memo');
+                      }
+                      // Success message
+                      setMemoSuccessMessage('전달사항이 저장되었습니다.');
+                      setTimeout(() => {
+                        setMemoSuccessMessage(null);
+                      }, 3000);
+                    } catch (err) {
+                      console.error('Error saving memo:', err);
+                      alert('전달사항 저장에 실패했습니다.');
+                    } finally {
+                      setMemoSaving(false);
+                    }
+                  }}
+                />
               </div>
               )}
 
@@ -2271,20 +1560,15 @@ export default function AppointmentsManagementPage() {
               <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} flex flex-col gap-4 min-h-0`}>
                 {/* Week view designer name banner */}
                 {isWeekViewMode && weekViewDesignerId && weekViewDesignerName && (
-                  <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between shadow-sm">
-                    <span className="text-sm font-bold text-gray-900">{weekViewDesignerName}</span>
-                    <button
-                      onClick={() => {
-                        setIsWeekViewMode(false);
-                        setWeekViewDesignerId(null);
-                        setWeekViewDesignerName('');
-                        setWeekViewBookings([]);
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      일반 보기
-                    </button>
-                  </div>
+                  <WeekViewBanner
+                    designerName={weekViewDesignerName}
+                    onBackToNormalView={() => {
+                      setIsWeekViewMode(false);
+                      setWeekViewDesignerId(null);
+                      setWeekViewDesignerName('');
+                      setWeekViewBookings([]);
+                    }}
+                  />
                 )}
                 <div
                   ref={scheduleRef}
@@ -2333,128 +1617,21 @@ export default function AppointmentsManagementPage() {
                       </div>
                     )}
                     {/* Sticky Header: show time and week dates with designers */}
-                    {!isWeekViewMode ? (
-                      <div 
-                        className="sticky top-0 bg-[#f8f9fc] shadow-sm" 
-                                style={{
-                          position: 'sticky', 
-                                  top: 0,
-                          zIndex: 100,
-                          width: 'max-content',
-                          minWidth: '100%'
-                        }}
-                      >
-                        {/* First row: Time header + Date headers */}
-                        <div className="flex border-b border-[#e2e8f0]">
-                          {/* Time column header - sticky left */}
-                          <div 
-                            className="w-20 shrink-0 border-r border-[#e2e8f0] bg-[#f8f9fc] flex flex-col items-center justify-center p-2"
-                            style={{ 
-                              position: 'sticky', 
-                              left: 0,
-                              zIndex: 50,
-                              backgroundColor: '#f8f9fc',
-                              boxShadow: '2px 0 4px rgba(0,0,0,0.1)'
-                            }}
-                          >
-                            <span className="text-xs font-medium text-gray-600">시간</span>
-                          </div>
-                          {/* Week date headers */}
-                          {weekDates.map((dateStr, dateIndex) => {
-                            const date = new Date(dateStr);
-                            const dayName = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
-                            const month = String(date.getMonth() + 1).padStart(2, '0');
-                            const day = String(date.getDate()).padStart(2, '0');
-                            const designerColumnWidth = visibleDesigners.length * 150; // Each designer column is min 150px
-                            return (
-                              <div key={dateStr} className="border-r border-[#e2e8f0] bg-[#f8f9fc] shrink-0" style={{ width: `${designerColumnWidth}px` }}>
-                                <div className="px-2 py-2 text-center border-b border-[#e2e8f0] flex items-center justify-center" style={{ minHeight: '40px' }}>
-                                  <p className="text-xs font-bold text-[#0d121b]">{month}-{day} ({dayName})</p>
-                                </div>
-                                {/* Designer headers for this date - hide when filtering by specific designer */}
-                                {selectedDesignerFilter === '전체' && (
-                                <div className="grid" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, 150px)` }}>
-                                  {visibleDesigners.map((name, designerIndex) => {
-                            const designer = allDesigners.find((d) => d.name === name);
-                            const designerId = designer?.id;
-                          return (
-                            <div
-                                        key={`${dateStr}-${name}`}
-                                        className="relative px-2 py-2 bg-white/50 backdrop-blur-sm border-r border-[#e2e8f0] last:border-r-0 flex items-center justify-center"
-                                        style={{ minHeight: '40px' }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenDesignerDropdown(openDesignerDropdown === designerId ? null : designerId || null);
-                                  }}
-                                  className="w-full text-center hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                  <p className="text-xs font-bold text-[#0d121b] truncate">{name}</p>
-                                </button>
-                              </div>
-                                    );
-                                  })}
-                                </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                    <div 
-                      className="sticky top-0 flex border-b border-[#e2e8f0] bg-[#f8f9fc] shadow-sm"
-                      style={{ position: 'sticky', top: 0, zIndex: 100 }}
-                    >
-                      {/* Time column header */}
-                      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-[#f8f9fc] flex flex-col items-center justify-center p-2">
-                        <span className="text-xs font-medium text-gray-600">시간</span>
-                      </div>
-                      {isWeekViewMode && weekViewDesignerId ? (
-                        // Comment: Week view header - 7 days
-                        <div className="grid flex-1 relative" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
-                          {/* Vertical column dividers for week view header */}
-                          {Array.from({ length: 7 }).map((_, colIndex) => {
-                            const columnWidth = 100 / 7;
-                            return (
-                              <div
-                                key={`week-header-divider-${colIndex}`}
-                                className="absolute border-r border-[#e2e8f0] pointer-events-none z-0"
-                                style={{
-                                  left: `${(colIndex + 1) * columnWidth}%`,
-                                  width: '1px',
-                                  top: 0,
-                                  bottom: 0,
-                                  height: '100%',
-                                }}
-                              />
-                            );
-                          })}
-                          {Array.from({ length: 7 }).map((_, dayIndex) => {
-                            const currentDate = new Date(weekViewStartDate);
-                            currentDate.setDate(currentDate.getDate() + dayIndex);
-                            const dateStr = currentDate.toISOString().split('T')[0];
-                            const dayName = ['일', '월', '화', '수', '목', '금', '토'][currentDate.getDay()];
-                            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-                            const day = String(currentDate.getDate()).padStart(2, '0');
-                            return (
-                              <div
-                                key={dayIndex}
-                                className="relative px-2 py-2 bg-white/50 backdrop-blur-sm z-10"
-                              >
-                                <div className="text-center">
-                                  <p className="text-xs font-bold text-[#0d121b]">{dayName}</p>
-                                  <p className="text-[10px] text-[#64748b]">{month}-{day}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                              </div>
-                    )}
+                    <ScheduleGridHeader
+                      isWeekViewMode={isWeekViewMode}
+                      weekViewDesignerId={weekViewDesignerId}
+                      weekDates={weekDates}
+                      visibleDesigners={visibleDesigners}
+                      allDesigners={allDesigners}
+                      selectedDesignerFilter={selectedDesignerFilter}
+                      weekViewStartDate={weekViewStartDate}
+                      openDesignerDropdown={openDesignerDropdown}
+                      onDesignerDropdownToggle={setOpenDesignerDropdown}
+                      onOpenWeekView={handleOpenWeekView}
+                      onCloseWeekView={handleCloseWeekView}
+                      onOpenRestriction={handleOpenRestrictionModal}
+                      onOpenHolidayModal={handleOpenHolidayModal}
+                    />
 
                     {/* Grid Body */}
                     <div
@@ -2464,947 +1641,55 @@ export default function AppointmentsManagementPage() {
                         width: 'max-content',
                         minWidth: '100%'
                       }}
-                      onClick={() => setFocusedBookingId(null)}
+                      onClick={() => {
+                        setFocusedBookingId(null);
+                        setBookingMenuOpen(null);
+                      }}
                     >
 
                       {/* Current Time Line (Sydney time, only when viewing today) */}
-                      {currentSydneyTime && (
-                        <div
-                          className="absolute w-full border-t-2 border-[#135bec] z-10 pointer-events-none flex items-center"
-                          style={{ top: currentSydneyTime.top + 8 }} // Add padding offset
-                        >
-                          <div className="absolute left-0 -translate-y-1/2 bg-[#135bec] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-r-md">
-                            {currentSydneyTime.label}
-                          </div>
-                          <div className="size-2 rounded-full bg-[#135bec] -ml-1" />
-                        </div>
-                      )}
+                      <CurrentTimeLine currentSydneyTime={currentSydneyTime} />
 
                       {/* Time Column - 30 minute intervals with padding - sticky left */}
-                      {!isWeekViewMode ? (
-                        <div 
-                          className="w-20 shrink-0 border-r border-[#e2e8f0] bg-white text-xs font-medium text-[#94a3b8] flex flex-col" 
-                          style={{ 
-                            position: 'sticky', 
-                            left: 0,
-                            zIndex: 50,
-                            backgroundColor: 'white',
-                            boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
-                            minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` 
-                          }}
-                        >
-                          <div className="pt-2 pb-2">
-                            {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => {
-                              const totalMinutes = GRID_START_HOUR * 60 + i * 30;
-                              const hour = Math.floor(totalMinutes / 60);
-                              const minutes = totalMinutes % 60;
-                              const isFullHour = minutes === 0;
-                              const label = isFullHour
-                                ? `${hour.toString().padStart(2, '0')}:00 ${hour >= 12 ? '오후' : '오전'}`
-                                : '';
-                            return (
-                              <div
-                                  key={i}
-                                  className="h-[40px] border-b border-[#f1f5f9] p-1 text-right relative"
-                              >
-                                  {isFullHour && (
-                                    <span className="absolute -top-1 right-1 bg-white px-0.5 text-[10px]">{label}</span>
-                                  )}
-                                  {!isFullHour && (
-                                    <span className="absolute top-1/2 -translate-y-1/2 right-1 text-[8px] text-gray-400">30</span>
-                                  )}
-                              </div>
-                            );
-                          })}
-                          </div>
-                        </div>
-                      ) : (
-                      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-white text-xs font-medium text-[#94a3b8] flex flex-col" style={{ minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}>
-                        <div className="pt-2 pb-2">
-                          {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => {
-                            const totalMinutes = GRID_START_HOUR * 60 + i * 30;
-                            const hour = Math.floor(totalMinutes / 60);
-                            const minutes = totalMinutes % 60;
-                            const isFullHour = minutes === 0;
-                            const label = isFullHour
-                              ? `${hour.toString().padStart(2, '0')}:00 ${hour >= 12 ? '오후' : '오전'}`
-                              : '';
-                          return (
-                            <div
-                                key={i}
-                                className="h-[40px] border-b border-[#f1f5f9] p-1 text-right relative"
-                            >
-                                {isFullHour && (
-                                  <span className="absolute -top-1 right-1 bg-white px-0.5 text-[10px]">{label}</span>
-                                )}
-                                {!isFullHour && (
-                                  <span className="absolute top-1/2 -translate-y-1/2 right-1 text-[8px] text-gray-400">30</span>
-                                )}
-                            </div>
-                          );
-                        })}
-                        </div>
-                      </div>
-                      )}
+                      <TimeColumn isWeekViewMode={isWeekViewMode} />
 
                       {/* Appointment Columns - Week view or normal view */}
                       {isWeekViewMode && weekViewDesignerId ? (
-                        // Comment: Week view - 7 days columns
-                        <div className="grid flex-1 bg-white relative" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
-                          {/* Vertical column dividers for week view - positioned to extend full scrollable height */}
-                          {/* Note: These dividers are rendered at lines 1166-1179. They use absolute positioning with calculated height. */}
-                          {Array.from({ length: 7 }).map((_, colIndex) => {
-                            const columnWidth = 100 / 7;
-                            // Comment: Calculate total height based on time slots to match grid body height
-                            // This ensures dividers extend to the full height of the scrollable content
-                            const totalHeight = (GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16; // Add padding
-                            return (
-                              <div
-                                key={`week-divider-${colIndex}`}
-                                className="absolute border-r border-[#e2e8f0] pointer-events-none z-0"
-                                style={{
-                                  left: `${(colIndex + 1) * columnWidth}%`,
-                                  width: '1px',
-                                  top: 0,
-                                  height: `${totalHeight}px`,
-                                  position: 'absolute',
-                                }}
-                              />
-                            );
-                          })}
-                          
-                          {/* Hour guidelines - 30 minute intervals with padding, full width */}
-                          <div className="absolute inset-0 pointer-events-none flex flex-col z-0 pt-2 pb-2" style={{ width: '100%' }}>
-                            {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => (
-                            <div
-                              key={i}
-                                className="h-[40px] border-b border-[#f1f5f9] border-dashed w-full"
-                            />
-                          ))}
-                        </div>
-
-                          {/* Show 7 days */}
-                          {Array.from({ length: 7 }).map((_, dayIndex) => {
-                            const currentDate = new Date(weekViewStartDate);
-                            currentDate.setDate(currentDate.getDate() + dayIndex);
-                            const dateStr = currentDate.toISOString().split('T')[0];
-                            const dayBookings = weekViewBookings.filter(
-                              (b) => b.booking_date === dateStr
-                            );
-                            
-                            // Comment: Get restrictions for this designer on this date
-                            const dayRestrictions = bookingRestrictions.filter(
-                              (r) => r.designer_id === weekViewDesignerId && r.restriction_date === dateStr
-                            );
-                            
-                            const color = DESIGNER_COLORS[0]; // Use first color for week view
-
-                          return (
-                            <div
-                                key={dayIndex}
-                                className="relative h-full"
-                              >
-                                {/* Comment: Render restriction blocks (greyout) */}
-                                {dayRestrictions.map((restriction) => {
-                                  if (restriction.restriction_type === 'date') {
-                                    // Comment: Full day restriction - 진한 그레이 컬러
-                                    return (
-                                      <div
-                                        key={`restriction-${restriction.id}`}
-                                        className="absolute inset-0 bg-gray-500/60 pointer-events-none z-5"
-                                      />
-                                    );
-                                  } else if (restriction.restriction_type === 'time' && restriction.start_time && restriction.end_time) {
-                                    // Comment: Time range restriction - 진한 그레이 컬러
-                                    const [startHour, startMin] = restriction.start_time.split(':').map(Number);
-                                    const [endHour, endMin] = restriction.end_time.split(':').map(Number);
-                                    const startMinutes = (startHour - GRID_START_HOUR) * 60 + startMin;
-                                    const endMinutes = (endHour - GRID_START_HOUR) * 60 + endMin;
-                                    if (startMinutes < 0 || endMinutes < 0) return null;
-                                    
-                                    const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
-                                    const height = ((endMinutes - startMinutes) / 30) * GRID_30MIN_HEIGHT;
-                                    const slotTime = `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`;
-                                    
-                                    return (
-                                      <div
-                                        key={`restriction-${restriction.id}`}
-                                        className="absolute left-0 right-0 bg-gray-500/60 z-[40] cursor-pointer"
-                                        style={{ top, height, pointerEvents: 'auto' }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          e.preventDefault();
-                                          console.log('Restriction cell clicked (week view):', { dateStr, weekViewDesignerId, slotTime, restriction });
-                                          // 예약금지 셀 클릭 시 드롭다운 메뉴 표시
-                                          const rect = e.currentTarget.getBoundingClientRect();
-                                          const cellElement = e.currentTarget.closest('[class*="relative h-full"]') as HTMLElement;
-                                          const cellRect = cellElement?.getBoundingClientRect();
-                                          const menuWidth = cellRect ? cellRect.width : 180;
-                                          // 메뉴를 셀의 왼쪽에 맞춤
-                                          const menuLeft = cellRect ? cellRect.left : rect.left;
-                                          
-                                          // 스크롤 컨테이너의 스크롤 위치 가져오기
-                                          const scrollContainer = document.getElementById('schedule-scroll-container');
-                                          const scrollTop = scrollContainer?.scrollTop || 0;
-                                          const scrollLeft = scrollContainer?.scrollLeft || 0;
-                                          
-                                          // 뷰포트 기준 위치 저장 (메뉴 렌더링 시 상대 위치로 변환됨)
-                                          setEmptySlotMenuPosition({
-                                            top: rect.bottom,
-                                            left: menuLeft,
-                                            width: menuWidth,
-                                            scrollTop,
-                                            scrollLeft
-                                          });
-                                          setEmptySlotMenuOpen({ 
-                                            date: dateStr, 
-                                            designerId: weekViewDesignerId, 
-                                            time: slotTime 
-                                          });
-                                        }}
-                                      />
-                                    );
-                                  }
-                                  return null;
-                                })}
-                                
-                                {/* Empty slots with hover UI for week view */}
-                                {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, slotIndex) => {
-                                  const slotMinutes = slotIndex * 30;
-                                  const slotHour = Math.floor((GRID_START_HOUR * 60 + slotMinutes) / 60);
-                                  const slotMin = (GRID_START_HOUR * 60 + slotMinutes) % 60;
-                                  const slotTime = `${String(slotHour).padStart(2, '0')}:${String(slotMin).padStart(2, '0')}`;
-                                  const slotTop = (slotMinutes / 30) * GRID_30MIN_HEIGHT + 8;
-                                  const slotHeight = GRID_30MIN_HEIGHT;
-                                  
-                                  // Check if this slot has a booking
-                                  const hasBooking = dayBookings.some((b) => {
-                                    if (!b.booking_time) return false;
-                                    const [bHour, bMin] = b.booking_time.split(':').map(Number);
-                                    const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
-                                    const bDuration = b.service?.duration_minutes || 60;
-                                    const bEndMinutes = bStartMinutes + bDuration;
-                                    return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
-                                  });
-                                  
-                                  // Check if this slot is restricted and get restriction info
-                                  const slotRestriction = dayRestrictions.find((r) => {
-                                    if (r.restriction_type === 'date') return true;
-                                    if (r.restriction_type === 'time' && r.start_time && r.end_time) {
-                                      const [rStartHour, rStartMin] = r.start_time.split(':').map(Number);
-                                      const [rEndHour, rEndMin] = r.end_time.split(':').map(Number);
-                                      const rStartMinutes = (rStartHour - GRID_START_HOUR) * 60 + rStartMin;
-                                      const rEndMinutes = (rEndHour - GRID_START_HOUR) * 60 + rEndMin;
-                                      return slotMinutes >= rStartMinutes && slotMinutes < rEndMinutes;
-                                    }
-                                    return false;
-                                  });
-                                  const isRestricted = !!slotRestriction;
-                                  
-                                  if (hasBooking || !weekViewDesignerId) return null;
-                                  
-                                  const slotKey = `week-${dateStr}-${weekViewDesignerId}-${slotTime}`;
-                                  const isHovered = hoveredEmptySlot?.date === dateStr && 
-                                                    hoveredEmptySlot?.designerId === weekViewDesignerId && 
-                                                    hoveredEmptySlot?.time === slotTime;
-                                  const isMenuOpen = emptySlotMenuOpen?.date === dateStr && 
-                                                     emptySlotMenuOpen?.designerId === weekViewDesignerId && 
-                                                     emptySlotMenuOpen?.time === slotTime;
-                                  
-                                  // Debug log
-                                  if (isMenuOpen) {
-                                    console.log('Menu should be open (week view):', { dateStr, weekViewDesignerId, slotTime, emptySlotMenuOpen });
-                                  }
-                                  
-                                  return (
-                                    <div
-                                      key={slotKey}
-                                      className="absolute left-0 right-0 z-0"
-                                      style={{ 
-                                        top: slotTop, 
-                                        height: slotHeight,
-                                        pointerEvents: (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction) ? 'none' : undefined
-                                      }}
-                                      onMouseEnter={() => {
-                                        // 메뉴가 열려있으면 다른 셀의 호버 무시
-                                        if (emptySlotMenuOpen) {
-                                          return;
-                                        }
-                                        // 예약 금지 셀은 호버하지 않음 (restriction 블록이 처리)
-                                        if (!isRestricted) {
-                                          setHoveredEmptySlot({ date: dateStr, designerId: weekViewDesignerId, time: slotTime });
-                                        }
-                                      }}
-                                      onMouseLeave={(e) => {
-                                      // 메뉴가 열려있으면 다른 셀로 이동해도 hoveredEmptySlot을 변경하지 않음
-                                      if (isMenuOpen) {
-                                          return;
-                                        }
-                                      // 메뉴가 열려있지 않을 때만 hoveredEmptySlot을 null로 설정
-                                          setHoveredEmptySlot(null);
-                                      }}
-                                    >
-                                      {isHovered && (
-                                        <div className="h-full w-full relative group" style={{ zIndex: isMenuOpen ? 10000 : undefined }}>
-                                          <div 
-                                            className={`h-full w-full ${isRestricted ? 'bg-gray-500/30' : 'bg-blue-50/30'} border ${isRestricted ? 'border-gray-400' : 'border-blue-200'} border-dashed rounded cursor-pointer transition-colors flex items-center justify-between px-2`}
-                                            onClick={(e) => {
-                                              // more 버튼 클릭은 무시
-                                              const target = e.target as HTMLElement;
-                                              if (target.closest('button[type="button"]') || target.closest('[data-empty-slot-menu]') || target.closest('.empty-slot-more-button')) {
-                                                return;
-                                              }
-                                              e.stopPropagation();
-                                              // 빈 셀 클릭: 즉시 예약 등록 모달 오픈 (예약 금지 셀이 아닐 때만)
-                                              if (!isRestricted && weekViewDesignerId) {
-                                                setNewBookingDate(dateStr);
-                                                const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                                                setNewBookingTimeSlots([{ designerId: weekViewDesignerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
-                                                setIsNewBookingOpen(true);
-                                              }
-                                            }}
-                                          >
-                                            <span className="text-xs font-medium text-gray-900">
-                                              {slotTime} {slotHour >= 12 ? '오후' : '오전'}
-                                            </span>
-                                            <span className="material-symbols-outlined text-sm text-gray-600">drag_handle</span>
-                                          </div>
-                                          <div 
-                                            className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
-                                            style={{ pointerEvents: 'auto' }}
-                                          >
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                e.preventDefault();
-                                                const menuData = { date: dateStr, designerId: weekViewDesignerId, time: slotTime };
-                                                console.log('Setting emptySlotMenuOpen (week view):', menuData);
-                                                // 현재 메뉴가 이미 열려있으면 닫고, 아니면 열기
-                                                if (isMenuOpen) {
-                                                  setEmptySlotMenuOpen(null);
-                                                  setEmptySlotMenuPosition(null);
-                                                } else {
-                                                  // 버튼 위치 계산
-                                                  const rect = e.currentTarget.getBoundingClientRect();
-                                                  // 버튼의 부모 셀 찾기
-                                                  const cellElement = e.currentTarget.closest('[class*="absolute left-0 right-0"]') as HTMLElement;
-                                                  const cellRect = cellElement?.getBoundingClientRect();
-                                                  
-                                                  // 셀의 너비를 메뉴 너비로 사용
-                                                  const menuWidth = cellRect ? cellRect.width : 180;
-                                                  
-                                                  // 메뉴를 버튼의 오른쪽에 맞추되, 셀 경계를 넘지 않도록 조정
-                                                  let menuLeft = rect.right;
-                                                  if (cellRect && menuLeft + menuWidth > cellRect.right) {
-                                                    // 셀을 넘어가면 셀의 왼쪽에 맞춤
-                                                    menuLeft = cellRect.left;
-                                                  }
-                                                  
-                                                  // 스크롤 컨테이너의 스크롤 위치 가져오기
-                                                  const scrollContainer = document.getElementById('schedule-scroll-container');
-                                                  const scrollTop = scrollContainer?.scrollTop || 0;
-                                                  const scrollLeft = scrollContainer?.scrollLeft || 0;
-                                                  
-                                                  // 뷰포트 기준 위치 저장 (메뉴 렌더링 시 상대 위치로 변환됨)
-                                                  setEmptySlotMenuPosition({
-                                                    top: rect.bottom,
-                                                    left: menuLeft,
-                                                    width: menuWidth,
-                                                    scrollTop,
-                                                    scrollLeft
-                                                  });
-                                                  setEmptySlotMenuOpen(menuData);
-                                                }
-                                              }}
-                                              onMouseEnter={() => {
-                                                // 버튼으로 다시 들어오면 타이머 취소
-                                                if (menuCloseTimeoutRef.current) {
-                                                  clearTimeout(menuCloseTimeoutRef.current);
-                                                  menuCloseTimeoutRef.current = null;
-                                                }
-                                              }}
-                                              onMouseDown={(e) => {
-                                                e.stopPropagation();
-                                                e.preventDefault();
-                                              }}
-                                              className="w-6 h-6 flex items-center justify-center bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors shadow-sm"
-                                              style={{ pointerEvents: 'auto' }}
-                                            >
-                                              <span className="material-symbols-outlined text-sm text-gray-600 pointer-events-none">more_vert</span>
-                                            </button>
-                                            
-                                            {/* Empty slot context menu - Portal로 렌더링 */}
-                                            {isMenuOpen && !isNewBookingOpen && emptySlotMenuPosition && typeof window !== 'undefined' && (() => {
-                                              const scrollContainer = document.getElementById('schedule-scroll-container');
-                                              if (!scrollContainer) return null;
-                                              
-                                              // 스크롤 컨테이너 내부의 상대 위치 계산
-                                              const containerRect = scrollContainer.getBoundingClientRect();
-                                              const scrollTop = scrollContainer.scrollTop;
-                                              const scrollLeft = scrollContainer.scrollLeft;
-                                              
-                                              // 셀의 절대 위치를 스크롤 컨테이너 기준 상대 위치로 변환
-                                              const relativeTop = emptySlotMenuPosition.top - containerRect.top + scrollTop;
-                                              const relativeLeft = emptySlotMenuPosition.left - containerRect.left + scrollLeft;
-                                              
-                                              // 원래 위치 저장 (한 번만)
-                                              if (!menuOriginalPositionRef.current) {
-                                                menuOriginalPositionRef.current = {
-                                                  top: relativeTop,
-                                                  left: relativeLeft,
-                                                  width: emptySlotMenuPosition.width
-                                                };
-                                              }
-                                              
-                                              return createPortal(
-                                              <div 
-                                                data-empty-slot-menu 
-                                                  className="absolute bg-white border border-gray-200 rounded-lg shadow-lg z-[99999] min-w-[180px]"
-                                                  style={{ 
-                                                    pointerEvents: 'auto',
-                                                    top: `${menuOriginalPositionRef.current?.top || relativeTop}px`,
-                                                    left: `${menuOriginalPositionRef.current?.left || relativeLeft}px`,
-                                                    width: `${emptySlotMenuPosition.width}px`
-                                                  }}
-                                                onMouseEnter={() => {
-                                                  // 메뉴로 다시 들어오면 타이머 취소
-                                                  if (menuCloseTimeoutRef.current) {
-                                                    clearTimeout(menuCloseTimeoutRef.current);
-                                                    menuCloseTimeoutRef.current = null;
-                                                  }
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                  // 메뉴를 벗어날 때 약간의 지연을 두고 닫기
-                                                  const relatedTarget = e.relatedTarget as HTMLElement;
-                                                  // 버튼이나 메뉴 내부로 이동하는 경우는 무시
-                                                  if (relatedTarget?.closest('.empty-slot-more-button') || 
-                                                      relatedTarget?.closest('[data-empty-slot-menu]')) {
-                                                    return;
-                                                  }
-                                                  // relatedTarget이 null이거나 없을 때도 버튼 위에 마우스가 있는지 확인
-                                                  const buttonElement = document.querySelector('.empty-slot-more-button:hover');
-                                                  if (buttonElement) {
-                                                    return;
-                                                  }
-                                                  // 기존 타이머가 있으면 취소
-                                                  if (menuCloseTimeoutRef.current) {
-                                                    clearTimeout(menuCloseTimeoutRef.current);
-                                                  }
-                                                  // 약간의 지연을 두고 메뉴 닫기 (마우스가 다시 메뉴로 돌아올 수 있도록)
-                                                  menuCloseTimeoutRef.current = setTimeout(() => {
-                                                    // 메뉴나 버튼 위에 마우스가 없을 때만 닫기
-                                                    const menuElement = document.querySelector('[data-empty-slot-menu]');
-                                                    const buttonElement = document.querySelector('.empty-slot-more-button:hover');
-                                                    if (!menuElement?.matches(':hover') && !buttonElement) {
-                                                      setEmptySlotMenuOpen(null);
-                                                      setEmptySlotMenuPosition(null);
-                                                    }
-                                                    menuCloseTimeoutRef.current = null;
-                                                  }, 200);
-                                                }}
-                                              >
-                                              {isRestricted && slotRestriction ? (
-                                                <>
-                                                  <button
-                                                    type="button"
-                                                    onClick={async (e) => {
-                                                      e.stopPropagation();
-                                                      // 예약금지 취소 - 바로 삭제
-                                                      if (!confirm('예약금지를 취소하시겠습니까?')) {
-                                                        return;
-                                                      }
-                                                      try {
-                                                        const res = await fetch(`/api/booking-restrictions?id=${slotRestriction.id}`, {
-                                                          method: 'DELETE',
-                                                        });
-                                                        if (res.ok) {
-                                                          // 예약 금지 목록 새로고침
-                                                          const startDate = new Date(weekViewStartDate);
-                                                          const endDate = new Date(startDate);
-                                                          endDate.setDate(endDate.getDate() + 6);
-                                                          const startDateStr = startDate.toISOString().split('T')[0];
-                                                          const endDateStr = endDate.toISOString().split('T')[0];
-                                                          
-                                                          const restrictionsRes = await fetch(
-                                                            `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`
-                                                          );
-                                                          const restrictionsData = await restrictionsRes.json();
-                                                          if (restrictionsRes.ok) {
-                                                            setBookingRestrictions(restrictionsData.restrictions || []);
-                                                          }
-                                                          setEmptySlotMenuOpen(null);
-                                                          setEmptySlotMenuPosition(null);
-                                                          setHoveredEmptySlot(null);
-                                                        } else {
-                                                          const data = await res.json();
-                                                          alert(data.error || '예약금지 취소에 실패했습니다.');
-                                                        }
-                                                      } catch (error) {
-                                                        console.error('Error deleting restriction:', error);
-                                                        alert('예약금지 취소에 실패했습니다.');
-                                                      }
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                                  >
-                                                    예약금지 취소
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      // 예약금지 수정 - 모달 띄움
-                                                      setRestrictionDesignerId(weekViewDesignerId);
-                                                      setRestrictionDesignerName(weekViewDesignerName);
-                                                      setRestrictionDate(dateStr);
-                                                      setRestrictionType(slotRestriction.restriction_type || 'time');
-                                                      if (slotRestriction.restriction_type === 'time') {
-                                                        setRestrictionStartTime(slotRestriction.start_time?.substring(0, 5) || slotTime);
-                                                        setRestrictionEndTime(slotRestriction.end_time?.substring(0, 5) || '');
-                                                      } else {
-                                                        setRestrictionStartTime('');
-                                                        setRestrictionEndTime('');
-                                                      }
-                                                      setExistingRestriction(slotRestriction);
-                                                      setIsRestrictionModalOpen(true);
-                                                      setEmptySlotMenuOpen(null);
-                                                      setEmptySlotMenuPosition(null);
-                                                      setHoveredEmptySlot(null);
-                                                    }}
-                                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                                                  >
-                                                    예약금지 수정
-                                                  </button>
-                                                </>
-                                              ) : (
-                                                <>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setNewBookingDate(dateStr);
-                                                  const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                                                  setNewBookingTimeSlots([{ designerId: weekViewDesignerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
-                                                  setIsNewBookingOpen(true);
-                                                  setEmptySlotMenuOpen(null);
-                                                      setEmptySlotMenuPosition(null);
-                                                  setHoveredEmptySlot(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                              >
-                                                예약 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  // 바로 방문: 예약 등록 모달에 "바로 방문" 체크박스 체크된 상태로 열기
-                                                  setNewBookingDate(dateStr);
-                                                  const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                                                  setNewBookingTimeSlots([{ designerId: weekViewDesignerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
-                                                  setNewBookingDirectVisit(true); // 바로 방문 체크박스 체크
-                                                  setIsNewBookingOpen(true);
-                                                  setEmptySlotMenuOpen(null);
-                                                      setEmptySlotMenuPosition(null);
-                                                  setHoveredEmptySlot(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                바로 방문
-                                              </button>
-                                              <button
-                                                type="button"
-                                                    onClick={async (e) => {
-                                                  e.stopPropagation();
-                                                      // 예약 금지 바로 적용
-                                                  const endTime = new Date(`2000-01-01T${slotTime}`);
-                                                  endTime.setMinutes(endTime.getMinutes() + 30);
-                                                      const endTimeStr = `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
-                                                      
-                                                      try {
-                                                        const res = await fetch('/api/booking-restrictions', {
-                                                          method: 'POST',
-                                                          headers: { 'Content-Type': 'application/json' },
-                                                          body: JSON.stringify({
-                                                            designer_id: weekViewDesignerId,
-                                                            restriction_type: 'time',
-                                                            restriction_date: dateStr,
-                                                            start_time: slotTime,
-                                                            end_time: endTimeStr,
-                                                          }),
-                                                        });
-                                                        if (res.ok) {
-                                                          // 예약 금지 목록 새로고침
-                                                          const startDate = new Date(weekViewStartDate);
-                                                          const endDate = new Date(startDate);
-                                                          endDate.setDate(endDate.getDate() + 6);
-                                                          const startDateStr = startDate.toISOString().split('T')[0];
-                                                          const endDateStr = endDate.toISOString().split('T')[0];
-                                                          
-                                                          const restrictionsRes = await fetch(
-                                                            `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`
-                                                          );
-                                                          const restrictionsData = await restrictionsRes.json();
-                                                          if (restrictionsRes.ok) {
-                                                            setBookingRestrictions(restrictionsData.restrictions || []);
-                                                          }
-                                                  setEmptySlotMenuOpen(null);
-                                                          setEmptySlotMenuPosition(null);
-                                                  setHoveredEmptySlot(null);
-                                                        } else {
-                                                          const data = await res.json();
-                                                          alert(data.error || '예약금지 등록에 실패했습니다.');
-                                                        }
-                                                      } catch (error) {
-                                                        console.error('Error creating restriction:', error);
-                                                        alert('예약금지 등록에 실패했습니다.');
-                                                      }
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                                              >
-                                                예약 금지
-                                              </button>
-                                                </>
-                                              )}
-                                              </div>,
-                                              (() => {
-                                                const scrollContainer = document.getElementById('schedule-scroll-container');
-                                                return scrollContainer || document.body;
-                                              })()
-                                              )
-                                            })()}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                                
-                                {dayBookings.map((b) => {
-                                if (!b.booking_time) return null;
-                                const [hourStr, minuteStr] = b.booking_time.split(':');
-                                const hour = Number(hourStr);
-                                const minutes = Number(minuteStr);
-                                if (Number.isNaN(hour) || Number.isNaN(minutes)) return null;
-
-                                const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
-                                if (startMinutes < 0) return null;
-
-                                const durationMinutes =
-                                  b.service?.duration_minutes && b.service.duration_minutes > 0
-                                    ? b.service.duration_minutes
-                                    : 60;
-                                  const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
-                                  const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
-
-                                const serviceName = b.service?.name || 'Service';
-                                const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
-                                const amount =
-                                  (b.total_amount ?? 0) > 0
-                                    ? `AU$${Number(b.total_amount).toFixed(0)}`
-                                    : 'Free';
-                                
-                                // Comment: Get booking status color
-                                const statusColor = getBookingStatusColor((b as any).status || (b as any).booking_status);
-                                const customerName = (b as any).customer?.name || (b as any).customer_name || '고객';
-                                const customerId = (b as any).customer?.id || (b as any).customer_id || b.id;
-                                const customerPhone = (b as any).customer?.phone || (b as any).customer_phone || '';
-                                const bookingMemo = (b as any).memo || (b as any).note || '';
-
-                                return (
-                                  <div
-                                    key={b.id}
-                                    className="absolute left-1 right-1"
-                                    style={{ top, height, zIndex: 1 }}
-                                    onMouseEnter={() => setHoveredBooking(b.id || null)}
-                                    onMouseLeave={() => setHoveredBooking(null)}
-                                  >
-                                    <div
-                                      className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
-                                      style={{ zIndex: 1 }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (b.id) {
-                                          setBookingMenuOpen(bookingMenuOpen === b.id ? null : b.id);
-                                        }
-                                      }}
-                                    >
-                                      <div>
-                                        <p className={`text-xs font-bold ${statusColor.text} mb-0.5`}>
-                                          {customerName}
-                                        </p>
-                                        <p className={`text-[11px] ${statusColor.text} opacity-70`}>{serviceName}</p>
-                                      </div>
-                                      <div className="flex items-center justify-between mt-1">
-                                        <span className={`text-[10px] font-mono ${statusColor.text} opacity-60`}>
-                                          {timeLabel}
-                                        </span>
-                                        <span className={`text-[10px] font-bold ${statusColor.text} bg-white/50 px-1.5 py-0.5 rounded`}>
-                                          {customerId}
-                                        </span>
-                                      </div>
-                                      
-                                      {/* Hover Card - 상태별 스펙에 맞게 표시 */}
-                                      {hoveredBooking === b.id && !isNewBookingOpen && (
-                                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
-                                          <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
-                                            <p className="text-xs font-bold">{statusColor.label}</p>
-                                          </div>
-                                          <div className="space-y-1.5 text-xs">
-                                            {/* timeRange - 공통 */}
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-gray-500 w-16 shrink-0">시간</span>
-                                              <span className="text-gray-900">{timeLabel} ~ {(() => {
-                                                const endTime = new Date(`2000-01-01T${hourStr}:${minuteStr}`);
-                                                endTime.setMinutes(endTime.getMinutes() + durationMinutes);
-                                                return `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
-                                              })()}</span>
-                                            </div>
-                                            {/* customerName (reservationId) - 공통 */}
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-gray-500 w-16 shrink-0">고객명</span>
-                                              <span className="text-gray-900">{customerName} ({b.id || customerId})</span>
-                                            </div>
-                                            {/* phone - PAID, BOOKED만 표시 */}
-                                            {(statusColor.statusEnum === 'PAID' || statusColor.statusEnum === 'BOOKED') && customerPhone && (
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-gray-500 w-16 shrink-0">전화번호</span>
-                                                <span className="text-gray-900">{customerPhone}</span>
-                                              </div>
-                                            )}
-                                            {/* serviceName - ARRIVED, PAID, BOOKED만 표시 */}
-                                            {(statusColor.statusEnum === 'ARRIVED' || statusColor.statusEnum === 'PAID' || statusColor.statusEnum === 'BOOKED') && serviceName && (
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-gray-500 w-16 shrink-0">시술명</span>
-                                                <span className="text-gray-900">{serviceName}</span>
-                                              </div>
-                                            )}
-                                            {/* memo - ARRIVED, BOOKED, NOSHOW만 표시 (optional) */}
-                                            {(statusColor.statusEnum === 'ARRIVED' || statusColor.statusEnum === 'BOOKED' || statusColor.statusEnum === 'NOSHOW') && bookingMemo && (
-                                              <>
-                                                <div className="border-t border-gray-200 my-1.5"></div>
-                                                <div className="text-gray-700">{bookingMemo}</div>
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                      )}
-                                      
-                                      {/* Context Menu - 상태별 스펙에 맞게 표시 */}
-                                      {bookingMenuOpen === b.id && !isNewBookingOpen && (
-                                        <div data-booking-menu className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-                                          {statusColor.statusEnum === 'ARRIVED' && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                              >
-                                                판매 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setIsNewBookingOpen(true);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEditingBooking(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 수정
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 이동
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setViewingBookingDetail(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                고객 정보
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg flex items-center gap-2"
-                                              >
-                                                <span className="material-symbols-outlined text-sm">check</span>
-                                                고객 입장
-                                              </button>
-                                            </>
-                                          )}
-                                          {statusColor.statusEnum === 'PAID' && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setIsNewBookingOpen(true);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                              >
-                                                예약 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEditingBooking(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 수정
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                판매 상세
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setViewingBookingDetail(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                                              >
-                                                고객 정보
-                                              </button>
-                                            </>
-                                          )}
-                                          {statusColor.statusEnum === 'BOOKED' && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                              >
-                                                판매 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setIsNewBookingOpen(true);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEditingBooking(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 수정
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 이동
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 취소
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setViewingBookingDetail(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                고객 정보
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                고객 입장
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                                              >
-                                                노쇼
-                                              </button>
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
+                        <WeekViewGrid
+                          weekViewDesignerId={weekViewDesignerId}
+                          weekViewDesignerName={weekViewDesignerName}
+                          weekViewStartDate={weekViewStartDate}
+                          weekViewBookings={weekViewBookings}
+                          bookingRestrictions={bookingRestrictions}
+                          hoveredEmptySlot={hoveredEmptySlot}
+                          emptySlotMenuOpen={emptySlotMenuOpen}
+                          emptySlotMenuPosition={emptySlotMenuPosition}
+                          isNewBookingOpen={isNewBookingOpen}
+                          hoveredBooking={hoveredBooking}
+                          bookingMenuOpen={bookingMenuOpen}
+                          menuCloseTimeoutRef={menuCloseTimeoutRef}
+                          menuOriginalPositionRef={menuOriginalPositionRef}
+                          setNewBookingDate={setNewBookingDate}
+                          setNewBookingTimeSlots={setNewBookingTimeSlots}
+                          setIsNewBookingOpen={setIsNewBookingOpen}
+                          setNewBookingDirectVisit={setNewBookingDirectVisit}
+                          setBookingRestrictions={setBookingRestrictions}
+                          setRestrictionDesignerId={setRestrictionDesignerId}
+                          setRestrictionDesignerName={setRestrictionDesignerName}
+                          setRestrictionDate={setRestrictionDate}
+                          setRestrictionType={setRestrictionType}
+                          setRestrictionStartTime={setRestrictionStartTime}
+                          setRestrictionEndTime={setRestrictionEndTime}
+                          setExistingRestriction={setExistingRestriction}
+                          setIsRestrictionModalOpen={setIsRestrictionModalOpen}
+                          setHoveredEmptySlot={setHoveredEmptySlot}
+                          setEmptySlotMenuOpen={setEmptySlotMenuOpen}
+                          setEmptySlotMenuPosition={setEmptySlotMenuPosition}
+                          setHoveredBooking={setHoveredBooking}
+                          setBookingMenuOpen={setBookingMenuOpen}
+                          setEditingBooking={setEditingBooking}
+                          setViewingBookingDetail={setViewingBookingDetail}
+                        />
                       ) : (
                         // Comment: Normal view - week dates with designer columns
                         <div className="flex flex-1 bg-white relative">
@@ -3561,11 +1846,36 @@ export default function AppointmentsManagementPage() {
                                 return (
                                   <div
                                     key={slotKey}
-                                    className="absolute left-0 right-0 z-0"
+                                    className="absolute left-0 right-0 z-0 select-none"
                                     style={{ 
                                       top: slotTop, 
                                       height: slotHeight,
-                                      pointerEvents: (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction) ? 'none' : undefined
+                                      pointerEvents: (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction) ? 'none' : 'auto',
+                                      cursor: !isRestricted && designerId ? 'pointer' : 'default',
+                                      userSelect: 'none',
+                                      WebkitUserSelect: 'none'
+                                    }}
+                                    onMouseDown={(e) => {
+                                      // Comment: Ignore clicks coming from more button or its menu (day view)
+                                      const target = e.target as HTMLElement;
+                                      if (target.closest('button[type="button"]') || target.closest('[data-empty-slot-menu]') || target.closest('.empty-slot-more-button')) {
+                                        return;
+                                      }
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      // Comment: Open "New Booking" modal immediately on click (day view)
+                                      if (!isRestricted && designerId) {
+                                        console.log('Empty slot clicked (day view - outer): opening new booking modal', {
+                                          dateStr,
+                                          designerId,
+                                          slotTime,
+                                        });
+                                        setNewBookingDate(dateStr);
+                                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
+                                        setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
+                                        setIsNewBookingOpen(true);
+                                        setHoveredEmptySlot(null);
+                                      }
                                     }}
                                     onMouseEnter={() => {
                                       // 메뉴가 열려있으면 다른 셀의 호버 무시
@@ -3583,34 +1893,11 @@ export default function AppointmentsManagementPage() {
                                         return;
                                       }
                                       // 메뉴가 열려있지 않을 때만 hoveredEmptySlot을 null로 설정
-                                        setHoveredEmptySlot(null);
+                                      setHoveredEmptySlot(null);
                                     }}
                                   >
                                     {isHovered && !isRestricted && (
                                       <div className="h-full w-full relative group" style={{ zIndex: isMenuOpen ? 10000 : undefined }}>
-                                        <div 
-                                          className="h-full w-full bg-blue-50/30 border border-blue-200 border-dashed rounded cursor-pointer transition-colors flex items-center justify-between px-2"
-                                          onClick={(e) => {
-                                            // more 버튼 클릭은 무시
-                                            const target = e.target as HTMLElement;
-                                            if (target.closest('button[type="button"]') || target.closest('[data-empty-slot-menu]') || target.closest('.empty-slot-more-button')) {
-                                              return;
-                                            }
-                                            e.stopPropagation();
-                                            // 빈 셀 클릭: 즉시 예약 등록 모달 오픈
-                                            if (!isRestricted && designerId) {
-                                              setNewBookingDate(dateStr);
-                                              const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                                              setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
-                                              setIsNewBookingOpen(true);
-                                            }
-                                          }}
-                                        >
-                                          <span className="text-xs font-medium text-gray-900">
-                                            {slotTime} {slotHour >= 12 ? '오후' : '오전'}
-                                          </span>
-                                          <span className="material-symbols-outlined text-sm text-gray-600">drag_handle</span>
-                                        </div>
                                         {/* 빈 셀 more(≡) 버튼 - 예약 금지 셀은 미노출 */}
                                         <div 
                                           className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
@@ -4128,13 +2415,16 @@ export default function AppointmentsManagementPage() {
                         return (
                           <div
                             key={b.id}
-                                    className="absolute left-1 right-1"
-                                    style={{ top, height, zIndex: emptySlotMenuOpen ? 0 : 1 }}
-                                    onMouseEnter={() => setHoveredBooking(b.id || null)}
-                                    onMouseLeave={() => setHoveredBooking(null)}
-                                  >
+                            className="absolute left-1 right-1"
+                            style={{ top, height, zIndex: emptySlotMenuOpen ? 0 : 1 }}
+                            onMouseEnter={() => setHoveredBooking(b.id || null)}
+                            onMouseLeave={() => {
+                              setHoveredBooking(null);
+                              setBookingMenuOpen((prev) => (prev === b.id ? null : prev));
+                            }}
+                          >
                                     <div
-                                      className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
+                                      className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-visible relative`}
                                       style={{ zIndex: emptySlotMenuOpen ? 0 : 1 }}
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -4204,269 +2494,150 @@ export default function AppointmentsManagementPage() {
                                     </div>
                                   )}
                                   
-                                  {/* Context Menu - 상태별 스펙에 맞게 표시 */}
-                                  {bookingMenuOpen === b.id && !isNewBookingOpen && (
+                                  {/* Context Menu - BOOKED 상태(입장 전) 전용 메뉴 */}
+                                  {statusColor.statusEnum === 'BOOKED' && bookingMenuOpen === b.id && !isNewBookingOpen && (
                                     <div data-booking-menu className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-                                      {statusColor.statusEnum === 'ARRIVED' && (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 판매 등록
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                          >
-                                            판매 등록
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setIsNewBookingOpen(true);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 등록
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setEditingBooking(b);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 수정
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 예약 이동
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 이동
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setViewingBookingDetail(b);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            고객 정보
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 상태 변경
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg flex items-center gap-2"
-                                          >
-                                            <span className="material-symbols-outlined text-sm">check</span>
-                                            고객 입장
-                                          </button>
-                                        </>
-                                      )}
-                                      {statusColor.label === '계산완료' && (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setIsNewBookingOpen(true);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                          >
-                                            예약 등록
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setEditingBooking(b);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 수정
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 판매 상세
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            판매 상세
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setViewingBookingDetail(b);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                                          >
-                                            고객 정보
-                                          </button>
-                                        </>
-                                      )}
-                                      {statusColor.statusEnum === 'BOOKED' && (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 판매 등록
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                          >
-                                            판매 등록
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setIsNewBookingOpen(true);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 등록
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setEditingBooking(b);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 수정
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 예약 이동
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 이동
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 예약 취소
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            예약 취소
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setViewingBookingDetail(b);
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            고객 정보
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 상태 변경 - 고객 입장
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                          >
-                                            고객 입장
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // TODO: 상태 변경 - 노쇼
-                                              setBookingMenuOpen(null);
-                                            }}
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                                          >
-                                            노쇼
-                                          </button>
-                                        </>
-                                          )}
-                                          {statusColor.statusEnum === 'NOSHOW' && (
-                                            <>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setIsNewBookingOpen(true);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                                              >
-                                                예약 등록
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setEditingBooking(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                예약 수정
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setViewingBookingDetail(b);
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                              >
-                                                고객 정보
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  // TODO: 상태 변경 - 노쇼 해제
-                                                  setBookingMenuOpen(null);
-                                                }}
-                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg flex items-center gap-2"
-                                              >
-                                                <span className="material-symbols-outlined text-sm">check</span>
-                                                노쇼
-                                              </button>
-                                            </>
-                                          )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // TODO: 판매 등록
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
+                                      >
+                                        판매 등록
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setIsNewBookingOpen(true);
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        예약 등록
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingBooking(b);
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        예약 수정
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // TODO: 예약 이동
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        예약 이동
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // TODO: 예약 취소
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        예약 취소
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setViewingBookingDetail(b);
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        고객 정보
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // TODO: 상태 변경 - 고객 입장
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        고객 입장
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // TODO: 상태 변경 - 노쇼
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
+                                      >
+                                        노쇼
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Context Menu - 그 외 상태(입장/계산완료/노쇼 등) 공통 4개 메뉴 */}
+                                  {statusColor.statusEnum !== 'BOOKED' && bookingMenuOpen === b.id && !isNewBookingOpen && (
+                                    <div
+                                      data-booking-menu
+                                      className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setIsNewBookingOpen(true);
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
+                                      >
+                                        예약 등록
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingBooking(b);
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        예약 수정
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // TODO: 판매 상세 구현
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        판매 상세
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setViewingBookingDetail(b);
+                                          setBookingMenuOpen(null);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
+                                      >
+                                        고객 정보
+                                      </button>
                                     </div>
                                   )}
                                 </div>
@@ -4491,791 +2662,110 @@ export default function AppointmentsManagementPage() {
         </div>
       </main>
       {/* New Booking Modal */}
-      {isNewBookingOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-black">예약 등록</h2>
-            <button
-              type="button"
-              onClick={() => setIsNewBookingOpen(false)}
-                className="text-gray-400 hover:text-black transition-colors"
-            >
-                <span className="material-symbols-outlined">close</span>
-            </button>
-            </div>
-            <div className="p-6">
-            
-            {/* Two Column Layout */}
-            <div className="grid grid-cols-2 gap-6">
-              {/* Left Column: Customer Information */}
-              <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    placeholder="고객명 또는 휴대폰"
-                    value={newBookingCustomerSearch}
-                    onChange={(e) => setNewBookingCustomerSearch(e.target.value)}
-                    className="w-full border border-gray-200 rounded-lg px-4 py-2 pr-10 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  />
-                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                    search
-                  </span>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={newBookingIncludeOtherShops}
-                    onChange={(e) => setNewBookingIncludeOtherShops(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  타 지점 포함
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsCustomerRegistrationModalOpen(true)}
-                  className="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-900 whitespace-nowrap"
-                >
-                  고객등록
-                </button>
-              </div>
-              
-              <div className="space-y-1 text-xs text-gray-600">
-                <p>신규 고객은 먼저 고객을 등록하세요.</p>
-                <p>고객을 등록하지 않고 예약 등록을 하시려면 '미등록 고객 예약'을 체크하세요.</p>
-              </div>
-              
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={newBookingUnregisteredCustomer}
-                  onChange={(e) => setNewBookingUnregisteredCustomer(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                미등록 고객 예약
-              </label>
-            </div>
+      <NewBookingModal
+        isOpen={isNewBookingOpen}
+        onClose={() => setIsNewBookingOpen(false)}
+        selectedDate={selectedDate}
+        newBookingCustomerSearch={newBookingCustomerSearch}
+        newBookingDate={newBookingDate}
+        newBookingDirectVisit={newBookingDirectVisit}
+        newBookingTimeSlots={newBookingTimeSlots}
+        newBookingDesigners={newBookingDesigners}
+        newBookingMemo={newBookingMemo}
+        newBookingSubmitting={newBookingSubmitting}
+        newBookingShopId={newBookingShopId}
+        setNewBookingCustomerSearch={setNewBookingCustomerSearch}
+        setNewBookingDate={setNewBookingDate}
+        setNewBookingDirectVisit={setNewBookingDirectVisit}
+        setNewBookingTimeSlots={setNewBookingTimeSlots}
+        setNewBookingMemo={setNewBookingMemo}
+        setNewBookingSubmitting={setNewBookingSubmitting}
+        setIsCustomerRegistrationModalOpen={setIsCustomerRegistrationModalOpen}
+        setBookingSuccessMessage={setBookingSuccessMessage}
+        setBookings={setBookings}
+        newBookingSelectedCustomerId={newBookingSelectedCustomerId}
+        newBookingCustomerSearchResults={newBookingCustomerSearchResults}
+        newBookingIsCustomerSearching={newBookingIsCustomerSearching}
+        setNewBookingSelectedCustomerId={setNewBookingSelectedCustomerId}
+        setNewBookingCustomerSearchResults={setNewBookingCustomerSearchResults}
+        setNewBookingIsCustomerSearching={setNewBookingIsCustomerSearching}
+      />
 
-              {/* Right Column: Appointment Details */}
-              <div className="space-y-4">
-              {/* Date */}
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">날짜</label>
-                <div className="flex-1 flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newBookingDate.replace(/-/g, '.')}
-                    readOnly
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  />
-                        <button
-                          type="button"
-                    onClick={() => setNewBookingDate(selectedDate)}
-                    className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    <span className="material-symbols-outlined text-sm">refresh</span>
-                        </button>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={newBookingDirectVisit}
-                    onChange={(e) => setNewBookingDirectVisit(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  바로 방문
-                  <span className="material-symbols-outlined text-sm text-gray-400">help</span>
-                </label>
-              </div>
-              
-              {/* Designer, Start Time, Duration Groups */}
-              <div className="space-y-4">
-                {newBookingTimeSlots.map((slot, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <div className="grid grid-cols-3 gap-4">
-                      {/* Designer */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
-                        <div className="flex items-center gap-2">
-                  <select
-                            value={slot.designerId || ''}
-                            onChange={(e) => {
-                              const updated = [...newBookingTimeSlots];
-                              updated[index].designerId = e.target.value ? Number(e.target.value) : null;
-                              setNewBookingTimeSlots(updated);
-                            }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  >
-                    <option value="">선택하세요</option>
-                    {newBookingDesigners.map((d: any) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                          {index === newBookingTimeSlots.length - 1 && (
-                  <button
-                    type="button"
-                              onClick={() => {
-                                setNewBookingTimeSlots([...newBookingTimeSlots, { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null }]);
-                              }}
-                              className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-900"
-                  >
-                    <span className="material-symbols-outlined text-sm">add</span>
-                  </button>
-                          )}
-                          {newBookingTimeSlots.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = newBookingTimeSlots.filter((_, i) => i !== index);
-                                setNewBookingTimeSlots(updated);
-                              }}
-                              className="w-8 h-8 flex items-center justify-center bg-gray-300 text-white rounded-lg hover:bg-gray-400"
-                            >
-                              <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                          )}
-                    </div>
-                </div>
-
-              {/* Start Time */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">시작시간</label>
-                <select
-                          value={slot.time}
-                          onChange={(e) => {
-                            const updated = [...newBookingTimeSlots];
-                            updated[index].time = e.target.value;
-                            setNewBookingTimeSlots(updated);
-                          }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                >
-                  {Array.from({ length: 24 }).map((_, i) => {
-                    const hour = i;
-                    const ampm = hour >= 12 ? '오후' : '오전';
-                    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-                    return (
-                      <option key={i} value={`${String(hour).padStart(2, '0')}:00 ${ampm}`}>
-                        {String(displayHour).padStart(2, '0')}:00 {ampm}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              
-              {/* Duration */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">소요시간</label>
-                <select
-                          value={slot.duration}
-                          onChange={(e) => {
-                            const updated = [...newBookingTimeSlots];
-                            updated[index].duration = Number(e.target.value);
-                            setNewBookingTimeSlots(updated);
-                          }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                >
-                  {[15, 30, 45, 60, 90, 120, 150, 180].map((min) => (
-                    <option key={min} value={min}>{min} 분</option>
-                  ))}
-                </select>
-                      </div>
-              </div>
-              
-                    {/* Service Selection */}
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center gap-4">
-                        <label className="text-sm font-bold text-black whitespace-nowrap">항목 선택</label>
-                        <div className="flex gap-2">
-                        <button
-                          type="button"
-                            onClick={() => {
-                              const updated = [...newBookingTimeSlots];
-                              updated[index].serviceTab = 'service';
-                              updated[index].serviceId = null;
-                              setNewBookingTimeSlots(updated);
-                            }}
-                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                              slot.serviceTab === 'service'
-                                ? 'bg-black text-white'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    서비스
-                  </button>
-                  <button
-                    type="button"
-                            onClick={() => {
-                              const updated = [...newBookingTimeSlots];
-                              updated[index].serviceTab = 'appointment';
-                              updated[index].serviceId = null;
-                              setNewBookingTimeSlots(updated);
-                            }}
-                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                              slot.serviceTab === 'appointment'
-                                ? 'bg-black text-white'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    예약 항목
-                  </button>
-                </div>
-                    </div>
-                </div>
-                  </div>
-                ))}
-                </div>
-
-              {/* Icon Display Options */}
-              <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">아이콘 표시:</label>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={newBookingShowMemberIcon}
-                      onChange={(e) => setNewBookingShowMemberIcon(e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    회원 (●)
-                    </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={newBookingShowImportantIcon}
-                      onChange={(e) => setNewBookingShowImportantIcon(e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    중요고객 (★)
-                    </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={newBookingShowConfirmedIcon}
-                      onChange={(e) => setNewBookingShowConfirmedIcon(e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    확인 (㉿)
-                  </label>
-                  <select
-                    value={newBookingIconColor}
-                    onChange={(e) => setNewBookingIconColor(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  >
-                    <option value="">색상</option>
-                    <option value="red">빨강</option>
-                    <option value="blue">파랑</option>
-                    <option value="green">초록</option>
-                    <option value="yellow">노랑</option>
-                  </select>
-                    </div>
-                  </div>
-              
-              {/* SMS Options */}
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">예약 문자:</label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={newBookingExcludeSms}
-                    onChange={(e) => setNewBookingExcludeSms(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  문자 발송 제외
-                </label>
-                </div>
-              
-              {/* Deposit Registration */}
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">예약금 등록:</label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={newBookingRegisterDeposit}
-                    onChange={(e) => setNewBookingRegisterDeposit(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  예약금 등록
-                </label>
-              </div>
-              
-              {/* Appointment Memo */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">예약 메모</label>
-                <textarea
-                  value={newBookingMemo}
-                  onChange={(e) => setNewBookingMemo(e.target.value)}
-                  placeholder="메모를 입력하세요"
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:ring-2 focus:ring-black focus:border-transparent"
-                />
-            </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                  onClick={() => {
-                    setIsNewBookingOpen(false);
-                    setNewBookingTimeSlots([{ designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null }]);
-                  }}
-                  className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                disabled={
-                    !newBookingTimeSlots[0]?.designerId ||
-                    !newBookingTimeSlots[0]?.serviceId ||
-                  !newBookingDate ||
-                    !newBookingTimeSlots[0]?.time ||
-                  newBookingSubmitting
-                }
-                onClick={async () => {
-                    const firstSlot = newBookingTimeSlots[0];
-                  if (
-                      !firstSlot?.designerId ||
-                      !firstSlot?.serviceId ||
-                    !newBookingDate ||
-                      !firstSlot?.time
-                  )
-                    return;
-                  setNewBookingSubmitting(true);
-                  try {
-                    const resCreate = await fetch('/api/appointment', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        shopId: newBookingShopId,
-                          designerId: firstSlot.designerId,
-                          serviceId: firstSlot.serviceId,
-                        day: Number(newBookingDate.split('-')[2]),
-                          timeLabel: firstSlot.time,
-                        totalAmount: null,
-                        depositAmount: null,
-                        fullDate: newBookingDate,
-                        memo: newBookingMemo,
-                      }),
-                    });
-                    if (!resCreate.ok) {
-                      console.error('Failed to create booking', await resCreate.text());
-                    } else {
-                      setBookingSuccessMessage('예약이 성공적으로 등록되었습니다.');
-                      setTimeout(() => {
-                        setBookingSuccessMessage(null);
-                      }, 3000);
-                    }
-                    setIsNewBookingOpen(false);
-                      setNewBookingTimeSlots([{ designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null }]);
-                    const res = await fetch(
-                      `/api/appointment?date=${encodeURIComponent(selectedDate)}`
-                    );
-                    const data = await res.json();
-                    if (res.ok) {
-                      setBookings(data.bookings || []);
-                    }
-                  } finally {
-                    setNewBookingSubmitting(false);
-                  }
-                }}
-                  className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-60 transition-colors"
-              >
-                {newBookingSubmitting ? '저장 중...' : '저장'}
-              </button>
-              </div>
-            </div>
-          </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Appointment Detail Modal (from schedule grid card click) */}
-      {viewingBookingDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
-            <button
-              type="button"
-              onClick={() => setViewingBookingDetail(null)}
-              className="absolute right-4 top-4 text-gray-400 hover:text-black"
-            >
-              <span className="material-symbols-outlined text-xl">close</span>
-            </button>
-            <h2 className="text-lg font-bold text-black mb-4">예약 상세</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">예약 번호</span>
-                <span className="font-semibold text-gray-800">#{viewingBookingDetail.id}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">시술</span>
-                <span className="font-medium text-gray-900">
-                  {viewingBookingDetail.service?.name || '—'}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">디자이너</span>
-                <span className="font-medium text-gray-900">
-                  {viewingBookingDetail.designer?.name || '—'}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">날짜</span>
-                <span className="font-medium text-gray-900">{viewingBookingDetail.booking_date}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">시간</span>
-                <span className="font-medium text-gray-900">
-                  {viewingBookingDetail.booking_time
-                    ? bookingTimeToLabel(viewingBookingDetail.booking_time)
-                    : '—'}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">금액</span>
-                <span className="font-medium text-gray-900">
-                  {(viewingBookingDetail.total_amount ?? 0) > 0
-                    ? `AU$${Number(viewingBookingDetail.total_amount).toFixed(0)}`
-                    : 'Free'}
-                </span>
-              </div>
-              <div className="pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-500">메모</span>
-                <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">
-                  {viewingBookingDetail.memo != null && viewingBookingDetail.memo !== ''
-                    ? viewingBookingDetail.memo
-                    : '—'}
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setViewingBookingDetail(null)}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-              >
-                닫기
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (viewingBookingDetail.booking_date && viewingBookingDetail.booking_time) {
-                    setEditingBooking(viewingBookingDetail);
-                    setViewingBookingDetail(null);
-                  }
-                }}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-black text-white hover:bg-gray-800"
-              >
-                수정
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Appointment Detail Modal */}
+      <AppointmentDetailModal
+        booking={viewingBookingDetail}
+        onClose={() => setViewingBookingDetail(null)}
+        onEdit={(booking: BookingWithRelations) => {
+          setEditingBooking(booking);
+          setViewingBookingDetail(null);
+        }}
+        bookingTimeToLabel={bookingTimeToLabel}
+      />
 
       {/* Edit Booking Modal */}
       {editingBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
-            <button
-              type="button"
-              onClick={() => setEditingBooking(null)}
-              className="absolute right-4 top-4 text-gray-400 hover:text-black"
-            >
-              <span className="material-symbols-outlined text-xl">close</span>
-            </button>
-            <h2 className="text-lg font-bold text-black mb-2">예약 수정</h2>
-            <p className="text-xs text-gray-500 mb-4">
-              기존 예약의 날짜·시작 시간·시술·메모를 한 번에 수정합니다. 시술을 바꾸면 캘린더에서 예약 높이가 해당 시술 시간에 맞게 바뀝니다.
-            </p>
-            <div className="space-y-4 text-sm">
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>예약 번호</span>
-                <span className="font-semibold text-gray-800">#{editingBooking.id}</span>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">날짜</label>
-                <input
-                  type="date"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                  value={editDate}
-                  onChange={(e) => setEditDate(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">시작 시간</label>
-                <select
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                  value={editTime}
-                  onChange={(e) => setEditTime(e.target.value)}
-                >
-                  {EDIT_TIME_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">시술</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setServicePickerCategory(null);
-                    setIsServicePickerOpen(true);
-                  }}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between bg-white hover:bg-gray-50"
-                >
-                  <span className="text-gray-800">
-                    {editServiceId != null
-                      ? (() => {
-                          const s = editServices.find((x) => x.id === editServiceId);
-                          if (!s) return '시술 선택';
-                          const name = s.name.replace(/\s*\(card\)\s*/gi, '').trim();
-                          const dur = s.duration_minutes != null ? `${s.duration_minutes}분` : '';
-                          return dur ? `${name} · ${dur}` : name;
-                        })()
-                      : '시술 선택'}
-                  </span>
-                  <span className="material-symbols-outlined text-gray-400 text-lg">expand_more</span>
-                </button>
-              </div>
-              {/* Service picker modal: category blocks → then service list (card only, duration only display) */}
-              {isServicePickerOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-                  <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
-                    <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="text-base font-bold text-black">
-                        {servicePickerCategory == null ? '카테고리 선택' : servicePickerCategory}
-                      </h3>
-                      {servicePickerCategory != null ? (
-                        <button
-                          type="button"
-                          onClick={() => setServicePickerCategory(null)}
-                          className="text-sm text-gray-600 hover:text-black"
-                        >
-                          뒤로
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setIsServicePickerOpen(false)}
-                          className="text-gray-400 hover:text-black"
-                        >
-                          <span className="material-symbols-outlined">close</span>
-                        </button>
-                      )}
-                    </div>
-                    <div className="p-4 overflow-y-auto flex-1">
-                      {servicePickerCategory == null ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {SERVICE_PICKER_CATEGORY_ORDER.map((cat) => {
-                            const list = editServices.filter(
-                              (s) => getServiceCategoryForPicker(s.name) === cat
-                            );
-                            if (list.length === 0) return null;
-                            return (
-                              <button
-                                key={cat}
-                                type="button"
-                                onClick={() => setServicePickerCategory(cat)}
-                                className="border-2 border-gray-200 rounded-xl p-4 text-center hover:border-black hover:bg-gray-50 transition-colors"
-                              >
-                                <span className="font-semibold text-gray-900">{cat}</span>
-                                <p className="text-xs text-gray-500 mt-1">{list.length}개</p>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {editServices
-                            .filter((s) => getServiceCategoryForPicker(s.name) === servicePickerCategory)
-                            .map((s) => {
-                              const name = s.name.replace(/\s*\(card\)\s*/gi, '').trim();
-                              const dur = s.duration_minutes != null ? `${s.duration_minutes}분` : '';
-                              return (
-                                <button
-                                  key={s.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setEditServiceId(s.id);
-                                    setIsServicePickerOpen(false);
-                                    setServicePickerCategory(null);
-                                  }}
-                                  className={`w-full text-left border rounded-xl px-4 py-3 text-sm transition-colors ${
-                                    editServiceId === s.id
-                                      ? 'border-black bg-black text-white'
-                                      : 'border-gray-200 hover:border-black hover:bg-gray-50'
-                                  }`}
-                                >
-                                  {dur ? `${name} · ${dur}` : name}
-                                </button>
-                              );
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">메모</label>
-                <textarea
-                  value={editMemo}
-                  onChange={(e) => setEditMemo(e.target.value)}
-                  placeholder="예약 메모"
-                  rows={3}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setEditingBooking(null)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                disabled={!editDate || !editTime || editSubmitting || !editingBooking.id}
-                onClick={async () => {
-                  if (!editDate || !editTime || !editingBooking?.id) return;
-                  const dbTime = labelToDbTime(editTime);
-                  if (!dbTime) return;
-                  setEditSubmitting(true);
-                  try {
-                    await fetch(`/api/appointment/${editingBooking.id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        booking_date: editDate,
-                        booking_time: dbTime,
-                        ...(editServiceId != null && { service_id: editServiceId }),
-                        memo: editMemo,
-                      }),
-                    });
-                    setEditingBooking(null);
-                    const res = await fetch(
-                      `/api/appointment?date=${encodeURIComponent(selectedDate)}`
-                    );
-                    const data = await res.json();
-                    if (res.ok) {
-                      setBookings(data.bookings || []);
-                    }
-                  } finally {
-                    setEditSubmitting(false);
-                  }
-                }}
-                className={`px-5 py-2 rounded-lg text-xs md:text-sm font-semibold text-white flex items-center gap-2 ${
-                  editSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-black hover:bg-gray-800'
-                }`}
-              >
-                {editSubmitting ? '저장 중...' : '변경 저장'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditBookingModal
+          booking={editingBooking}
+          selectedDate={selectedDate}
+          onClose={() => setEditingBooking(null)}
+          onSave={async (bookingId, updates) => {
+            await fetch(`/api/appointment/${bookingId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updates),
+            });
+            const res = await fetch(
+              `/api/appointment?date=${encodeURIComponent(selectedDate)}`
+            );
+            const data = await res.json();
+            if (res.ok) {
+              setBookings(data.bookings || []);
+            }
+          }}
+        />
       )}
 
       {/* Delete Booking Confirm Modal */}
       {bookingToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative">
-            <button
-              type="button"
-              onClick={() => setBookingToDelete(null)}
-              className="absolute right-4 top-4 text-gray-400 hover:text-black"
-            >
-              <span className="material-symbols-outlined text-xl">close</span>
-            </button>
-            <h2 className="text-base font-bold text-black mb-2">Delete Booking</h2>
-            <p className="text-xs text-gray-500 mb-4">
-              이 예약을 정말 삭제할까요? 삭제 후에는 되돌릴 수 없습니다.
-            </p>
-            <div className="text-xs text-gray-600 mb-4 space-y-1">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Booking</span>
-                <span className="font-semibold text-gray-900">
-                  #{bookingToDelete.id}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Service</span>
-                <span className="font-medium text-gray-900">
-                  {bookingToDelete.service?.name || 'Service'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Designer</span>
-                <span className="font-medium text-gray-900">
-                  {bookingToDelete.designer?.name || 'Designer'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Date</span>
-                <span className="font-medium text-gray-900">
-                  {bookingToDelete.booking_date}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Time</span>
-                <span className="font-medium text-gray-900">
-                  {bookingTimeToLabel(bookingToDelete.booking_time)}
-                </span>
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setBookingToDelete(null)}
-                className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={cancellingId === bookingToDelete.id}
-                onClick={async () => {
-                  if (!bookingToDelete?.id) return;
-                  setCancellingId(bookingToDelete.id);
-                  try {
-                    const resDelete = await fetch(`/api/appointment/${bookingToDelete.id}`, {
-                      method: 'DELETE',
-                    });
-                    if (!resDelete.ok) {
-                      console.error('Failed to delete booking', await resDelete.text());
-                    }
+        <DeleteBookingModal
+          booking={bookingToDelete}
+          cancellingId={cancellingId}
+          onClose={() => setBookingToDelete(null)}
+          onConfirm={async () => {
+            if (!bookingToDelete?.id) return;
+            setCancellingId(bookingToDelete.id);
+            try {
+              const resDelete = await fetch(`/api/appointment/${bookingToDelete.id}`, {
+                method: 'DELETE',
+              });
+              if (!resDelete.ok) {
+                console.error('Failed to delete booking', await resDelete.text());
+              }
 
-                    const res = await fetch(
-                      `/api/appointment?date=${encodeURIComponent(selectedDate)}`
-                    );
-                    const data = await res.json();
-                    if (res.ok) {
-                      setBookings(data.bookings || []);
-                    }
-                    setBookingToDelete(null);
-                  } catch (err) {
-                    console.error('Error deleting booking:', err);
-                  } finally {
-                    setCancellingId(null);
-                  }
-                }}
-                className={`px-5 py-2 rounded-lg text-xs md:text-sm font-semibold text-white flex items-center gap-2 ${
-                  cancellingId === bookingToDelete.id
-                    ? 'bg-gray-400 cursor-wait'
-                    : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+              const res = await fetch(
+                `/api/appointment?date=${encodeURIComponent(selectedDate)}`
+              );
+              const data = await res.json();
+              if (res.ok) {
+                setBookings(data.bookings || []);
+              }
+              setBookingToDelete(null);
+            } catch (err) {
+              console.error('Error deleting booking:', err);
+            } finally {
+              setCancellingId(null);
+            }
+          }}
+        />
       )}
+
+      {/* Reservation History Modal */}
+      <ReservationHistoryModal
+        isOpen={isReservationHistoryOpen}
+        onClose={() => setIsReservationHistoryOpen(false)}
+        defaultStartDate={selectedDate}
+        defaultEndDate={selectedDate}
+      />
 
       {/* Designer Time Off Management Modal */}
       {isTimeOffModalOpen && (
@@ -5817,7 +3307,7 @@ export default function AppointmentsManagementPage() {
 
       {/* Holiday and Special Work Day Modal */}
       {isHolidayModalOpen && holidayDesignerId && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">임의 휴일 및 특근 설정</h2>
@@ -6099,252 +3589,18 @@ export default function AppointmentsManagementPage() {
         </div>
       )}
 
-      {/* Customer Info Modal - Right Sidebar */}
-      {viewingCustomerId && (
-        <div className="fixed inset-0 z-[100] pointer-events-none">
-          <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={() => {
-            setViewingCustomerId(null);
-            setViewingCustomer(null);
-          }} />
-          <div className="absolute right-0 top-0 bottom-0 w-[480px] bg-white shadow-2xl pointer-events-auto flex flex-col">
-            {customerInfoLoading ? (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
-                  <p className="text-sm text-gray-600">고객 정보를 불러오는 중...</p>
-                </div>
-              </div>
-            ) : viewingCustomer ? (
-              <>
-                {/* Header */}
-                <div className="p-6 border-b border-gray-200 flex items-center justify-between shrink-0">
-                  <h2 className="text-xl font-bold text-black">고객 정보</h2>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewingCustomerId(null);
-                      setViewingCustomer(null);
-                    }}
-                    className="text-gray-400 hover:text-black transition-colors"
-                  >
-                    <span className="material-symbols-outlined">close</span>
-                  </button>
-                </div>
-
-                {/* Search Bar */}
-                <div className="p-4 border-b border-gray-200 shrink-0">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-lg pointer-events-none">
-                        search
-                      </span>
-                      <input
-                        type="text"
-                        placeholder="고객명 또는 휴대폰"
-                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap"
-                    >
-                      고객등록
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      예약 등록
-                    </button>
-                  </div>
-                </div>
-
-                {/* Customer Info Content */}
-                <div className="flex-1 overflow-y-auto p-6">
-                  {/* Customer Image and Basic Info */}
-                  <div className="flex items-start gap-4 mb-6">
-                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-4xl text-gray-400">person</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-black">{viewingCustomer.name || '-'}</h3>
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
-                          {viewingCustomer.customer_type === 'prepaid' ? '정액권' : '일반'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-3">
-                        {viewingCustomer.phone ? viewingCustomer.phone.replace(/(\d{3})(\d{3,4})(\d{4})/, '$1-$2-$3') : '-'}
-                      </p>
-                      <button
-                        type="button"
-                        className="px-4 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50"
-                      >
-                        상세정보
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Customer Details */}
-                  <div className="space-y-4 mb-6">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">고객 번호</p>
-                      <p className="text-sm font-medium text-black">{viewingCustomer.customer_number || viewingCustomer.id || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">담당자</p>
-                      <p className="text-sm font-medium text-black">{viewingCustomer.manager_name || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">정액권 잔액</p>
-                      <p className="text-sm font-medium text-black">
-                        {viewingCustomer.prepaid_balance ? `${Number(viewingCustomer.prepaid_balance).toLocaleString()}` : '0'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">최근 방문일</p>
-                      <p className="text-sm font-medium text-black">
-                        {viewingCustomer.last_visit_date ? (() => {
-                          const date = new Date(viewingCustomer.last_visit_date);
-                          const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                          return `${formattedDate} (${viewingCustomer.days_since_last_visit || 0}일전)`;
-                        })() : '-'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">최근 1년 예약 수</p>
-                      <p className="text-sm font-medium text-black">
-                        {viewingCustomer.appointments_count || 0} {viewingCustomer.cancelled_count ? `(취소 ${viewingCustomer.cancelled_count})` : ''}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">예정된 예약</p>
-                      {viewingCustomer.next_appointment ? (
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-black">
-                            {(() => {
-                              const date = new Date(viewingCustomer.next_appointment.date);
-                              const formattedDate = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                              const time = viewingCustomer.next_appointment.time || '';
-                              const [hour, minute] = time.split(':');
-                              const hourNum = Number(hour);
-                              const ampm = hourNum >= 12 ? 'PM' : 'AM';
-                              const displayHour = hourNum > 12 ? hourNum - 12 : (hourNum === 0 ? 12 : hourNum);
-                              const formattedTime = minute ? `${displayHour}:${minute} ${ampm}` : '';
-                              return `${formattedDate} ${formattedTime}`;
-                            })()}
-                          </p>
-                          <span className="material-symbols-outlined text-sm text-gray-400">chevron_right</span>
-                        </div>
-                      ) : (
-                        <p className="text-sm font-medium text-black">-</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Tabs */}
-                  <div className="border-b border-gray-200 mb-4">
-                    <div className="flex gap-4">
-                      <button
-                        type="button"
-                        onClick={() => setCustomerInfoTab('appointments')}
-                        className={`pb-3 px-1 border-b-2 text-sm font-medium transition-colors ${
-                          customerInfoTab === 'appointments'
-                            ? 'border-purple-600 text-black'
-                            : 'border-transparent hover:border-gray-300 text-gray-600 hover:text-black'
-                        }`}
-                      >
-                        예약내역
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomerInfoTab('prepaid')}
-                        className={`pb-3 px-1 border-b-2 text-sm font-medium transition-colors ${
-                          customerInfoTab === 'prepaid'
-                            ? 'border-purple-600 text-black'
-                            : 'border-transparent hover:border-gray-300 text-gray-600 hover:text-black'
-                        }`}
-                      >
-                        정액권
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomerInfoTab('tickets')}
-                        className={`pb-3 px-1 border-b-2 text-sm font-medium transition-colors ${
-                          customerInfoTab === 'tickets'
-                            ? 'border-purple-600 text-black'
-                            : 'border-transparent hover:border-gray-300 text-gray-600 hover:text-black'
-                        }`}
-                      >
-                        티켓
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tab Content */}
-                  {customerInfoTab === 'prepaid' && (
-                    <div className="space-y-2">
-                      <div className="text-sm font-semibold text-black mb-3">정액권</div>
-                      <div className="border border-gray-200 rounded-lg overflow-hidden">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">정액권명</th>
-                              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">잔액</th>
-                              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">만료일</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {viewingCustomer.prepaid_tickets && viewingCustomer.prepaid_tickets.length > 0 ? (
-                              viewingCustomer.prepaid_tickets.map((ticket: any, idx: number) => (
-                                <tr key={idx} className="border-t border-gray-200">
-                                  <td className="px-4 py-2 text-gray-900">{ticket.name || '-'}</td>
-                                  <td className="px-4 py-2 text-gray-900">{Number(ticket.balance || 0).toLocaleString()}</td>
-                                  <td className="px-4 py-2 text-gray-900">{ticket.expiry_date || '무제한'}</td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr>
-                                <td colSpan={3} className="px-4 py-4 text-center text-sm text-gray-500">
-                                  정액권 내역이 없습니다.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {customerInfoTab === 'appointments' && (
-                    <div className="space-y-2">
-                      <div className="text-sm font-semibold text-black mb-3">예약내역</div>
-                      <div className="text-sm text-gray-500 text-center py-4">
-                        예약내역 기능은 추후 구현 예정입니다.
-                      </div>
-                    </div>
-                  )}
-                  
-                  {customerInfoTab === 'tickets' && (
-                    <div className="space-y-2">
-                      <div className="text-sm font-semibold text-black mb-3">티켓</div>
-                      <div className="text-sm text-gray-500 text-center py-4">
-                        티켓 기능은 추후 구현 예정입니다.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-gray-600">고객 정보를 불러올 수 없습니다.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Customer Info Drawer */}
+      <CustomerInfoDrawer
+        customerId={viewingCustomerId}
+        customer={viewingCustomer}
+        loading={customerInfoLoading}
+        tab={customerInfoTab}
+        onClose={() => {
+          setViewingCustomerId(null);
+          setViewingCustomer(null);
+        }}
+        onTabChange={setCustomerInfoTab}
+      />
     </div>
   );
 }
-
-
