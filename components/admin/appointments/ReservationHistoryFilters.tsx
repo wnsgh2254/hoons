@@ -2,6 +2,16 @@
 
 import React from 'react';
 
+type ReservationStatusFilter =
+  | 'all'
+  | 'BOOKED'
+  | 'ARRIVED'
+  | 'PAID'
+  | 'NOSHOW'
+  | 'CANCELLED';
+
+type ReservationDesignerFilter = 'all' | number;
+
 interface ReservationHistoryFiltersProps {
   dateType: 'booking' | 'created';
   setDateType: (type: 'booking' | 'created') => void;
@@ -11,10 +21,10 @@ interface ReservationHistoryFiltersProps {
   setStartDate: (date: string) => void;
   endDate: string;
   setEndDate: (date: string) => void;
-  statusFilter: 'all' | 'BOOKED' | 'ARRIVED' | 'PAID' | 'NOSHOW' | 'CANCELLED';
-  setStatusFilter: (status: typeof statusFilter) => void;
-  designerFilter: 'all' | number;
-  setDesignerFilter: (designer: typeof designerFilter) => void;
+  statusFilter: ReservationStatusFilter;
+  setStatusFilter: (status: ReservationStatusFilter) => void;
+  designerFilter: ReservationDesignerFilter;
+  setDesignerFilter: (designer: ReservationDesignerFilter) => void;
   searchKeyword: string;
   setSearchKeyword: (keyword: string) => void;
   onSearch: () => void;
@@ -138,7 +148,7 @@ export default function ReservationHistoryFilters({
             <span className="text-xs text-gray-500">상태</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              onChange={(e) => setStatusFilter(e.target.value as ReservationStatusFilter)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[140px] focus:ring-2 focus:ring-black focus:border-transparent"
             >
               <option value="all">전체(취소포함)</option>
