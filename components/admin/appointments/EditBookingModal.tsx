@@ -106,8 +106,8 @@ export default function EditBookingModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+      <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-visible">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative overflow-visible">
           <button
             type="button"
             onClick={onClose}
@@ -133,12 +133,13 @@ export default function EditBookingModal({
                 onChange={(e) => setEditDate(e.target.value)}
               />
             </div>
-            <div>
+            <div className="relative">
               <label className="block text-xs font-semibold text-gray-500 mb-1">시작 시간</label>
               <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm appearance-none bg-white relative z-[100002]"
                 value={editTime}
                 onChange={(e) => setEditTime(e.target.value)}
+                style={{ position: 'relative', zIndex: 100002 }}
               >
                 {EDIT_TIME_OPTIONS.map((t) => (
                   <option key={t} value={t}>
