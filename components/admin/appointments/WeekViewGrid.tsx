@@ -854,7 +854,7 @@ export default function WeekViewGrid({
 
                     {/* Hover Card */}
                     {hoveredBooking === b.id && !isNewBookingOpen && (
-                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
+                      <div className="absolute top-0 left-full ml-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
                         <div
                           className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}
                         >

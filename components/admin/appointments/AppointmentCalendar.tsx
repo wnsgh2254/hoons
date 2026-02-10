@@ -47,7 +47,7 @@ export default function AppointmentCalendar({
         </button>
       </div>
       {/* Comment: Always show booking count - toggle removed */}
-      <div className="grid grid-cols-7 gap-2 text-sm text-gray-500 mb-2 font-medium">
+      <div className="grid grid-cols-7 gap-2 text-sm text-gray-500 mb-1.5 font-medium">
         {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
           <span key={d} className="text-center">
             {d}

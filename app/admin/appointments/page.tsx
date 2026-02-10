@@ -15,12 +15,12 @@ import BookingCard from '@/components/admin/appointments/BookingCard';
 import EditBookingModal from '@/components/admin/appointments/EditBookingModal';
 import DeleteBookingModal from '@/components/admin/appointments/DeleteBookingModal';
 import ScheduleHeaderControls from '@/components/admin/appointments/ScheduleHeaderControls';
-import WeekViewBanner from '@/components/admin/appointments/WeekViewBanner';
 import ScheduleGridHeader from '@/components/admin/appointments/ScheduleGridHeader';
 import TimeColumn from '@/components/admin/appointments/TimeColumn';
 import CurrentTimeLine from '@/components/admin/appointments/CurrentTimeLine';
 import WeekViewGrid from '@/components/admin/appointments/WeekViewGrid';
 import ReservationHistoryModal from '@/components/admin/appointments/ReservationHistoryModal';
+import HolidayCalendarModal from '@/components/admin/appointments/HolidayCalendarModal';
 import {
   GRID_START_HOUR,
   GRID_END_HOUR,
@@ -161,10 +161,12 @@ export default function AppointmentsManagementPage() {
   const [isStartTimeDropdownOpen, setIsStartTimeDropdownOpen] = useState(false);
   const [isEndTimeDropdownOpen, setIsEndTimeDropdownOpen] = useState(false);
 
-  // Comment: Holiday and special work day modal state
+  // Comment: Holiday and special work day modal state (for individual designer)
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
+  // Comment: Holiday calendar modal state (for overall view)
+  const [isHolidayCalendarModalOpen, setIsHolidayCalendarModalOpen] = useState(false);
   const [holidayDesignerId, setHolidayDesignerId] = useState<number | null>(null);
-  const [holidayDesignerName, setHolidayDesignerName] = useState<string>('');
+  const [holidayDesignerName, setHolidayDesignerName] = useState<string>('전체');
   const [holidayType, setHolidayType] = useState<'holiday' | 'special'>('holiday');
   const [holidaySelectedDates, setHolidaySelectedDates] = useState<string[]>([]);
   const [holidayCurrentMonth, setHolidayCurrentMonth] = useState<Date>(new Date());
@@ -208,7 +210,7 @@ export default function AppointmentsManagementPage() {
   const [viewingCustomerId, setViewingCustomerId] = useState<number | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<any | null>(null);
   const [customerInfoLoading, setCustomerInfoLoading] = useState(false);
-  const [customerInfoTab, setCustomerInfoTab] = useState<'appointments' | 'prepaid' | 'tickets'>('prepaid');
+  const [customerInfoTab, setCustomerInfoTab] = useState<'sales' | 'appointments' | 'prepaid' | 'tickets' | 'messages'>('sales');
 
   // Comment: REQ_SCH_001_09 - Menu dropdown state
   const [isMenuDropdownOpen, setIsMenuDropdownOpen] = useState(false);
@@ -217,6 +219,7 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Reservation history modal state
   const [isReservationHistoryOpen, setIsReservationHistoryOpen] = useState(false);
+  const [reservationHistoryRefreshTrigger, setReservationHistoryRefreshTrigger] = useState(0);
 
   // Comment: Empty slot hover and context menu state
   const [hoveredEmptySlot, setHoveredEmptySlot] = useState<{
@@ -677,49 +680,59 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Load regular schedule and existing time offs for holiday modal
   useEffect(() => {
-    if (isHolidayModalOpen && holidayDesignerId) {
-      const fetchData = async () => {
-        setHolidayScheduleLoading(true);
-        try {
-          // Comment: Fetch regular schedule
-          const scheduleRes = await fetch(`/api/designer-schedules?designer_id=${holidayDesignerId}`);
-          const scheduleData = await scheduleRes.json();
-          if (scheduleRes.ok) {
-            setHolidayRegularSchedule(scheduleData.schedules || []);
-          }
+    if (isHolidayModalOpen) {
+      // Comment: Only fetch data if a specific designer is selected
+      // For "전체" (holidayDesignerId === null), skip fetching (calendar will be empty but usable)
+      if (holidayDesignerId !== null) {
+        const fetchData = async () => {
+          setHolidayScheduleLoading(true);
+          try {
+            // Comment: Fetch regular schedule
+            const scheduleRes = await fetch(`/api/designer-schedules?designer_id=${holidayDesignerId}`);
+            const scheduleData = await scheduleRes.json();
+            if (scheduleRes.ok) {
+              setHolidayRegularSchedule(scheduleData.schedules || []);
+            }
 
-          // Comment: Fetch existing time offs (임의 휴일, 특별 근무일)
-          const timeOffRes = await fetch(`/api/designer-time-off?designer_id=${holidayDesignerId}`);
-          const timeOffData = await timeOffRes.json();
-          if (timeOffRes.ok) {
-            const existingTimeOffs = (timeOffData.timeOffs || []).filter(
-              (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일'
-            );
-            setHolidayExistingTimeOffs(existingTimeOffs);
-            
-            // Comment: Extract dates from existing time offs and set to selected dates
-            const dates: string[] = [];
-            existingTimeOffs.forEach((to: any) => {
-              const start = new Date(to.start_date);
-              const end = new Date(to.end_date);
-              const current = new Date(start);
-              while (current <= end) {
-                dates.push(current.toISOString().split('T')[0]);
-                current.setDate(current.getDate() + 1);
-              }
-            });
-            setHolidaySelectedDates(dates);
+            // Comment: Fetch existing time offs (임의 휴일, 특별 근무일)
+            const timeOffRes = await fetch(`/api/designer-time-off?designer_id=${holidayDesignerId}`);
+            const timeOffData = await timeOffRes.json();
+            if (timeOffRes.ok) {
+              const existingTimeOffs = (timeOffData.timeOffs || []).filter(
+                (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일'
+              );
+              setHolidayExistingTimeOffs(existingTimeOffs);
+              
+              // Comment: Extract dates from existing time offs and set to selected dates
+              const dates: string[] = [];
+              existingTimeOffs.forEach((to: any) => {
+                const start = new Date(to.start_date);
+                const end = new Date(to.end_date);
+                const current = new Date(start);
+                while (current <= end) {
+                  dates.push(current.toISOString().split('T')[0]);
+                  current.setDate(current.getDate() + 1);
+                }
+              });
+              setHolidaySelectedDates(dates);
+            }
+          } catch (error) {
+            console.error('Error fetching holiday data:', error);
+            setHolidayRegularSchedule([]);
+            setHolidayExistingTimeOffs([]);
+          } finally {
+            setHolidayScheduleLoading(false);
           }
-        } catch (error) {
-          console.error('Error fetching holiday data:', error);
-          setHolidayRegularSchedule([]);
-          setHolidayExistingTimeOffs([]);
-        } finally {
-          setHolidayScheduleLoading(false);
-        }
-      };
+        };
 
-      fetchData();
+        fetchData();
+      } else {
+        // Comment: For "전체" selection, clear existing data but keep calendar active
+        setHolidayRegularSchedule([]);
+        setHolidayScheduleLoading(false);
+        setHolidayExistingTimeOffs([]);
+        setHolidaySelectedDates([]);
+      }
     } else if (!isHolidayModalOpen) {
       setHolidayRegularSchedule([]);
       setHolidayScheduleLoading(false);
@@ -1365,18 +1378,23 @@ export default function AppointmentsManagementPage() {
     }
   };
 
-  // Comment: Handlers for designer header dropdown menu (week view, restrictions, holidays)
-  const handleOpenWeekView = (designerId: number, name: string) => {
-    const date = new Date(selectedDate);
+  // Comment: Helper function to get Monday of the week for a given date
+  const getMondayOfWeek = (date: Date): string => {
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Monday 기준
     const monday = new Date(date.setDate(diff));
-    const mondayStr = monday.toISOString().split('T')[0];
+    return monday.toISOString().split('T')[0];
+  };
+
+  // Comment: Handlers for designer header dropdown menu (week view, restrictions, holidays)
+  const handleOpenWeekView = (designerId: number, name: string) => {
+    const mondayStr = getMondayOfWeek(new Date(selectedDate));
 
     setWeekViewDesignerId(designerId);
     setWeekViewDesignerName(name);
     setWeekViewStartDate(mondayStr);
     setIsWeekViewMode(true);
+    setSelectedDesignerFilter(name);
   };
 
   const handleCloseWeekView = () => {
@@ -1385,6 +1403,29 @@ export default function AppointmentsManagementPage() {
     setWeekViewDesignerName('');
     setWeekViewBookings([]);
   };
+
+  // Comment: Handle designer filter changes when in week view mode
+  useEffect(() => {
+    if (!isWeekViewMode || !selectedDesignerFilter) return;
+
+    if (selectedDesignerFilter === '전체' || selectedDesignerFilter === '전체(휴무 제외)') {
+      // If "전체" is selected, exit week view mode
+      setIsWeekViewMode(false);
+      setWeekViewDesignerId(null);
+      setWeekViewDesignerName('');
+      setWeekViewBookings([]);
+      return;
+    }
+
+    // If a specific designer is selected, update week view to that designer
+    const designer = allDesigners.find((d) => d.name === selectedDesignerFilter);
+    if (designer && designer.id !== weekViewDesignerId) {
+      const mondayStr = getMondayOfWeek(new Date(selectedDate));
+      setWeekViewDesignerId(designer.id);
+      setWeekViewDesignerName(designer.name);
+      setWeekViewStartDate(mondayStr);
+    }
+  }, [selectedDesignerFilter, isWeekViewMode, allDesigners, weekViewDesignerId, selectedDate]);
 
   const handleOpenRestrictionModal = (designerId: number, name: string) => {
     setRestrictionDesignerId(designerId);
@@ -1505,6 +1546,7 @@ export default function AppointmentsManagementPage() {
           onSetViewingCustomerId={setViewingCustomerId}
           onLoadCustomerInfo={loadCustomerInfo}
           onOpenReservationHistory={() => setIsReservationHistoryOpen(true)}
+          onOpenHolidayCalendar={() => setIsHolidayCalendarModalOpen(true)}
         />
 
         <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
@@ -1558,18 +1600,6 @@ export default function AppointmentsManagementPage() {
 
               {/* Center: Full Schedule */}
               <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} flex flex-col gap-4 min-h-0`}>
-                {/* Week view designer name banner */}
-                {isWeekViewMode && weekViewDesignerId && weekViewDesignerName && (
-                  <WeekViewBanner
-                    designerName={weekViewDesignerName}
-                    onBackToNormalView={() => {
-                      setIsWeekViewMode(false);
-                      setWeekViewDesignerId(null);
-                      setWeekViewDesignerName('');
-                      setWeekViewBookings([]);
-                    }}
-                  />
-                )}
                 <div
                   ref={scheduleRef}
                   className="flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
@@ -2450,7 +2480,7 @@ export default function AppointmentsManagementPage() {
                                   
                                   {/* Hover Card - 상태별 스펙에 맞게 표시 */}
                                   {hoveredBooking === b.id && !isNewBookingOpen && (
-                                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
+                                    <div className="absolute top-0 left-full ml-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
                                       <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
                                         <p className="text-xs font-bold">{statusColor.label}</p>
                                       </div>
@@ -2721,6 +2751,10 @@ export default function AppointmentsManagementPage() {
             if (res.ok) {
               setBookings(data.bookings || []);
             }
+            // 예약 내역 모달이 열려있으면 데이터 새로고침
+            if (isReservationHistoryOpen) {
+              setReservationHistoryRefreshTrigger((prev) => prev + 1);
+            }
           }}
         />
       )}
@@ -2765,6 +2799,128 @@ export default function AppointmentsManagementPage() {
         onClose={() => setIsReservationHistoryOpen(false)}
         defaultStartDate={selectedDate}
         defaultEndDate={selectedDate}
+        refreshTrigger={reservationHistoryRefreshTrigger}
+        onCustomerClick={(customerId) => {
+          // customerId가 없어도 모달이 열리도록 기본값 사용
+          const finalCustomerId = customerId || 1;
+          setViewingCustomerId(finalCustomerId);
+          // 더미 데이터 설정 (UI 확인용)
+          setViewingCustomer({
+            id: finalCustomerId,
+            name: '홍길동',
+            phone: '010-1234-5678',
+            customer_number: finalCustomerId,
+            customer_type: 'normal',
+            manager_name: '윤훈원장',
+            prepaid_balance: 50000,
+            last_visit_date: '2026-01-15',
+            days_since_last_visit: 26,
+            appointments_count: 12,
+            cancelled_count: 2,
+            next_appointment: {
+              date: '2026-02-20',
+              time: '14:00',
+            },
+            prepaid_tickets: [
+              {
+                name: '기본 정액권',
+                balance: 50000,
+                expiry_date: '2026-12-31',
+              },
+              {
+                name: '프리미엄 정액권',
+                balance: 200000,
+                expiry_date: '2027-06-30',
+              },
+            ],
+          });
+          setCustomerInfoLoading(false);
+        }}
+        onEditBooking={(booking) => {
+          // 예약 내역 모달은 닫지 않고 그대로 유지
+          setEditingBooking(booking);
+          setEditDate(booking.booking_date || selectedDate);
+          if (booking.booking_time) {
+            const [hour, minute] = booking.booking_time.split(':');
+            const hourNum = Number(hour);
+            const ampm = hourNum >= 12 ? 'PM' : 'AM';
+            const displayHour = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum;
+            setEditTime(`${displayHour}:${minute} ${ampm}`);
+          }
+        }}
+        onCancelBooking={async (booking) => {
+          if (!confirm('예약을 취소하시겠습니까?')) {
+            return;
+          }
+          try {
+            const res = await fetch(`/api/appointment/${booking.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'CANCELLED' }),
+            });
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || '예약 취소에 실패했습니다.');
+            }
+            alert('예약이 취소되었습니다.');
+            // 예약 내역 모달은 닫지 않고 데이터만 새로고침
+            setReservationHistoryRefreshTrigger((prev) => prev + 1);
+            // Refresh bookings
+            const weekStart = getWeekStart(selectedDate);
+            const weekEnd = getWeekEnd(selectedDate);
+            const refreshRes = await fetch(
+              `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+            );
+            const refreshData = await refreshRes.json();
+            if (refreshRes.ok) {
+              setBookings(refreshData.bookings || []);
+              setFilteredBookings(refreshData.bookings || []);
+            }
+          } catch (error: any) {
+            alert(error.message || '예약 취소에 실패했습니다.');
+          }
+        }}
+        onViewBooking={(booking) => {
+          if (booking.booking_date) {
+            setSelectedDate(booking.booking_date);
+            setIsReservationHistoryOpen(false);
+            // Scroll to the booking cell after a short delay to allow date change
+            setTimeout(() => {
+              const scrollContainer = document.getElementById('schedule-scroll-container');
+              if (scrollContainer && booking.booking_time && booking.designer?.id) {
+                const [hour, minute] = booking.booking_time.split(':');
+                const hourNum = Number(hour);
+                const minutes = Number(minute);
+                const GRID_START_HOUR = 8;
+                const GRID_30MIN_HEIGHT = 60;
+                const startMinutes = (hourNum - GRID_START_HOUR) * 60 + minutes;
+                const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
+                
+                // Find the designer in visibleDesigners (which is an array of names)
+                const designer = allDesigners.find((d) => d.id === booking.designer?.id);
+                const designerIndex = designer 
+                  ? visibleDesigners.findIndex((name) => name === designer.name)
+                  : -1;
+                
+                if (designerIndex >= 0) {
+                  const columnWidth = scrollContainer.scrollWidth / visibleDesigners.length;
+                  const scrollLeft = columnWidth * designerIndex;
+                  
+                  scrollContainer.scrollTo({
+                    top: Math.max(0, top - 200),
+                    left: scrollLeft,
+                    behavior: 'smooth',
+                  });
+                } else {
+                  scrollContainer.scrollTo({
+                    top: Math.max(0, top - 200),
+                    behavior: 'smooth',
+                  });
+                }
+              }
+            }, 300);
+          }
+        }}
       />
 
       {/* Designer Time Off Management Modal */}
@@ -3306,63 +3462,96 @@ export default function AppointmentsManagementPage() {
       )}
 
       {/* Holiday and Special Work Day Modal */}
-      {isHolidayModalOpen && holidayDesignerId && (
-        <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">임의 휴일 및 특근 설정</h2>
+      {isHolidayModalOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100001] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-black">임의 휴일 및 특근 설정</h2>
               <button
                 onClick={() => {
                   setIsHolidayModalOpen(false);
                   setHolidayDesignerId(null);
-                  setHolidayDesignerName('');
+                  setHolidayDesignerName('전체');
                   setHolidaySelectedDates([]);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="text-gray-400 hover:text-black transition-colors"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="p-6 space-y-4 overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">
                   디자이너
                 </label>
                 <select
-                  value={holidayDesignerName}
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                  value={holidayDesignerId || 'all'}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === 'all') {
+                      setHolidayDesignerId(null);
+                      setHolidayDesignerName('전체');
+                      // Reset to holiday type when "전체" is selected (special work day not allowed for "전체")
+                      if (holidayType === 'special') {
+                        setHolidayType('holiday');
+                      }
+                    } else {
+                      const designerId = Number(value);
+                      const designer = allDesigners.find(d => d.id === designerId);
+                      if (designer) {
+                        setHolidayDesignerId(designerId);
+                        setHolidayDesignerName(designer.name);
+                      }
+                    }
+                    // Reset selected dates when designer changes
+                    setHolidaySelectedDates([]);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                 >
-                  <option>{holidayDesignerName}</option>
+                  <option value="all">전체</option>
+                  {allDesigners.map((designer) => (
+                    <option key={designer.id} value={designer.id}>
+                      {designer.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">
                   유형
                 </label>
                 <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
                       value="holiday"
                       checked={holidayType === 'holiday'}
                       onChange={(e) => setHolidayType(e.target.value as 'holiday' | 'special')}
+                      className="w-3.5 h-3.5"
                     />
-                    <span className="text-sm">임의 휴일</span>
+                    <span className="text-sm text-gray-700">임의 휴일</span>
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className={`flex items-center gap-2 ${!holidayDesignerId ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                     <input
                       type="radio"
                       value="special"
                       checked={holidayType === 'special'}
                       onChange={(e) => setHolidayType(e.target.value as 'holiday' | 'special')}
+                      disabled={!holidayDesignerId}
+                      className={`w-3.5 h-3.5 ${!holidayDesignerId ? 'cursor-not-allowed' : ''}`}
                     />
-                    <span className="text-sm">특별 근무일</span>
+                    <span className="text-sm text-gray-700">특별 근무일</span>
                   </label>
                 </div>
               </div>
               {/* Calendar component */}
               <div className="border border-gray-200 rounded-lg p-4">
+                {!holidayDesignerId && holidayType === 'special' ? (
+                  <div className="text-center py-8 text-sm text-gray-500">
+                    특별 근무일은 전체 디자이너에 대해 설정할 수 없습니다. 디자이너를 선택해주세요.
+                  </div>
+                ) : (
+                  <>
                 <div className="flex items-center justify-between mb-4">
                   <button
                     onClick={() => {
@@ -3370,11 +3559,11 @@ export default function AppointmentsManagementPage() {
                       prevMonth.setMonth(prevMonth.getMonth() - 1);
                       setHolidayCurrentMonth(prevMonth);
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
+                    className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
                   >
                     <span className="material-symbols-outlined text-lg">chevron_left</span>
                   </button>
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-sm font-medium text-black">
                     {holidayCurrentMonth.getFullYear()}년 {holidayCurrentMonth.getMonth() + 1}월
                   </h3>
                   <button
@@ -3383,14 +3572,14 @@ export default function AppointmentsManagementPage() {
                       nextMonth.setMonth(nextMonth.getMonth() + 1);
                       setHolidayCurrentMonth(nextMonth);
                     }}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
+                    className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
                   >
                     <span className="material-symbols-outlined text-lg">chevron_right</span>
                   </button>
                 </div>
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
-                    <div key={day} className="text-center text-xs font-medium text-gray-600 py-1">
+                    <div key={day} className="text-center text-xs font-semibold text-gray-700 uppercase tracking-wider py-1">
                       {day}
                     </div>
                   ))}
@@ -3446,11 +3635,14 @@ export default function AppointmentsManagementPage() {
                       }
                       
                       // Comment: Check if this date is a regular holiday (no schedule for this weekday)
+                      // Only show regular holiday if a specific designer is selected (not "전체")
                       const weekday = date.getDay(); // 0 = Sunday, 6 = Saturday
-                      const hasRegularSchedule = holidayRegularSchedule.some(
-                        (s: any) => s.weekday === weekday && !s.effective_to
-                      );
-                      const isRegularHoliday = isCurrentMonth && !hasRegularSchedule;
+                      const hasRegularSchedule = holidayDesignerId !== null 
+                        ? holidayRegularSchedule.some(
+                            (s: any) => s.weekday === weekday && !s.effective_to
+                          )
+                        : false; // For "전체", don't show regular holidays
+                      const isRegularHoliday = isCurrentMonth && !hasRegularSchedule && holidayDesignerId !== null;
                       
                       // Comment: Check if this date has existing time off (임의 휴일 or 특별 근무일)
                       const existingTimeOff = holidayExistingTimeOffs.find((to: any) => {
@@ -3513,48 +3705,76 @@ export default function AppointmentsManagementPage() {
                 <div className="mt-4 flex flex-col gap-2 text-xs">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <span>정기 휴일</span>
+                    <span className="text-gray-700">정기 휴일</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full border-2 border-red-500"></div>
-                    <span>임의 휴일</span>
+                    <span className="text-gray-700">임의 휴일</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                    <span>특별 근무일</span>
+                    <span className="text-gray-700">특별 근무일</span>
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-4">
                   *날짜를 선택하면 등록/수정이 가능합니다.
                 </p>
+                  </>
+                )}
               </div>
               <button
                 onClick={async () => {
+                  if (!holidayDesignerId && holidayType === 'special') {
+                    alert('특별 근무일은 전체 디자이너에 대해 설정할 수 없습니다. 디자이너를 선택해주세요.');
+                    return;
+                  }
                   if (holidaySelectedDates.length === 0) {
                     alert('날짜를 선택해주세요.');
                     return;
                   }
                   setHolidaySubmitting(true);
                   try {
-                    // Comment: Get designer's shop_id
-                    const designer = allDesigners.find((d) => d.id === holidayDesignerId);
-                    const designerShopId = designer?.shop_id;
-                    
-                    // Comment: Create time off records for selected dates
-                    const promises = holidaySelectedDates.map((date) =>
-                      fetch('/api/designer-time-off', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          designer_id: holidayDesignerId,
-                          shop_id: designerShopId || null,
-                          start_date: date,
-                          end_date: date,
-                          reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
-                        }),
-                      })
-                    );
-                    await Promise.all(promises);
+                    // Comment: If "전체" is selected for holiday type, apply to all designers
+                    if (!holidayDesignerId && holidayType === 'holiday') {
+                      // Apply to all designers
+                      const promises = holidaySelectedDates.flatMap((date) =>
+                        allDesigners.map((designer) => {
+                          const designerShopId = designer?.shop_id;
+                          return fetch('/api/designer-time-off', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              designer_id: designer.id,
+                              shop_id: designerShopId || null,
+                              start_date: date,
+                              end_date: date,
+                              reason: '임의 휴일',
+                            }),
+                          });
+                        })
+                      );
+                      await Promise.all(promises);
+                    } else if (holidayDesignerId) {
+                      // Comment: Get designer's shop_id
+                      const designer = allDesigners.find((d) => d.id === holidayDesignerId);
+                      const designerShopId = designer?.shop_id;
+                      
+                      // Comment: Create time off records for selected dates
+                      const promises = holidaySelectedDates.map((date) =>
+                        fetch('/api/designer-time-off', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            designer_id: holidayDesignerId,
+                            shop_id: designerShopId || null,
+                            start_date: date,
+                            end_date: date,
+                            reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
+                          }),
+                        })
+                      );
+                      await Promise.all(promises);
+                    }
                     alert('설정이 완료되었습니다.');
                     
                     // Comment: Reload available designers if the selected date is in the current view
@@ -3570,7 +3790,7 @@ export default function AppointmentsManagementPage() {
                     
                     setIsHolidayModalOpen(false);
                     setHolidayDesignerId(null);
-                    setHolidayDesignerName('');
+                    setHolidayDesignerName('전체');
                     setHolidaySelectedDates([]);
                   } catch (error) {
                     console.error('Error setting holidays:', error);
@@ -3579,8 +3799,8 @@ export default function AppointmentsManagementPage() {
                     setHolidaySubmitting(false);
                   }
                 }}
-                disabled={holidaySubmitting || holidaySelectedDates.length === 0}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                disabled={holidaySubmitting || holidaySelectedDates.length === 0 || (!holidayDesignerId && holidayType === 'special')}
+                className="w-full px-4 py-2 bg-black text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
                 {holidaySubmitting ? '설정 중...' : '저장하기'}
               </button>
@@ -3588,6 +3808,26 @@ export default function AppointmentsManagementPage() {
           </div>
         </div>
       )}
+
+      {/* Holiday Calendar Modal */}
+      <HolidayCalendarModal
+        isOpen={isHolidayCalendarModalOpen}
+        onClose={() => setIsHolidayCalendarModalOpen(false)}
+        allDesigners={allDesigners}
+        onOpenHolidayModal={(designerId, designerName) => {
+          if (designerId === null) {
+            // If "전체" is selected, set to null and show dropdown
+            setHolidayDesignerId(null);
+            setHolidayDesignerName('전체');
+          } else {
+            setHolidayDesignerId(designerId);
+            setHolidayDesignerName(designerName);
+          }
+          setHolidayCurrentMonth(new Date());
+          setHolidaySelectedDates([]);
+          setIsHolidayModalOpen(true);
+        }}
+      />
 
       {/* Customer Info Drawer */}
       <CustomerInfoDrawer
