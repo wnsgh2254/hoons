@@ -19,7 +19,7 @@ export default function ServicePickerModal({
   const [servicePickerCategory, setServicePickerCategory] = useState<string | null>(null);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-[100002] flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-base font-bold text-black">

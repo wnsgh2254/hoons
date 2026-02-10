@@ -47,6 +47,7 @@ interface ScheduleHeaderControlsProps {
   onSetViewingCustomerId: (id: number | null) => void;
   onLoadCustomerInfo: (id: number) => void;
   onOpenReservationHistory: () => void;
+  onOpenHolidayCalendar?: () => void;
 }
 
 export default function ScheduleHeaderControls({
@@ -92,6 +93,7 @@ export default function ScheduleHeaderControls({
   onSetViewingCustomerId,
   onLoadCustomerInfo,
   onOpenReservationHistory,
+  onOpenHolidayCalendar,
 }: ScheduleHeaderControlsProps) {
   return (
     <div className="bg-white border-b border-gray-200 shrink-0 relative z-[100]">
@@ -574,16 +576,19 @@ export default function ScheduleHeaderControls({
                     >
                       예약 내역
                     </button>
-                    <Link
-                      href="/admin/appointments"
-                      className="block px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 last:rounded-b-lg transition-colors"
+                    <button
+                      type="button"
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 last:rounded-b-lg transition-colors"
                       onClick={() => {
+                        if (onOpenHolidayCalendar) {
+                          onOpenHolidayCalendar();
+                        }
                         onSetIsMenuDropdownOpen(false);
                         onSetMenuDropdownPosition(null);
                       }}
                     >
                       휴일 및 특근 현황
-                    </Link>
+                    </button>
                   </div>,
                   document.body
                 )}
