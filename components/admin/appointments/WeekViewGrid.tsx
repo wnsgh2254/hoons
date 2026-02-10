@@ -813,24 +813,23 @@ export default function WeekViewGrid({
               const bookingMemo = (b as any).memo || (b as any).note || '';
 
               return (
-              <div
-                key={b.id}
-                className="absolute left-1 right-1"
-                style={{ top, height, zIndex: 1 }}
-                onMouseEnter={() => setHoveredBooking(b.id || null)}
-                onMouseLeave={() => {
-                  setHoveredBooking(null);
-                  setBookingMenuOpen((prev) => (prev === b.id ? null : prev));
-                }}
-              >
+                <div
+                  key={b.id}
+                  className="absolute left-1 right-1"
+                  style={{ top, height, zIndex: 1 }}
+                  onMouseEnter={() => setHoveredBooking(b.id || null)}
+                  onMouseLeave={() => {
+                    setHoveredBooking(null);
+                    setBookingMenuOpen(null);
+                  }}
+                >
                   <div
                     className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-visible relative`}
                     style={{ zIndex: 1 }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (b.id) {
-                        setBookingMenuOpen((prev) => (prev === b.id ? null : b.id));
-                      }
+                      if (!b.id) return;
+                      setBookingMenuOpen(b.id);
                     }}
                   >
                     <div>
