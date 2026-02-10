@@ -463,7 +463,7 @@ export default function NewBookingModal({
                           }}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                         >
-                          {[15, 30, 45, 60, 90, 120, 150, 180].map((min) => (
+                          {[30, 60, 90, 120, 150, 180].map((min) => (
                             <option key={min} value={min}>
                               {min} 분
                             </option>

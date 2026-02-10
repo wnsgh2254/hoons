@@ -2483,47 +2483,91 @@ export default function AppointmentsManagementPage() {
                               
                               {designerBookings.map((b) => {
                                 if (!b.booking_time) return null;
-                        const [hourStr, minuteStr] = b.booking_time.split(':');
-                        const hour = Number(hourStr);
-                        const minutes = Number(minuteStr);
+                                const [hourStr, minuteStr] = b.booking_time.split(':');
+                                const hour = Number(hourStr);
+                                const minutes = Number(minuteStr);
                                 if (Number.isNaN(hour) || Number.isNaN(minutes)) return null;
 
                                 const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
                                 if (startMinutes < 0) return null;
-
                                 const durationMinutes =
                                   b.service?.duration_minutes && b.service.duration_minutes > 0
                                     ? b.service.duration_minutes
                                     : 60;
+                                const endMinutes = startMinutes + durationMinutes;
+
+                                // Comment: Check overlap with other bookings for this designer (same date)
+                                let hasOverlap = false;
+                                let placeOnRight = false;
+                                designerBookings.forEach((other) => {
+                                  if (other === b || !other.booking_time) return;
+                                  const [ohStr, omStr] = other.booking_time.split(':');
+                                  const oh = Number(ohStr);
+                                  const om = Number(omStr);
+                                  if (Number.isNaN(oh) || Number.isNaN(om)) return;
+                                  const otherStart = (oh - GRID_START_HOUR) * 60 + om;
+                                  const otherDuration =
+                                    other.service?.duration_minutes && other.service.duration_minutes > 0
+                                      ? other.service.duration_minutes
+                                      : 60;
+                                  const otherEnd = otherStart + otherDuration;
+                                  const overlap =
+                                    Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);
+                                  if (overlap) {
+                                    hasOverlap = true;
+                                    // Comment: Later-created booking goes to the right side
+                                    if ((other as any).id < (b as any).id) {
+                                      placeOnRight = true;
+                                    }
+                                  }
+                                });
+
                                 // Comment: Calculate position based on 30-minute intervals (40px each) with padding
                                 const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8; // Add padding offset
                                 const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
 
-                        const serviceName = b.service?.name || 'Service';
-                                const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
-                        const amount =
-                          (b.total_amount ?? 0) > 0
-                            ? `AU$${Number(b.total_amount).toFixed(0)}`
-                            : 'Free';
-                        
-                        // Comment: Get booking status color
-                        const statusColor = getBookingStatusColor((b as any).status || (b as any).booking_status);
-                        const customerName = (b as any).customer?.name || (b as any).customer_name || '고객';
-                        const customerId = (b as any).customer?.id || (b as any).customer_id || b.id;
-                        const customerPhone = (b as any).customer?.phone || (b as any).customer_phone || '';
-                        const bookingMemo = (b as any).memo || (b as any).note || '';
+                                // Comment: Horizontal layout - split width when overlapped
+                                const widthPercent = hasOverlap ? 50 : 100;
+                                const leftPercent = hasOverlap && placeOnRight ? 50 : 0;
 
-                        return (
-                          <div
-                            key={b.id}
-                            className="absolute left-1 right-1"
-                            style={{ top, height, zIndex: emptySlotMenuOpen ? 0 : 1 }}
-                            onMouseEnter={() => setHoveredBooking(b.id || null)}
-                            onMouseLeave={() => {
-                              setHoveredBooking(null);
-                              setBookingMenuOpen((prev) => (prev === b.id ? null : prev));
-                            }}
-                          >
+                                const serviceName = b.service?.name || 'Service';
+                                const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
+                                const amount =
+                                  (b.total_amount ?? 0) > 0
+                                    ? `AU$${Number(b.total_amount).toFixed(0)}`
+                                    : 'Free';
+                                
+                                // Comment: Get booking status color
+                                const statusColor = getBookingStatusColor(
+                                  (b as any).status || (b as any).booking_status,
+                                );
+                                const customerName =
+                                  (b as any).customer?.name || (b as any).customer_name || '고객';
+                                const customerId =
+                                  (b as any).customer?.id || (b as any).customer_id || b.id;
+                                const customerPhone =
+                                  (b as any).customer?.phone || (b as any).customer_phone || '';
+                                const bookingMemo = (b as any).memo || (b as any).note || '';
+
+                                return (
+                                  <div
+                                    key={b.id}
+                                    className="absolute"
+                                    style={{
+                                      top,
+                                      height,
+                                      zIndex: emptySlotMenuOpen ? 0 : 1,
+                                      left: `${leftPercent}%`,
+                                      width: `${widthPercent}%`,
+                                      paddingLeft: 4,
+                                      paddingRight: 4,
+                                    }}
+                                    onMouseEnter={() => setHoveredBooking(b.id || null)}
+                                    onMouseLeave={() => {
+                                      setHoveredBooking(null);
+                                      setBookingMenuOpen((prev) => (prev === b.id ? null : prev));
+                                    }}
+                                  >
                                     <div
                                       className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-visible relative`}
                                       style={{ zIndex: emptySlotMenuOpen ? 0 : 1 }}
@@ -2613,6 +2657,35 @@ export default function AppointmentsManagementPage() {
                                         type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          // Comment: 예약 등록 - 선택한 예약의 디자이너/시간을 기본값으로 사용
+                                          setNewBookingDate(b.booking_date || selectedDate);
+                                          if (b.booking_time) {
+                                            const [hourStr2, minuteStr2] = b.booking_time.split(':');
+                                            const hourNum2 = Number(hourStr2);
+                                            const ampm2 = hourNum2 >= 12 ? 'PM' : 'AM';
+                                            const displayHour2 =
+                                              hourNum2 > 12 ? hourNum2 - 12 : hourNum2 === 0 ? 12 : hourNum2;
+                                            const timeLabel2 = `${displayHour2}:${minuteStr2} ${ampm2}`;
+                                            setNewBookingTimeSlots([
+                                              {
+                                                designerId: b.designer?.id || null,
+                                                time: timeLabel2,
+                                                duration: 30,
+                                                serviceTab: 'service',
+                                                serviceId: null,
+                                              },
+                                            ]);
+                                          } else {
+                                            setNewBookingTimeSlots([
+                                              {
+                                                designerId: b.designer?.id || null,
+                                                time: '10:00 AM',
+                                                duration: 30,
+                                                serviceTab: 'service',
+                                                serviceId: null,
+                                              },
+                                            ]);
+                                          }
                                           setIsNewBookingOpen(true);
                                           setBookingMenuOpen(null);
                                         }}
