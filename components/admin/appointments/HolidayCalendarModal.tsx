@@ -55,63 +55,91 @@ export default function HolidayCalendarModal({
     }
   }, [calendarData, selectedDesignerFilter]);
 
-  // Fetch calendar data when month changes
+  // Comment: Fetch calendar data from API when month changes
   useEffect(() => {
     if (!isOpen) return;
 
     const fetchCalendarData = async () => {
       setLoading(true);
       try {
-        // TODO: Fetch actual data from API
-        // For now, use dummy data for UI verification
         const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth();
+        const month = currentMonth.getMonth(); // 0-based
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        
-        const dummyData: Record<string, DayEntry[]> = {};
-        
-        // Add some dummy entries for demonstration using actual designers
-        // Distribute entries across the month for better visualization
-        const designerNames = allDesigners.length > 0 
-          ? allDesigners.map(d => d.name)
-          : ['윤훈원장', '태훈원장', 'winter선생님'];
-        
-        for (let day = 1; day <= daysInMonth; day++) {
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          const entries: DayEntry[] = [];
-          
-          // Add entries for some designers on different days
-          designerNames.forEach((name, index) => {
-            // Create a pattern: each designer appears on certain days
-            const shouldShow = (day + index) % 3 === 0 || (day + index) % 5 === 0;
-            if (shouldShow) {
-              const typeIndex = (day + index) % 3;
-              let type: HolidayType;
-              if (typeIndex === 0) {
-                type = 'regular';
-              } else if (typeIndex === 1) {
-                type = 'arbitrary';
-              } else {
-                type = 'special';
-              }
-              entries.push({ name, type });
-            }
-          });
-          
-          if (entries.length > 0) {
-            dummyData[dateStr] = entries;
-          }
+        const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+        const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(
+          daysInMonth,
+        ).padStart(2, '0')}`;
+
+        // Comment: Load designer_time_off records for the month
+        const timeOffRes = await fetch(
+          `/api/designer-time-off?start_date=${monthStart}&end_date=${monthEnd}`,
+        );
+        const timeOffJson = await timeOffRes.json();
+        if (!timeOffRes.ok) {
+          console.error('Error fetching designer time off for calendar:', timeOffJson);
+          setCalendarData({});
+          return;
         }
 
-        setCalendarData(dummyData);
+        const timeOffs: any[] = timeOffJson.timeOffs || [];
+
+        // Comment: Map designer_id -> name for quick lookup
+        const designerNameMap = new Map<number, string>();
+        allDesigners.forEach((d) => {
+          if (d.id && d.name) designerNameMap.set(d.id, d.name);
+        });
+
+        const data: Record<string, DayEntry[]> = {};
+
+        // Comment: Expand each time off range into per-day entries
+        timeOffs.forEach((to) => {
+          const designerId = to.designer_id as number | undefined;
+          if (!designerId) return;
+          const name =
+            (to.designer && to.designer.name) || designerNameMap.get(designerId);
+          if (!name) return;
+
+          const start = new Date(to.start_date);
+          const end = new Date(to.end_date);
+          const current = new Date(start);
+          while (current <= end) {
+            // Only include days in current month
+            if (
+              current.getFullYear() === year &&
+              current.getMonth() === month
+            ) {
+              const dateStr = `${current.getFullYear()}-${String(
+                current.getMonth() + 1,
+              ).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+
+              let type: HolidayType = 'arbitrary';
+              if (to.reason === '정기 휴무') {
+                type = 'regular';
+              } else if (to.reason === '특별 근무일') {
+                type = 'special';
+              } else {
+                type = 'arbitrary';
+              }
+
+              if (!data[dateStr]) data[dateStr] = [];
+              data[dateStr].push({ name, type });
+            }
+            current.setDate(current.getDate() + 1);
+          }
+        });
+
+        setCalendarData(data);
       } catch (error) {
         console.error('Error fetching calendar data:', error);
+        setCalendarData({});
       } finally {
         setLoading(false);
       }
     };
 
     fetchCalendarData();
+  // Note: allDesigners는 parent에서 거의 변하지 않으므로 deps에서 제외하여
+  // useEffect dependency array 크기 경고를 피한다.
   }, [isOpen, currentMonth]);
 
   const handleMonthChange = (direction: 'prev' | 'next') => {

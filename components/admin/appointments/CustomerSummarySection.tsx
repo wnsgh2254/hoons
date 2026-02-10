@@ -53,49 +53,6 @@ export default function CustomerSummarySection({
         </div>
       </div>
 
-      {/* Prepaid Balance */}
-      <div className="flex items-center gap-3">
-        <p className="text-xs text-gray-500 w-20 flex-shrink-0">정액권 잔액</p>
-        <p className="text-sm font-medium text-black">
-          {customer.prepaid_balance
-            ? `${Number(customer.prepaid_balance).toLocaleString()}`
-            : '0'}
-        </p>
-      </div>
-
-      {/* Unpaid Amount */}
-      <div className="flex items-center gap-3">
-        <p className="text-xs text-gray-500 w-20 flex-shrink-0">미수금</p>
-        <div className="flex items-center gap-2">
-          <p className={`text-sm font-medium ${Number(unpaidAmount) > 0 ? 'text-red-600' : 'text-black'}`}>
-            {Number(unpaidAmount).toLocaleString()}
-          </p>
-          {onEditUnpaid && (
-            <button
-              type="button"
-              onClick={onEditUnpaid}
-              className="text-gray-400 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">edit</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Last Visit Date */}
-      <div className="flex items-center gap-3">
-        <p className="text-xs text-gray-500 w-20 flex-shrink-0">최근 방문일</p>
-        <p className="text-sm font-medium text-black">
-          {customer.last_visit_date
-            ? (() => {
-                const date = new Date(customer.last_visit_date);
-                const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                return `${formattedDate} (${customer.days_since_last_visit || 0}일전)`;
-              })()
-            : '-'}
-        </p>
-      </div>
-
       {/* Action Buttons */}
       <div className="flex gap-2 mt-2">
         {onRegisterSale && (

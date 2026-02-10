@@ -175,7 +175,7 @@ export default function AppointmentsManagementPage() {
   const [holidayScheduleLoading, setHolidayScheduleLoading] = useState(false);
   const [holidayExistingTimeOffs, setHolidayExistingTimeOffs] = useState<any[]>([]);
 
-  // Comment: Booking restrictions state
+  // Comment: Booking restrictions state (예약금지/휴무 정보)
   const [bookingRestrictions, setBookingRestrictions] = useState<any[]>([]);
 
   // Comment: Calendar view mode - always show booking count instead of green dot
@@ -210,7 +210,7 @@ export default function AppointmentsManagementPage() {
   const [viewingCustomerId, setViewingCustomerId] = useState<number | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<any | null>(null);
   const [customerInfoLoading, setCustomerInfoLoading] = useState(false);
-  const [customerInfoTab, setCustomerInfoTab] = useState<'sales' | 'appointments' | 'prepaid' | 'tickets' | 'messages'>('sales');
+  const [customerInfoTab, setCustomerInfoTab] = useState<'sales' | 'prepaid'>('sales');
 
   // Comment: REQ_SCH_001_09 - Menu dropdown state
   const [isMenuDropdownOpen, setIsMenuDropdownOpen] = useState(false);
@@ -407,81 +407,131 @@ export default function AppointmentsManagementPage() {
   const loadCustomerInfo = async (customerId: number) => {
     setCustomerInfoLoading(true);
     try {
-      const [customerRes, bookingsRes, prepaidRes] = await Promise.all([
-        fetch(`/api/customers/${customerId}`),
-        fetch(`/api/appointment?customer_id=${customerId}&limit=1000`),
-        fetch(`/api/prepaid?customer_id=${customerId}`).catch(() => null)
-      ]);
-      
+      // Step 1: 빠른 기본 고객 정보 조회 (모달을 빨리 띄우기 위함)
+      const customerRes = await fetch(`/api/customers/${customerId}`);
       const customerData = await customerRes.json();
-      const bookingsData = await bookingsRes.json();
-      const prepaidData = prepaidRes ? await prepaidRes.json() : null;
-      
-      if (customerRes.ok && customerData.customer) {
-        const customer = customerData.customer;
-        
-        // Calculate last visit date and days since
-        const bookings = bookingsData.bookings || [];
-        const completedBookings = bookings.filter((b: any) => b.status === 'PAID' || b.status === 'COMPLETED');
-        const lastBooking = completedBookings.sort((a: any, b: any) => {
-          const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);
-          const dateB = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-          return dateB.getTime() - dateA.getTime();
-        })[0];
-        
-        const lastVisitDate = lastBooking ? lastBooking.booking_date : null;
-        let daysSinceLastVisit = null;
-        if (lastVisitDate) {
-          const lastVisit = new Date(lastVisitDate);
-          const today = new Date();
-          const diffTime = today.getTime() - lastVisit.getTime();
-          daysSinceLastVisit = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        }
-        
-        // Calculate appointments in last year
-        const oneYearAgo = new Date();
-        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        const recentBookings = bookings.filter((b: any) => {
-          const bookingDate = new Date(b.booking_date);
-          return bookingDate >= oneYearAgo;
-        });
-        const appointmentsCount = recentBookings.length;
-        const cancelledCount = recentBookings.filter((b: any) => b.status === 'CANCELLED' || b.status === 'CANCELLED').length;
-        
-        // Get next appointment
-        const upcomingBookings = bookings
-          .filter((b: any) => {
-            const bookingDate = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-            return bookingDate > new Date() && (b.status === 'BOOKED' || b.status === 'CONFIRMED' || !b.status);
-          })
-          .sort((a: any, b: any) => {
-            const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);
-            const dateB = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-            return dateA.getTime() - dateB.getTime();
-          });
-        const nextAppointment = upcomingBookings[0] ? {
-          date: upcomingBookings[0].booking_date,
-          time: upcomingBookings[0].booking_time || ''
-        } : null;
-        
-        // Get prepaid tickets
-        const prepaidTickets = prepaidData?.prepaid || [];
-        const totalPrepaidBalance = prepaidTickets.reduce((sum: number, ticket: any) => sum + (Number(ticket.balance) || 0), 0);
-        
-        setViewingCustomer({
-          ...customer,
-          last_visit_date: lastVisitDate,
-          days_since_last_visit: daysSinceLastVisit,
-          appointments_count: appointmentsCount,
-          cancelled_count: cancelledCount,
-          next_appointment: nextAppointment,
-          prepaid_tickets: prepaidTickets,
-          prepaid_balance: totalPrepaidBalance
-        });
-      } else {
+
+      if (!customerRes.ok || !customerData.customer) {
         alert('고객 정보를 불러올 수 없습니다.');
         setViewingCustomerId(null);
+        return;
       }
+
+      const baseCustomer = customerData.customer;
+      // Comment: 기본 고객 정보만으로 먼저 모달을 보여준다.
+      setViewingCustomer(baseCustomer);
+
+      // Step 2: 상세 통계(예약/정액권)는 백그라운드에서 별도로 계산
+      void (async () => {
+        try {
+          const [bookingsRes, prepaidRes] = await Promise.all([
+            fetch(`/api/appointment?customer_id=${customerId}&limit=500`),
+            fetch(`/api/prepaid?customer_id=${customerId}`).catch(() => null),
+          ]);
+
+          const bookingsData = await bookingsRes.json();
+          const prepaidData = prepaidRes ? await prepaidRes.json() : null;
+
+          const bookings = bookingsData.bookings || [];
+
+          // Comment: 총 판매액
+          const totalSales = bookings.reduce((sum: number, b: any) => {
+            return sum + Number(b.total_amount || 0);
+          }, 0);
+
+          // Comment: 최근 방문일 / 방문 후 경과일
+          const completedBookings = bookings.filter(
+            (b: any) => b.status === 'PAID' || b.status === 'COMPLETED',
+          );
+          const lastBooking = completedBookings.sort((a: any, b: any) => {
+            const dateA = new Date(
+              `${a.booking_date}T${a.booking_time || '00:00:00'}`,
+            );
+            const dateB = new Date(
+              `${b.booking_date}T${b.booking_time || '00:00:00'}`,
+            );
+            return dateB.getTime() - dateA.getTime();
+          })[0];
+
+          const lastVisitDate = lastBooking ? lastBooking.booking_date : null;
+          let daysSinceLastVisit = null as number | null;
+          if (lastVisitDate) {
+            const lastVisit = new Date(lastVisitDate);
+            const today = new Date();
+            const diffTime = today.getTime() - lastVisit.getTime();
+            daysSinceLastVisit = Math.floor(
+              diffTime / (1000 * 60 * 60 * 24),
+            );
+          }
+
+          // Comment: 최근 1년 예약/취소 건수
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+          const recentBookings = bookings.filter((b: any) => {
+            const bookingDate = new Date(b.booking_date);
+            return bookingDate >= oneYearAgo;
+          });
+          const appointmentsCount = recentBookings.length;
+          const cancelledCount = recentBookings.filter(
+            (b: any) => b.status === 'CANCELLED',
+          ).length;
+
+          // Comment: 다음 예약
+          const upcomingBookings = bookings
+            .filter((b: any) => {
+              const bookingDate = new Date(
+                `${b.booking_date}T${b.booking_time || '00:00:00'}`,
+              );
+              return (
+                bookingDate > new Date() &&
+                (b.status === 'BOOKED' ||
+                  b.status === 'CONFIRMED' ||
+                  !b.status)
+              );
+            })
+            .sort((a: any, b: any) => {
+              const dateA = new Date(
+                `${a.booking_date}T${a.booking_time || '00:00:00'}`,
+              );
+              const dateB = new Date(
+                `${b.booking_date}T${b.booking_time || '00:00:00'}`,
+              );
+              return dateA.getTime() - dateB.getTime();
+            });
+          const nextAppointment = upcomingBookings[0]
+            ? {
+                date: upcomingBookings[0].booking_date,
+                time: upcomingBookings[0].booking_time || '',
+              }
+            : null;
+
+          // Comment: 정액권 / 포인트
+          const prepaidTickets = prepaidData?.prepaid || [];
+          const totalPrepaidBalance = prepaidTickets.reduce(
+            (sum: number, ticket: any) =>
+              sum + (Number(ticket.balance) || 0),
+            0,
+          );
+
+          // Comment: 동일 고객일 때만 최신 통계를 merge
+          setViewingCustomer((prev: any) => {
+            if (!prev || prev.id !== baseCustomer.id) return prev;
+            return {
+              ...prev,
+              last_visit_date: lastVisitDate,
+              days_since_last_visit: daysSinceLastVisit,
+              appointments_count: appointmentsCount,
+              cancelled_count: cancelledCount,
+              next_appointment: nextAppointment,
+              prepaid_tickets: prepaidTickets,
+              prepaid_balance: totalPrepaidBalance,
+              total_sales: totalSales,
+            };
+          });
+        } catch (err) {
+          console.error('Error loading detailed customer stats:', err);
+        }
+      })();
     } catch (err) {
       console.error('Error loading customer info:', err);
       alert('고객 정보를 불러오는 중 오류가 발생했습니다.');
@@ -549,6 +599,22 @@ export default function AppointmentsManagementPage() {
     }
   };
 
+  // Comment: Precompute designer IDs that are fully off (하루 전체 휴무) on the selected date
+  // 시간 단위 예약금지는 "휴무"가 아니라 단순 예약 불가 구간으로만 보고, 여기서는 제외한다.
+  const offDesignerIdsForSelectedDate = useMemo(() => {
+    const offIds = new Set<number>();
+    bookingRestrictions.forEach((r: any) => {
+      if (
+        r.designer_id &&
+        r.restriction_date === selectedDate &&
+        r.restriction_type === 'date'
+      ) {
+        offIds.add(r.designer_id as number);
+      }
+    });
+    return offIds;
+  }, [bookingRestrictions, selectedDate]);
+
   // Comment: Apply designer filter and search
   useEffect(() => {
     let filtered = bookings;
@@ -557,8 +623,12 @@ export default function AppointmentsManagementPage() {
     if (selectedDesignerFilter === '전체') {
       // No filter
     } else if (selectedDesignerFilter === '전체(휴무 제외)') {
-      // Filter out designers with time off
-      // TODO: Implement time off filtering - for now, show all
+      // Comment: Filter out designers who are not working (no schedule / no special work day) on selectedDate
+      filtered = filtered.filter((b) => {
+        const id = b.designer?.id;
+        if (!id) return true;
+        return availableDesignerIds.includes(id);
+      });
     } else {
       // Filter by specific designer
       filtered = filtered.filter((b) => {
@@ -571,7 +641,7 @@ export default function AppointmentsManagementPage() {
     if (!searchInput.trim()) {
       setFilteredBookings(filtered);
     }
-  }, [selectedDesignerFilter, bookings, searchInput]);
+  }, [selectedDesignerFilter, bookings, searchInput, availableDesignerIds]);
 
   // Comment: Load booking restrictions for selected date or week range
   useEffect(() => {
@@ -1253,7 +1323,8 @@ export default function AppointmentsManagementPage() {
       if (selectedDesignerFilter === '전체') {
         // Show all designers
       } else if (selectedDesignerFilter === '전체(휴무 제외)') {
-        // TODO: Filter out designers with time off - for now, show all
+        // Comment: Show only designers who are working on selectedDate (based on /designer-schedules)
+        filtered = filtered.filter((d) => availableDesignerIds.includes(d.id));
       } else {
         // Show only selected designer
         filtered = filtered.filter((d) => d.name === selectedDesignerFilter);
@@ -1279,7 +1350,7 @@ export default function AppointmentsManagementPage() {
     
     // Fallback: if designers not loaded yet, return empty array (will show once loaded)
     return [];
-  }, [allDesigners, selectedDesignerFilter]);
+  }, [allDesigners, selectedDesignerFilter, availableDesignerIds]);
 
   // Comment: Stable color assignment per designer
   const designerColorMap = useMemo(() => {
@@ -2584,10 +2655,19 @@ export default function AppointmentsManagementPage() {
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={(e) => {
+                                        onClick={async (e) => {
                                           e.stopPropagation();
-                                          setViewingBookingDetail(b);
                                           setBookingMenuOpen(null);
+                                          const customerId =
+                                            (b as any).customer?.id ||
+                                            (b as any).customer_id ||
+                                            null;
+                                          if (!customerId) {
+                                            alert('고객 정보가 없습니다.');
+                                            return;
+                                          }
+                                          setViewingCustomerId(customerId);
+                                          await loadCustomerInfo(customerId);
                                         }}
                                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                       >
@@ -2800,41 +2880,48 @@ export default function AppointmentsManagementPage() {
         defaultStartDate={selectedDate}
         defaultEndDate={selectedDate}
         refreshTrigger={reservationHistoryRefreshTrigger}
-        onCustomerClick={(customerId) => {
-          // customerId가 없어도 모달이 열리도록 기본값 사용
-          const finalCustomerId = customerId || 1;
-          setViewingCustomerId(finalCustomerId);
-          // 더미 데이터 설정 (UI 확인용)
-          setViewingCustomer({
-            id: finalCustomerId,
-            name: '홍길동',
-            phone: '010-1234-5678',
-            customer_number: finalCustomerId,
-            customer_type: 'normal',
-            manager_name: '윤훈원장',
-            prepaid_balance: 50000,
-            last_visit_date: '2026-01-15',
-            days_since_last_visit: 26,
-            appointments_count: 12,
-            cancelled_count: 2,
-            next_appointment: {
-              date: '2026-02-20',
-              time: '14:00',
-            },
-            prepaid_tickets: [
-              {
-                name: '기본 정액권',
-                balance: 50000,
-                expiry_date: '2026-12-31',
+        onCustomerClick={async (customerId, phone) => {
+          try {
+            // Case 1: 고객 ID가 있는 경우 - 정상 경로
+            if (customerId) {
+              setViewingCustomerId(customerId);
+              await loadCustomerInfo(customerId);
+              return;
+            }
+
+            // Case 2: 고객 ID는 없지만 전화번호가 있는 경우 - 전화번호로 고객 조회
+            const phoneTrimmed = (phone || '').trim();
+            if (!phoneTrimmed) {
+              alert('고객 정보가 없습니다.');
+              return;
+            }
+
+            // Comment: Try to find existing customer by phone using lookup API
+            const lookupRes = await fetch('/api/customers/lookup', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
               },
-              {
-                name: '프리미엄 정액권',
-                balance: 200000,
-                expiry_date: '2027-06-30',
-              },
-            ],
-          });
-          setCustomerInfoLoading(false);
+              body: JSON.stringify({ phone: phoneTrimmed }),
+            });
+
+            if (!lookupRes.ok) {
+              alert('고객 정보를 불러오는 중 오류가 발생했습니다.');
+              return;
+            }
+
+            const lookupJson = await lookupRes.json();
+            if (lookupJson.exists && lookupJson.customer?.id) {
+              const resolvedId = lookupJson.customer.id as number;
+              setViewingCustomerId(resolvedId);
+              await loadCustomerInfo(resolvedId);
+            } else {
+              alert('해당 전화번호로 등록된 고객을 찾을 수 없습니다.');
+            }
+          } catch (err) {
+            console.error('Error resolving customer from reservation history:', err);
+            alert('고객 정보를 불러오는 중 오류가 발생했습니다.');
+          }
         }}
         onEditBooking={(booking) => {
           // 예약 내역 모달은 닫지 않고 그대로 유지

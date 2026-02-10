@@ -4,16 +4,14 @@ import React, { useState, useEffect } from 'react';
 import CustomerProfileSection from './CustomerProfileSection';
 import CustomerSummarySection from './CustomerSummarySection';
 import SalesHistoryTable from './SalesHistoryTable';
-import AppointmentsTab from './AppointmentsTab';
-import MessagesTab from './MessagesTab';
 
 interface CustomerInfoDrawerProps {
   customerId: number | null;
   customer: any | null;
   loading: boolean;
-  tab: 'sales' | 'appointments' | 'prepaid' | 'tickets' | 'messages';
+  tab: 'sales' | 'prepaid';
   onClose: () => void;
-  onTabChange: (tab: 'sales' | 'appointments' | 'prepaid' | 'tickets' | 'messages') => void;
+  onTabChange: (tab: 'sales' | 'prepaid') => void;
 }
 
 export default function CustomerInfoDrawer({
@@ -24,48 +22,14 @@ export default function CustomerInfoDrawer({
   onClose,
   onTabChange,
 }: CustomerInfoDrawerProps) {
-  const [totalSales, setTotalSales] = useState(0);
-  const [points, setPoints] = useState(0);
-  const [unpaidAmount, setUnpaidAmount] = useState(0);
   const [salesFilter, setSalesFilter] = useState('all');
 
-  useEffect(() => {
-    if (customerId && customer) {
-      // Fetch customer statistics
-      const fetchStats = async () => {
-        try {
-          // Fetch total sales from bookings
-          const bookingsRes = await fetch(`/api/appointment?customer_id=${customerId}&limit=1000`);
-          const bookingsData = await bookingsRes.json();
-          
-          if (bookingsRes.ok && bookingsData.bookings) {
-            const total = bookingsData.bookings.reduce((sum: number, b: any) => {
-              return sum + Number(b.total_amount || 0);
-            }, 0);
-            setTotalSales(total);
-          }
-
-          // Fetch points from prepaid passes
-          // Note: The prepaid API doesn't support customer_id filter, so we'll use the customer's prepaid_balance
-          // or fetch all and filter client-side if needed
-          // For now, use customer.prepaid_balance or points from customer data
-          if (customer.prepaid_balance) {
-            setPoints(Number(customer.prepaid_balance));
-          } else if (customer.points) {
-            setPoints(Number(customer.points));
-          }
-
-          // TODO: Fetch unpaid amount (미수금)
-          // This would require a separate API endpoint or calculation
-          setUnpaidAmount(0);
-        } catch (error) {
-          console.error('Error fetching customer stats:', error);
-        }
-      };
-
-      fetchStats();
-    }
-  }, [customerId, customer]);
+  // Comment: Derive summary numbers directly from loaded customer data
+  const derivedTotalSales = Number(customer?.total_sales ?? 0);
+  const derivedPoints = Number(
+    customer?.prepaid_balance ?? customer?.points ?? 0,
+  );
+  const derivedUnpaidAmount = Number(customer?.unpaid_amount ?? 0);
 
   if (!customerId) return null;
 
@@ -116,9 +80,9 @@ export default function CustomerInfoDrawer({
                 <div className="flex flex-col">
                   <CustomerSummarySection
                     customer={customer}
-                    totalSales={totalSales}
-                    points={points}
-                    unpaidAmount={unpaidAmount}
+                    totalSales={derivedTotalSales}
+                    points={derivedPoints}
+                    unpaidAmount={derivedUnpaidAmount}
                     onEditPoints={() => {
                       // TODO: Open edit points modal
                       alert('포인트 편집 기능은 추후 구현 예정입니다.');
@@ -155,17 +119,6 @@ export default function CustomerInfoDrawer({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onTabChange('appointments')}
-                    className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
-                      tab === 'appointments'
-                        ? 'border-black text-black'
-                        : 'border-transparent text-gray-500 hover:text-black'
-                    }`}
-                  >
-                    예약
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => onTabChange('prepaid')}
                     className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
                       tab === 'prepaid'
@@ -174,28 +127,6 @@ export default function CustomerInfoDrawer({
                     }`}
                   >
                     정액권
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onTabChange('tickets')}
-                    className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
-                      tab === 'tickets'
-                        ? 'border-black text-black'
-                        : 'border-transparent text-gray-500 hover:text-black'
-                    }`}
-                  >
-                    티켓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onTabChange('messages')}
-                    className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
-                      tab === 'messages'
-                        ? 'border-black text-black'
-                        : 'border-transparent text-gray-500 hover:text-black'
-                    }`}
-                  >
-                    문자전송내역
                   </button>
                 </div>
               </div>
@@ -211,10 +142,6 @@ export default function CustomerInfoDrawer({
                     console.log('View detail:', item);
                   }}
                 />
-              )}
-
-              {tab === 'appointments' && customerId && (
-                <AppointmentsTab customerId={customerId} />
               )}
 
               {tab === 'prepaid' && (
@@ -253,19 +180,6 @@ export default function CustomerInfoDrawer({
                     </div>
                   </div>
                 </div>
-              )}
-
-              {tab === 'tickets' && (
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold text-black mb-3">티켓</div>
-                  <div className="text-sm text-gray-500 text-center py-4">
-                    티켓 기능은 추후 구현 예정입니다.
-                  </div>
-                </div>
-              )}
-
-              {tab === 'messages' && customerId && (
-                <MessagesTab customerId={customerId} />
               )}
 
             </div>

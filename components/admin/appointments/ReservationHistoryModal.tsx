@@ -12,7 +12,7 @@ interface ReservationHistoryModalProps {
   onEditBooking?: (booking: any) => void;
   onCancelBooking?: (booking: any) => void;
   onViewBooking?: (booking: any) => void;
-  onCustomerClick?: (customerId: number) => void;
+  onCustomerClick?: (customerId: number | null, phone?: string | null) => void;
   refreshTrigger?: number; // Trigger refresh when this value changes
 }
 

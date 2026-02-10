@@ -148,11 +148,12 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('bookings')
       .select(
-        `
+      `
         *,
         designer:designer_id ( id, name ),
         service:service_id ( id, name, duration_minutes ),
-        shop:shop_id ( id, name )
+        shop:shop_id ( id, name ),
+        customer:customer_id ( id, name, phone )
       `,
         { count: 'exact' }
       )

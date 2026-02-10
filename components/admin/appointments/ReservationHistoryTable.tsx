@@ -28,7 +28,7 @@ interface ReservationHistoryTableProps {
   onEdit?: (booking: BookingWithRelations) => void;
   onCancel?: (booking: BookingWithRelations) => void;
   onView?: (booking: BookingWithRelations) => void;
-  onCustomerClick?: (customerId: number) => void;
+  onCustomerClick?: (customerId: number | null, phone?: string | null) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -228,9 +228,9 @@ export default function ReservationHistoryTable({
                     className="px-4 py-3 text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const customerId = b.customer?.id || (b as any).customer_id || b.id;
+                      const customerId = b.customer?.id || (b as any).customer_id || null;
                       if (onCustomerClick) {
-                        onCustomerClick(customerId);
+                        onCustomerClick(customerId, customerPhone || null);
                       }
                     }}
                   >

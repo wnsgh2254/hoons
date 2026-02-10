@@ -71,8 +71,9 @@ export default function ScheduleGridHeader({
                 <div className="px-2 py-2 text-center border-b border-[#e2e8f0] flex items-center justify-center" style={{ minHeight: '40px' }}>
                   <p className="text-xs font-bold text-[#0d121b]">{month}-{day} ({dayName})</p>
                 </div>
-                {/* Designer headers for this date - hide when filtering by specific designer */}
-                {selectedDesignerFilter === '전체' && (
+                {/* Designer headers for this date - hide only when a specific designer is selected */}
+                {(selectedDesignerFilter === '전체' ||
+                  selectedDesignerFilter === '전체(휴무 제외)') && (
                   <div className="grid" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, 150px)` }}>
                     {visibleDesigners.map((name) => {
                       const designer = allDesigners.find((d) => d.name === name);
