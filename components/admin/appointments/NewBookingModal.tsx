@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { EDIT_TIME_OPTIONS } from '@/lib/utils/appointment-utils';
 
@@ -22,6 +22,7 @@ interface NewBookingModalProps {
   newBookingDirectVisit: boolean;
   newBookingTimeSlots: TimeSlot[];
   newBookingDesigners: any[];
+  newBookingServices: { id: number; name: string; duration_minutes: number }[];
   newBookingMemo: string;
   newBookingSubmitting: boolean;
   newBookingShopId: number | null;
@@ -52,6 +53,7 @@ export default function NewBookingModal({
   newBookingDirectVisit,
   newBookingTimeSlots,
   newBookingDesigners,
+  newBookingServices,
   newBookingMemo,
   newBookingSubmitting,
   newBookingShopId,
@@ -72,6 +74,20 @@ export default function NewBookingModal({
   setNewBookingIsCustomerSearching,
 }: NewBookingModalProps) {
   const router = useRouter();
+
+  // Comment: Duration options in 30-min steps only
+  const durationOptions = [30, 60, 90, 120, 150, 180];
+
+  // Comment: Show only card services (like customer booking), and strip (card)/(cash) from display name
+  const servicesForDropdown = Array.isArray(newBookingServices)
+    ? newBookingServices.filter((s) => {
+        const name = (s.name || '').toLowerCase();
+        const isCardService = name.includes('(card)') || (!name.includes('(cash)') && !name.includes('(card)'));
+        return isCardService;
+      })
+    : [];
+  const getServiceDisplayName = (name: string) =>
+    name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
 
   const handleCancel = () => {
     onClose();
@@ -381,58 +397,60 @@ export default function NewBookingModal({
               <div className="space-y-4">
                 {newBookingTimeSlots.map((slot, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+                      {/* Service */}
+                      <div className="min-w-0">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
+                        <select
+                          value={slot.serviceId != null ? String(slot.serviceId) : ''}
+                          onChange={(e) => {
+                            const updated = [...newBookingTimeSlots];
+                            const val = e.target.value;
+                            updated[index].serviceId = val ? Number(val) : null;
+                            if (val) {
+                              const svc = newBookingServices.find((s) => s.id === Number(val));
+                              if (svc?.duration_minutes) {
+                                // Round to nearest 30 min for duration options
+                                const rounded = Math.round(svc.duration_minutes / 30) * 30;
+                                updated[index].duration = Math.min(180, Math.max(30, rounded));
+                              }
+                            }
+                            setNewBookingTimeSlots(updated);
+                          }}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                        >
+                          <option value="">선택하세요</option>
+                          {servicesForDropdown.map((s) => (
+                            <option key={s.id} value={String(s.id)}>
+                              {getServiceDisplayName(s.name)} ({s.duration_minutes}분)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* Designer */}
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={slot.designerId || ''}
-                            onChange={(e) => {
-                              const updated = [...newBookingTimeSlots];
-                              updated[index].designerId = e.target.value ? Number(e.target.value) : null;
-                              setNewBookingTimeSlots(updated);
-                            }}
-                            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                          >
-                            <option value="">선택하세요</option>
-                            {newBookingDesigners.map((d: any) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))}
-                          </select>
-                          {index === newBookingTimeSlots.length - 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewBookingTimeSlots([
-                                  ...newBookingTimeSlots,
-                                  { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null },
-                                ]);
-                              }}
-                              className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-900"
-                            >
-                              <span className="material-symbols-outlined text-sm">add</span>
-                            </button>
-                          )}
-                          {newBookingTimeSlots.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updated = newBookingTimeSlots.filter((_, i) => i !== index);
-                                setNewBookingTimeSlots(updated);
-                              }}
-                              className="w-8 h-8 flex items-center justify-center bg-gray-300 text-white rounded-lg hover:bg-gray-400"
-                            >
-                              <span className="material-symbols-outlined text-sm">close</span>
-                            </button>
-                          )}
-                        </div>
+                        <select
+                          value={slot.designerId ?? ''}
+                          onChange={(e) => {
+                            const updated = [...newBookingTimeSlots];
+                            updated[index].designerId = e.target.value ? Number(e.target.value) : null;
+                            setNewBookingTimeSlots(updated);
+                          }}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                        >
+                          <option value="">선택하세요</option>
+                          {newBookingDesigners.map((d: any) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Start Time */}
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">시작시간</label>
                         <select
                           value={slot.time}
@@ -452,7 +470,7 @@ export default function NewBookingModal({
                       </div>
 
                       {/* Duration */}
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">소요시간</label>
                         <select
                           value={slot.duration}
@@ -463,16 +481,52 @@ export default function NewBookingModal({
                           }}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                         >
-                          {[30, 60, 90, 120, 150, 180].map((min) => (
+                          {durationOptions.map((min) => (
                             <option key={min} value={min}>
                               {min} 분
                             </option>
                           ))}
                         </select>
                       </div>
-                    </div>
 
-                    {/* Service Selection removed: service will be chosen in a dedicated flow */}
+                      {/* Row actions: Add (last row only), Delete (when more than one slot) */}
+                      <div className="flex items-center gap-2 justify-end md:justify-start">
+                        {index === newBookingTimeSlots.length - 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewBookingTimeSlots([
+                                ...newBookingTimeSlots,
+                                {
+                                  designerId: null,
+                                  time: '10:00 AM',
+                                  duration: 30,
+                                  serviceTab: 'service',
+                                  serviceId: null,
+                                },
+                              ]);
+                            }}
+                            className="shrink-0 w-9 h-9 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                            title="슬롯 추가"
+                          >
+                            <span className="material-symbols-outlined text-lg">add</span>
+                          </button>
+                        )}
+                        {newBookingTimeSlots.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = newBookingTimeSlots.filter((_, i) => i !== index);
+                              setNewBookingTimeSlots(updated);
+                            }}
+                            className="shrink-0 w-9 h-9 flex items-center justify-center border border-gray-300 bg-white text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                            title="슬롯 삭제"
+                          >
+                            <span className="material-symbols-outlined text-lg">close</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

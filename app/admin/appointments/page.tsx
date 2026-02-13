@@ -1056,6 +1056,7 @@ export default function AppointmentsManagementPage() {
 
     const loadServices = async () => {
       try {
+        // Comment: Load all active services (no shop filter) so dropdown always has options
         const res = await fetch('/api/services');
         const json = await res.json();
         if (res.ok) {
@@ -2854,6 +2855,7 @@ export default function AppointmentsManagementPage() {
         newBookingDirectVisit={newBookingDirectVisit}
         newBookingTimeSlots={newBookingTimeSlots}
         newBookingDesigners={newBookingDesigners}
+        newBookingServices={newBookingServices}
         newBookingMemo={newBookingMemo}
         newBookingSubmitting={newBookingSubmitting}
         newBookingShopId={newBookingShopId}
