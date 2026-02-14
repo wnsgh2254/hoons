@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import AdminTopNav from '@/components/AdminTopNav';
 
 // Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
@@ -227,9 +228,12 @@ export default function WagesPage() {
                 <button className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors">
                   급여 명세서 작성
                 </button>
-                <button className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors">
+                <Link
+                  href="/admin/wages/settings"
+                  className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors inline-block"
+                >
                   급여 설정
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -360,6 +364,7 @@ export default function WagesPage() {
           onClose={() => setViewingIncentives(false)}
         />
       )}
+
     </div>
   );
 }

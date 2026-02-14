@@ -167,7 +167,19 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, english_name, role, shop_id, wage_type, percent_rate, hourly_rate, instagramLink, is_active } = body;
+    const {
+      name,
+      english_name,
+      role,
+      shop_id,
+      wage_type,
+      percent_rate,
+      hourly_rate,
+      product_sale_pct,
+      product_deduction_pct,
+      instagramLink,
+      is_active,
+    } = body;
 
     const designer = await updateDesigner(Number(id), {
       name,
@@ -177,6 +189,8 @@ export async function PATCH(request: NextRequest) {
       wage_type,
       percent_rate,
       hourly_rate,
+      product_sale_pct,
+      product_deduction_pct,
       instagramLink,
       is_active,
     });

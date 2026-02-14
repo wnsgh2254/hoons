@@ -297,6 +297,8 @@ export async function updateDesigner(
     wage_type: string;
     percent_rate?: number | null;
     hourly_rate?: number | null;
+    product_sale_pct?: number | null;
+    product_deduction_pct?: number | null;
     instagramLink?: string | null;
     is_active?: boolean;
   }
@@ -316,6 +318,8 @@ export async function updateDesigner(
     wage_type: updates.wage_type,
     percent_rate: updates.wage_type === 'percent' ? updates.percent_rate : null,
     hourly_rate: updates.wage_type === 'hourly' ? updates.hourly_rate : null,
+    product_sale_pct: updates.product_sale_pct != null ? Number(updates.product_sale_pct) : 10,
+    product_deduction_pct: updates.product_deduction_pct != null ? Number(updates.product_deduction_pct) : 10,
     instagramLink:
       updates.instagramLink !== undefined ? updates.instagramLink || null : undefined,
     is_active: updates.is_active !== undefined ? updates.is_active : true,
