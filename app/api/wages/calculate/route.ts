@@ -96,6 +96,39 @@ async function calculateWorkingHours(
   return totalHours;
 }
 
+// Comment: Get total worked minutes from staff_attendance for a designer in date range
+async function getAttendanceTotalMinutes(
+  designerId: number,
+  startDate: string,
+  endDate: string
+): Promise<number> {
+  const { data: rows } = await supabase
+    .from('staff_attendance')
+    .select('clock_in, clock_out, manual_total_minutes')
+    .eq('designer_id', designerId)
+    .gte('work_date', startDate)
+    .lte('work_date', endDate);
+
+  if (!rows || rows.length === 0) return 0;
+  let total = 0;
+  for (const r of rows) {
+    if (r.manual_total_minutes != null && Number.isFinite(r.manual_total_minutes)) {
+      total += r.manual_total_minutes;
+      continue;
+    }
+    const cin = r.clock_in;
+    const cout = r.clock_out;
+    if (!cin || !cout) continue;
+    const [h1, m1] = String(cin).split(':').map(Number);
+    const [h2, m2] = String(cout).split(':').map(Number);
+    const startM = (h1 || 0) * 60 + (m1 || 0);
+    let endM = (h2 || 0) * 60 + (m2 || 0);
+    if (endM <= startM) endM += 24 * 60;
+    total += endM - startM;
+  }
+  return total;
+}
+
 // Comment: Calculate wages for designers
 export async function GET(request: NextRequest) {
   try {
@@ -147,32 +180,63 @@ export async function GET(request: NextRequest) {
     const wages = await Promise.all(
       (designers || []).map(async (designer: any) => {
         const sales = staffSalesMap.get(designer.id) || {
+          sales: { service: { amount: 0 }, product: { amount: 0 } },
+          membershipDeduction: { service: { amount: 0 }, subtotal: 0 },
           total: { subtotal: 0 },
         };
 
+        // Comment: Raw sales/deduction amounts from DB
+        const serviceSalesRaw = toNum(sales.sales?.service?.amount || 0);
+        const serviceDeductionRaw = toNum(sales.membershipDeduction?.service?.amount ?? sales.membershipDeduction?.subtotal || 0);
+        const productSalesRaw = toNum(sales.sales?.product?.amount || 0);
+        const productDeductionRaw = 0;
+
+        // Comment: Hourly pay from staff_attendance (actual clock-in/out) × designer hourly_rate
+        const attendanceMinutes = await getAttendanceTotalMinutes(designer.id, startDate, endDate);
+        const hourlyRate = toNum(designer.hourly_rate || 0);
+        const hourlyPayRaw = (attendanceMinutes / 60) * hourlyRate;
+
+        const round2 = (x: number) => Math.round(x * 100) / 100;
+
         let wage = 0;
         let calculationDetails: any = {};
+        // Comment: Incentive breakdown for payslip (shown in 인센티브 내역)
+        let serviceSales = 0;
+        let serviceDeduction = 0;
+        let productSales = 0;
+        let productDeduction = 0;
+        let hourlyPay = 0;
 
         if (designer.wage_type === 'percent') {
-          // Comment: Commission-based wage
-          const totalSales = toNum(sales.total?.subtotal || 0);
-          const rate = toNum(designer.percent_rate || 0);
-          wage = (totalSales * rate) / 100;
+          // Comment: Percent staff – apply incentive rate to each category; product uses 10%
+          const incentiveRate = toNum(designer.percent_rate || 0);
+          const productRate = 10; // Comment: Product is 10% for all
+          serviceSales = round2((serviceSalesRaw * incentiveRate) / 100);
+          serviceDeduction = round2((serviceDeductionRaw * incentiveRate) / 100);
+          productSales = round2((productSalesRaw * productRate) / 100);
+          productDeduction = round2((productDeductionRaw * productRate) / 100);
+          hourlyPay = 0;
+          wage = serviceSales - serviceDeduction + productSales - productDeduction;
           calculationDetails = {
             type: 'commission',
-            totalSales,
-            rate,
+            totalSales: serviceSalesRaw + productSalesRaw - serviceDeductionRaw - productDeductionRaw,
+            rate: incentiveRate,
+            productRate,
             wage,
           };
         } else if (designer.wage_type === 'hourly') {
-          // Comment: Hourly-based wage
+          // Comment: Hourly staff – only attendance × hourly_rate in 시급; no sales incentive
+          serviceSales = 0;
+          serviceDeduction = 0;
+          productSales = 0;
+          productDeduction = 0;
+          hourlyPay = round2(hourlyPayRaw);
+          wage = hourlyPay;
           const workingHours = await calculateWorkingHours(
             designer.id,
             startDate,
             endDate
           );
-          const hourlyRate = toNum(designer.hourly_rate || 0);
-          wage = workingHours * hourlyRate;
           calculationDetails = {
             type: 'hourly',
             workingHours,
@@ -185,7 +249,7 @@ export async function GET(request: NextRequest) {
           designerId: designer.id,
           name: designer.name,
           wageType: designer.wage_type,
-          wage: Math.round(wage * 100) / 100, // Comment: Round to 2 decimal places
+          wage: round2(wage),
           calculationDetails,
           sales: {
             total: sales.total?.subtotal || 0,
@@ -194,6 +258,12 @@ export async function GET(request: NextRequest) {
             membership: sales.sales?.membership?.amount || 0,
             membershipDeduction: sales.membershipDeduction?.subtotal || 0,
             ticket: sales.sales?.ticket?.amount || 0,
+            // Comment: Incentive amounts for payslip (percent: rate applied; hourly: 시급 only)
+            serviceSales,
+            serviceDeduction,
+            productSales,
+            productDeduction,
+            hourlyPay,
           },
         };
       })

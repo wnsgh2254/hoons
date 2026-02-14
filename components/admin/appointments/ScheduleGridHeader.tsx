@@ -14,6 +14,8 @@ interface ScheduleGridHeaderProps {
   onCloseWeekView: () => void;
   onOpenRestriction: (designerId: number, designerName: string) => void;
   onOpenHolidayModal: (designerId: number, designerName: string) => void;
+  onOpenAttendanceModal: (designerId: number, designerName: string) => void;
+  canUseAttendanceManagement?: boolean;
 }
 
 export default function ScheduleGridHeader({
@@ -30,6 +32,8 @@ export default function ScheduleGridHeader({
   onCloseWeekView,
   onOpenRestriction,
   onOpenHolidayModal,
+  onOpenAttendanceModal,
+  canUseAttendanceManagement = false,
 }: ScheduleGridHeaderProps) {
   if (!isWeekViewMode) {
     // Day view header
@@ -141,10 +145,23 @@ export default function ScheduleGridHeader({
                                     onOpenHolidayModal(designerId, name);
                                     onDesignerDropdownToggle(null);
                                   }}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
+                                  className={`w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 ${canUseAttendanceManagement ? '' : 'last:rounded-b-lg'}`}
                                 >
                                   임의 휴일 및 특근 설정
                                 </button>
+                                {canUseAttendanceManagement && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onOpenAttendanceModal(designerId, name);
+                                      onDesignerDropdownToggle(null);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
+                                  >
+                                    출/퇴근 관리
+                                  </button>
+                                )}
                               </div>
                             )}
                         </div>

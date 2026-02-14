@@ -21,6 +21,7 @@ import CurrentTimeLine from '@/components/admin/appointments/CurrentTimeLine';
 import WeekViewGrid from '@/components/admin/appointments/WeekViewGrid';
 import ReservationHistoryModal from '@/components/admin/appointments/ReservationHistoryModal';
 import HolidayCalendarModal from '@/components/admin/appointments/HolidayCalendarModal';
+import AttendanceModal from '../../../components/admin/appointments/AttendanceModal';
 import {
   GRID_START_HOUR,
   GRID_END_HOUR,
@@ -175,6 +176,13 @@ export default function AppointmentsManagementPage() {
   const [holidayScheduleLoading, setHolidayScheduleLoading] = useState(false);
   const [holidayExistingTimeOffs, setHolidayExistingTimeOffs] = useState<any[]>([]);
 
+  // Comment: Attendance (clock-in/out) modal state
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [attendanceModalDesignerId, setAttendanceModalDesignerId] = useState<number | null>(null);
+  const [attendanceModalDesignerName, setAttendanceModalDesignerName] = useState<string>('');
+  // Comment: Only manager and director can use attendance management
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   // Comment: Booking restrictions state (예약금지/휴무 정보)
   const [bookingRestrictions, setBookingRestrictions] = useState<any[]>([]);
 
@@ -305,6 +313,24 @@ export default function AppointmentsManagementPage() {
   }, [selectedDate]);
 
   const monthKey = selectedDate.slice(0, 7); // YYYY-MM
+
+  // Comment: Fetch user session for role (attendance management: manager/director only)
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const res = await fetch('/api/auth/session');
+        const data = await res.json();
+        if (data.authenticated && data.user?.role) {
+          setUserRole(data.user.role);
+        }
+      } catch (err) {
+        console.error('Error fetching session:', err);
+      }
+    };
+    fetchSession();
+  }, []);
+
+  const canUseAttendanceManagement = userRole === 'manager' || userRole === 'director';
 
   // Comment: Load bookings for selected week (all shops)
   useEffect(() => {
@@ -1514,6 +1540,12 @@ export default function AppointmentsManagementPage() {
     setIsHolidayModalOpen(true);
   };
 
+  const handleOpenAttendanceModal = (designerId: number, name: string) => {
+    setAttendanceModalDesignerId(designerId);
+    setAttendanceModalDesignerName(name);
+    setIsAttendanceModalOpen(true);
+  };
+
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
       <AdminTopNav />
@@ -1733,6 +1765,8 @@ export default function AppointmentsManagementPage() {
                       onCloseWeekView={handleCloseWeekView}
                       onOpenRestriction={handleOpenRestrictionModal}
                       onOpenHolidayModal={handleOpenHolidayModal}
+                      onOpenAttendanceModal={handleOpenAttendanceModal}
+                      canUseAttendanceManagement={canUseAttendanceManagement}
                     />
 
                     {/* Grid Body */}
@@ -3969,6 +4003,20 @@ export default function AppointmentsManagementPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Attendance (clock-in/out) Modal - only for manager/director */}
+      {canUseAttendanceManagement && isAttendanceModalOpen && attendanceModalDesignerId !== null && (
+        <AttendanceModal
+          designerId={attendanceModalDesignerId}
+          designerName={attendanceModalDesignerName}
+          workDate={selectedDate}
+          onClose={() => {
+            setIsAttendanceModalOpen(false);
+            setAttendanceModalDesignerId(null);
+            setAttendanceModalDesignerName('');
+          }}
+        />
       )}
 
       {/* Holiday Calendar Modal */}

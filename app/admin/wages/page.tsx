@@ -88,6 +88,7 @@ export default function WagesPage() {
   const [viewingPayslip, setViewingPayslip] = useState<any>(null);
   const [viewingDetail, setViewingDetail] = useState<any>(null);
   const [viewingIncentives, setViewingIncentives] = useState(false);
+  const [isPayslipCreateModalOpen, setIsPayslipCreateModalOpen] = useState(false);
 
   // Comment: Calculate weeks for selected month
   const weeks = useMemo(() => {
@@ -225,7 +226,10 @@ export default function WagesPage() {
                 >
                   직원별 인센티브
                 </button>
-                <button className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors">
+                <button
+                  onClick={() => setIsPayslipCreateModalOpen(true)}
+                  className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors"
+                >
                   급여 명세서 작성
                 </button>
                 <Link
@@ -365,6 +369,323 @@ export default function WagesPage() {
         />
       )}
 
+      {/* Payslip Create Modal (급여 명세서 작성) */}
+      {isPayslipCreateModalOpen && (
+        <PayslipCreateModal
+          designers={designers}
+          onClose={() => setIsPayslipCreateModalOpen(false)}
+          getSydneyToday={getSydneyToday}
+          getLastDayOfMonth={getLastDayOfMonth}
+        />
+      )}
+    </div>
+  );
+}
+
+// Comment: Compute end date from start date: same month as today => end = today, else => last day of month
+function computePeriodEnd(
+  startDate: string,
+  getSydneyToday: () => string,
+  getLastDayOfMonth: (year: number, month: number) => string
+): string {
+  if (!startDate || startDate.length < 10) return '';
+  const [y, m] = startDate.split('-').map(Number);
+  const today = getSydneyToday();
+  const [ty, tm] = today.split('-').map(Number);
+  const lastDay = getLastDayOfMonth(y, m);
+  if (y === ty && m === tm) return today;
+  return lastDay;
+}
+
+function parseNumber(s: string): number {
+  const n = parseInt(s.replace(/,/g, ''), 10);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+// Comment: Payslip Create Modal - 급여 명세서 작성 (only 기본급/인센티브, 인센티브 내역: 서비스/제품/시급/합계)
+function PayslipCreateModal({
+  designers,
+  onClose,
+  getSydneyToday,
+  getLastDayOfMonth,
+}: {
+  designers: any[];
+  onClose: () => void;
+  getSydneyToday: () => string;
+  getLastDayOfMonth: (year: number, month: number) => string;
+}) {
+  const today = getSydneyToday();
+  const [periodStart, setPeriodStart] = useState<string>(() => {
+    const [y, m] = today.split('-').map(Number);
+    return `${y}-${String(m).padStart(2, '0')}-01`;
+  });
+  const periodEnd = useMemo(
+    () => computePeriodEnd(periodStart, getSydneyToday, getLastDayOfMonth),
+    [periodStart, getSydneyToday, getLastDayOfMonth]
+  );
+  const [selectedDesignerId, setSelectedDesignerId] = useState<string>('');
+  const [basePay, setBasePay] = useState<string>('');
+  const [incentive, setIncentive] = useState<string>('');
+  const [advancePay, setAdvancePay] = useState<string>('');
+  const [loadingIncentive, setLoadingIncentive] = useState(false);
+  const [incentiveBreakdown, setIncentiveBreakdown] = useState<{
+    serviceSales: number;
+    serviceDeduction: number;
+    productSales: number;
+    productDeduction: number;
+    hourlyPay: number;
+  } | null>(null);
+
+  const basePayNum = parseNumber(basePay);
+  const incentiveNum = parseNumber(incentive);
+  const salaryTotal = basePayNum + incentiveNum;
+  const deductionTotal = 0;
+  const actualPay = salaryTotal - deductionTotal;
+  const advancePayNum = parseNumber(advancePay);
+  const netPay = actualPay - advancePayNum;
+
+  const incentiveSum = incentiveBreakdown
+    ? (incentiveBreakdown.serviceSales - incentiveBreakdown.serviceDeduction) +
+      (incentiveBreakdown.productSales - incentiveBreakdown.productDeduction) +
+      incentiveBreakdown.hourlyPay
+    : 0;
+
+  useEffect(() => {
+    if (!selectedDesignerId || !periodStart || !periodEnd) return;
+    const fetchIncentive = async () => {
+      setLoadingIncentive(true);
+      setIncentiveBreakdown(null);
+      try {
+        const res = await fetch(
+          `/api/wages/calculate?start_date=${periodStart}&end_date=${periodEnd}&designer_id=${selectedDesignerId}`
+        );
+        const data = await res.json();
+        if (res.ok && data.wages?.[0]) {
+          const w = data.wages[0];
+          const s = w.sales || {};
+          setIncentive(String(Math.round(w.wage || 0)));
+          setIncentiveBreakdown({
+            serviceSales: Number(s.serviceSales ?? 0),
+            serviceDeduction: Number(s.serviceDeduction ?? 0),
+            productSales: Number(s.productSales ?? 0),
+            productDeduction: Number(s.productDeduction ?? 0),
+            hourlyPay: Number(s.hourlyPay ?? 0),
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching incentive:', err);
+      } finally {
+        setLoadingIncentive(false);
+      }
+    };
+    fetchIncentive();
+  }, [selectedDesignerId, periodStart, periodEnd]);
+
+  const handleSave = () => {
+    if (!selectedDesignerId) {
+      alert('직원을 선택해주세요.');
+      return;
+    }
+    alert('저장 기능은 백엔드 연동 후 적용됩니다.');
+  };
+
+  const handleSaveAndContinue = () => {
+    handleSave();
+    setSelectedDesignerId('');
+    setBasePay('');
+    setIncentive('');
+    setIncentiveBreakdown(null);
+    setAdvancePay('');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-black">급여 명세서 작성</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">근무 기간</span>
+              <input
+                type="date"
+                value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+              />
+              <span className="text-gray-400">~</span>
+              <input
+                type="date"
+                value={periodEnd}
+                readOnly
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-700"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">직원</span>
+              <select
+                value={selectedDesignerId}
+                onChange={(e) => setSelectedDesignerId(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent min-w-[140px]"
+              >
+                <option value="">선택</option>
+                {designers.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setSelectedDesignerId('')}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+              >
+                다시 선택
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg">settings</span>
+              급여 및 공제 항목
+            </h3>
+            <div className="grid grid-cols-2 gap-4 border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 p-4">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">급여 항목</div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-sm text-gray-700">기본급</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={basePay}
+                      onChange={(e) => setBasePay(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="w-28 px-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-sm text-gray-700">인센티브</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={incentive}
+                      onChange={(e) => setIncentive(e.target.value.replace(/[^0-9]/g, ''))}
+                      className="w-28 px-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between">
+                  <span className="text-sm font-bold text-gray-900">급여 합계</span>
+                  <span className="text-sm font-bold text-gray-900">{salaryTotal.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="bg-gray-50 p-4">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">공제 항목</div>
+                <div className="text-sm text-gray-500">해당 없음</div>
+                <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between">
+                  <span className="text-sm font-bold text-gray-900">공제 합계</span>
+                  <span className="text-sm font-bold text-gray-900">0</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 p-4 bg-gray-100 rounded-lg border border-gray-200 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-700">실지급액 (급여 합계 - 공제 합계)</span>
+                <span className="font-bold text-black">{actualPay.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center gap-2 text-sm">
+                <span className="text-gray-700">가지급금</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={advancePay}
+                  onChange={(e) => setAdvancePay(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-28 px-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:ring-2 focus:ring-black focus:border-transparent"
+                />
+              </div>
+              <div className="flex justify-between text-sm pt-2 border-t border-gray-300">
+                <span className="font-bold text-gray-900">차감 지급 금액 (실지급액 - 가지급금)</span>
+                <span className="font-bold text-black">{netPay.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-bold text-black mb-3">인센티브 내역</h3>
+            {loadingIncentive ? (
+              <p className="text-sm text-gray-500">불러오는 중...</p>
+            ) : (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th colSpan={2} className="px-4 py-3 text-center font-semibold text-gray-700 border-r border-gray-200">
+                        서비스
+                      </th>
+                      <th colSpan={2} className="px-4 py-3 text-center font-semibold text-gray-700 border-r border-gray-200">
+                        제품
+                      </th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-700 border-r border-gray-200">
+                        시급
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-700">
+                        합계
+                      </th>
+                    </tr>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">판매</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">차감</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">판매</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200">차감</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-200"></th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    <tr className="border-b border-gray-100">
+                      <td className="px-4 py-3 text-center text-gray-900 border-r border-gray-200">
+                        {incentiveBreakdown ? incentiveBreakdown.serviceSales.toLocaleString() : '0'}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-900 border-r border-gray-200">
+                        {incentiveBreakdown ? incentiveBreakdown.serviceDeduction.toLocaleString() : '0'}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-900 border-r border-gray-200">
+                        {incentiveBreakdown ? incentiveBreakdown.productSales.toLocaleString() : '0'}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-900 border-r border-gray-200">
+                        {incentiveBreakdown ? incentiveBreakdown.productDeduction.toLocaleString() : '0'}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-900 border-r border-gray-200">
+                        {incentiveBreakdown ? incentiveBreakdown.hourlyPay.toLocaleString() : '0'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                        {Math.round(incentiveSum).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="p-6 border-t border-gray-200 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            취소
+          </button>
+          <button type="button" onClick={handleSaveAndContinue} className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors">
+            저장 후 계속
+          </button>
+          <button type="button" onClick={handleSave} className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-900 transition-colors">
+            저장
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
