@@ -7,7 +7,6 @@ interface CustomerSummarySectionProps {
   totalSales?: number;
   points?: number;
   unpaidAmount?: number;
-  onEditPoints?: () => void;
   onEditUnpaid?: () => void;
   onRegisterSale?: () => void;
   onRegisterRefund?: () => void;
@@ -19,7 +18,6 @@ export default function CustomerSummarySection({
   totalSales = 0,
   points = 0,
   unpaidAmount = 0,
-  onEditPoints,
   onEditUnpaid,
   onRegisterSale,
   onRegisterRefund,
@@ -34,23 +32,12 @@ export default function CustomerSummarySection({
         </p>
       </div>
 
-      {/* Points */}
+      {/* Prepaid Balance */}
       <div className="flex items-center gap-3">
-        <p className="text-xs text-gray-500 w-20 flex-shrink-0">포인트</p>
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-black">
-            {Number(points).toLocaleString()}
-          </p>
-          {onEditPoints && (
-            <button
-              type="button"
-              onClick={onEditPoints}
-              className="text-gray-400 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">edit</span>
-            </button>
-          )}
-        </div>
+        <p className="text-xs text-gray-500 w-20 flex-shrink-0">정액권 잔액</p>
+        <p className="text-sm font-medium text-black">
+          {Number(points).toLocaleString()}
+        </p>
       </div>
 
       {/* Action Buttons */}

@@ -2,7 +2,7 @@
 
 // Comment: Week view grid - extracted from appointments page for readability and reuse
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Booking } from '@/lib/types';
 import {
@@ -12,6 +12,7 @@ import {
   DESIGNER_COLORS,
   getBookingStatusColor,
 } from '@/lib/utils/appointment-utils';
+import BookingContextMenu from './BookingContextMenu';
 
 type BookingWithRelations = Booking & {
   designer?: { id: number; name: string } | null;
@@ -43,7 +44,25 @@ interface WeekViewGridProps {
   emptySlotMenuPosition: EmptySlotMenuPosition | null;
   isNewBookingOpen: boolean;
   hoveredBooking: number | null;
+  hoverCardPosition: { top: number; left: number } | null;
+  hoverCardOriginalPositionRef: React.RefObject<{ top: number; left: number } | null>;
+  setHoverCardPosition: (pos: { top: number; left: number } | null) => void;
   bookingMenuOpen: number | null;
+  bookingMenuPosition: {
+    top: number;
+    left: number;
+    width: number;
+    scrollTop: number;
+    scrollLeft: number;
+  } | null;
+  bookingMenuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
+  setBookingMenuPosition: (pos: {
+    top: number;
+    left: number;
+    width: number;
+    scrollTop: number;
+    scrollLeft: number;
+  } | null) => void;
   menuCloseTimeoutRef: React.RefObject<NodeJS.Timeout | null>;
   menuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
   setNewBookingDate: (date: string) => void;
@@ -76,6 +95,8 @@ interface WeekViewGridProps {
   setBookingMenuOpen: (id: number | null) => void;
   setEditingBooking: (booking: BookingWithRelations | null) => void;
   setViewingBookingDetail: (booking: BookingWithRelations | null) => void;
+  onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => Promise<void>;
+  onCancelBooking?: (booking: BookingWithRelations) => void;
 }
 
 export default function WeekViewGrid({
@@ -89,7 +110,13 @@ export default function WeekViewGrid({
   emptySlotMenuPosition,
   isNewBookingOpen,
   hoveredBooking,
+  hoverCardPosition,
+  hoverCardOriginalPositionRef,
+  setHoverCardPosition,
   bookingMenuOpen,
+  bookingMenuPosition,
+  bookingMenuOriginalPositionRef,
+  setBookingMenuPosition,
   menuCloseTimeoutRef,
   menuOriginalPositionRef,
   setNewBookingDate,
@@ -112,9 +139,108 @@ export default function WeekViewGrid({
   setBookingMenuOpen,
   setEditingBooking,
   setViewingBookingDetail,
+  onBookingStatusChange,
+  onCancelBooking,
 }: WeekViewGridProps) {
   // Comment: If designer not selected, nothing to render
   if (!weekViewDesignerId || !weekViewStartDate) return null;
+
+  // Comment: 스크롤 이벤트 감지하여 호버 카드 위치 업데이트 (빈셀 메뉴와 동일한 방식)
+  useEffect(() => {
+    if (!hoverCardPosition || !hoveredBooking) {
+      hoverCardOriginalPositionRef.current = null;
+      return;
+    }
+    
+    const scrollContainer = document.getElementById('schedule-scroll-container');
+    if (!scrollContainer) return;
+    
+    // 호버 카드가 처음 표시될 때 원래 카드의 위치 저장 (스크롤 컨테이너 내부의 상대 위치)
+    if (!hoverCardOriginalPositionRef.current) {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      // 뷰포트 기준 위치에서 컨테이너의 뷰포트 위치를 빼서 상대 위치 계산
+      const relativeTop = hoverCardPosition.top - containerRect.top + scrollContainer.scrollTop;
+      const relativeLeft = hoverCardPosition.left - containerRect.left + scrollContainer.scrollLeft;
+      hoverCardOriginalPositionRef.current = {
+        top: relativeTop,
+        left: relativeLeft
+      };
+    }
+    
+    const handleScroll = () => {
+      if (!hoverCardOriginalPositionRef.current || !hoverCardPosition) return;
+      
+      // 호버 카드 요소를 직접 찾아서 위치 업데이트 (fixed 포지셔닝용)
+      const hoverCardElement = document.querySelector('[data-hover-card]') as HTMLElement;
+      if (hoverCardElement) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const scrollTop = scrollContainer.scrollTop;
+        const scrollLeft = scrollContainer.scrollLeft;
+        
+        // 원래 카드의 뷰포트 기준 위치를 계산
+        const viewportTop = containerRect.top + hoverCardOriginalPositionRef.current.top - scrollTop;
+        const viewportLeft = containerRect.left + hoverCardOriginalPositionRef.current.left - scrollLeft;
+        
+        // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
+        hoverCardElement.style.top = `${viewportTop}px`;
+        hoverCardElement.style.left = `${viewportLeft}px`;
+      }
+    };
+    
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, [hoveredBooking, hoverCardPosition]);
+
+  // Comment: 스크롤 이벤트 감지하여 예약 카드 메뉴 위치 업데이트 (빈셀 메뉴와 동일한 방식)
+  useEffect(() => {
+    if (!bookingMenuPosition || !bookingMenuOpen) {
+      bookingMenuOriginalPositionRef.current = null;
+      return;
+    }
+    
+    const scrollContainer = document.getElementById('schedule-scroll-container');
+    if (!scrollContainer) return;
+    
+    // 메뉴가 처음 열릴 때 원래 카드의 위치 저장 (스크롤 컨테이너 내부의 상대 위치)
+    if (!bookingMenuOriginalPositionRef.current) {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      // 뷰포트 기준 위치에서 컨테이너의 뷰포트 위치를 빼서 상대 위치 계산
+      const relativeTop = bookingMenuPosition.top - containerRect.top + scrollContainer.scrollTop;
+      const relativeLeft = bookingMenuPosition.left - containerRect.left + scrollContainer.scrollLeft;
+      bookingMenuOriginalPositionRef.current = {
+        top: relativeTop,
+        left: relativeLeft,
+        width: bookingMenuPosition.width
+      };
+    }
+    
+    const handleScroll = () => {
+      if (!bookingMenuOriginalPositionRef.current || !bookingMenuPosition) return;
+      
+      // 메뉴 요소를 직접 찾아서 위치 업데이트 (fixed 포지셔닝용)
+      const menuElement = document.querySelector('[data-booking-menu]') as HTMLElement;
+      if (menuElement) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const scrollTop = scrollContainer.scrollTop;
+        const scrollLeft = scrollContainer.scrollLeft;
+        
+        // 원래 카드의 뷰포트 기준 위치를 계산
+        const viewportTop = containerRect.top + bookingMenuOriginalPositionRef.current.top - scrollTop;
+        const viewportLeft = containerRect.left + bookingMenuOriginalPositionRef.current.left - scrollLeft;
+        
+        // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
+        menuElement.style.top = `${viewportTop}px`;
+        menuElement.style.left = `${viewportLeft}px`;
+      }
+    };
+    
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
+  }, [bookingMenuOpen, bookingMenuPosition]);
 
   return (
     <div
@@ -159,7 +285,16 @@ export default function WeekViewGrid({
         const currentDate = new Date(weekViewStartDate);
         currentDate.setDate(currentDate.getDate() + dayIndex);
         const dateStr = currentDate.toISOString().split('T')[0];
-        const dayBookings = weekViewBookings.filter((b) => b.booking_date === dateStr);
+        const dayBookings = weekViewBookings.filter((b) => {
+          if (b.booking_date !== dateStr) return false;
+          // Comment: 취소된 예약은 타임테이블에서 제외
+          const status = (b as any).status || (b as any).booking_status || '';
+          const statusUpper = status.toUpperCase();
+          if (statusUpper === 'CANCELLED' || statusUpper === 'CANCELED' || status === 'cancelled') {
+            return false;
+          }
+          return true;
+        });
 
         // Comment: Get restrictions for this designer on this date
         const dayRestrictions = bookingRestrictions.filter(
@@ -169,7 +304,7 @@ export default function WeekViewGrid({
         const color = DESIGNER_COLORS[0]; // Use first color for week view (kept for future color usage)
 
         return (
-          <div key={dayIndex} className="relative h-full">
+          <div key={dayIndex} className="relative h-full overflow-hidden">
             {/* Comment: Render restriction blocks (greyout) */}
             {dayRestrictions.map((restriction: any) => {
               if (restriction.restriction_type === 'date') {
@@ -377,11 +512,8 @@ export default function WeekViewGrid({
                     setHoveredEmptySlot(null);
                   }}
                 >
+                  {/* More button - 메뉴가 열려있을 때도 보이도록 별도 렌더링 */}
                   {isHovered && (
-                    <div
-                      className="h-full w-full relative group"
-                      style={{ zIndex: isMenuOpen ? 10000 : undefined }}
-                    >
                       <div
                         className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
                         style={{ pointerEvents: 'auto' }}
@@ -456,6 +588,8 @@ export default function WeekViewGrid({
                             more_vert
                           </span>
                         </button>
+                    </div>
+                  )}
 
                         {/* Empty slot context menu - Portal로 렌더링 */}
                         {isMenuOpen &&
@@ -491,12 +625,15 @@ export default function WeekViewGrid({
                             return createPortal(
                               <div
                                 data-empty-slot-menu
-                                className="absolute bg-white border border-gray-200 rounded-lg shadow-lg z-[99999] min-w-[180px]"
+                                className="fixed bg-white rounded-lg shadow-lg z-[99999] min-w-[180px] flex flex-col"
                                 style={{
                                   pointerEvents: 'auto',
-                                  top: `${menuOriginalPositionRef.current?.top || relativeTop}px`,
-                                  left: `${menuOriginalPositionRef.current?.left || relativeLeft}px`,
+                                  top: `${emptySlotMenuPosition.top}px`,
+                                  left: `${emptySlotMenuPosition.left}px`,
                                   width: `${emptySlotMenuPosition.width}px`,
+                                  height: 'auto',
+                                  minHeight: 'fit-content',
+                                  border: 'none',
                                 }}
                                 onMouseEnter={() => {
                                   // 메뉴로 다시 들어오면 타이머 취소
@@ -509,11 +646,13 @@ export default function WeekViewGrid({
                                   // 메뉴를 벗어날 때 약간의 지연을 두고 닫기
                                   const relatedTarget = e.relatedTarget as HTMLElement | null;
                                   // 버튼이나 메뉴 내부로 이동하는 경우는 무시
+                                  if (relatedTarget && relatedTarget instanceof Element) {
                                   if (
-                                    relatedTarget?.closest('.empty-slot-more-button') ||
-                                    relatedTarget?.closest('[data-empty-slot-menu]')
+                                      relatedTarget.closest('.empty-slot-more-button') ||
+                                      relatedTarget.closest('[data-empty-slot-menu]')
                                   ) {
                                     return;
+                                    }
                                   }
                                   // relatedTarget이 null이거나 없을 때도 버튼 위에 마우스가 있는지 확인
                                   const buttonElement = document.querySelector(
@@ -766,17 +905,9 @@ export default function WeekViewGrid({
                                   </>
                                 )}
                               </div>,
-                              (() => {
-                                const scrollContainer = document.getElementById(
-                                  'schedule-scroll-container',
-                                );
-                                return scrollContainer || document.body;
-                              })(),
+                              document.body,
                             );
                           })()}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -815,21 +946,85 @@ export default function WeekViewGrid({
               return (
                 <div
                   key={b.id}
+                  data-booking-card={b.id}
                   className="absolute left-1 right-1"
                   style={{ top, height, zIndex: 1 }}
-                  onMouseEnter={() => setHoveredBooking(b.id || null)}
-                  onMouseLeave={() => {
+                  onMouseEnter={() => {
+                    if (b.id) {
+                      // 호버 카드 위치 계산 및 저장
+                      const cardElement = document.querySelector(`[data-booking-card="${b.id}"]`) as HTMLElement;
+                      if (cardElement) {
+                        const cardRect = cardElement.getBoundingClientRect();
+                        setHoverCardPosition({
+                          top: cardRect.top,
+                          left: cardRect.right + 4,
+                        });
+                      }
+                      setHoveredBooking(b.id);
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    const relatedTarget = e.relatedTarget;
+                    // relatedTarget이 Element인지 확인
+                    if (relatedTarget && relatedTarget instanceof Element) {
+                      // 드롭다운 메뉴나 호버 카드로 이동하는 경우는 무시
+                      if (
+                        relatedTarget.closest('[data-booking-menu]') ||
+                        relatedTarget.closest('[data-booking-card]')
+                      ) {
+                        return;
+                      }
+                    }
                     setHoveredBooking(null);
+                    setHoverCardPosition(null);
+                    hoverCardOriginalPositionRef.current = null;
+                    // 드롭다운 메뉴가 열려있지 않을 때만 닫기
+                    if (bookingMenuOpen !== b.id) {
                     setBookingMenuOpen(null);
+                    }
                   }}
                 >
                   <div
-                    className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-visible relative`}
+                    className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
                     style={{ zIndex: 1 }}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (!b.id) return;
+                      setHoveredBooking(null); // 호버 popover 비활성화
+                      setHoverCardPosition(null);
+                      hoverCardOriginalPositionRef.current = null;
+                      
+                      // 메뉴가 이미 열려있으면 닫기
+                      if (bookingMenuOpen === b.id) {
+                        setBookingMenuOpen(null);
+                        setBookingMenuPosition(null);
+                        if (bookingMenuOriginalPositionRef.current) {
+                          bookingMenuOriginalPositionRef.current = null;
+                        }
+                      } else {
+                        // 메뉴 위치 계산 및 저장
+                        const cardElement = e.currentTarget.closest('[data-booking-card]') as HTMLElement;
+                        if (cardElement) {
+                          const cardRect = cardElement.getBoundingClientRect();
+                          const cellContainer = cardElement.closest('.relative.h-full.overflow-hidden') as HTMLElement;
+                          const scrollContainer = document.getElementById('schedule-scroll-container');
+                          const scrollTop = scrollContainer?.scrollTop || 0;
+                          const scrollLeft = scrollContainer?.scrollLeft || 0;
+                          
+                          const menuTop = cardRect.bottom + 4;
+                          const menuLeft = cardRect.left;
+                          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+                          
+                          setBookingMenuPosition({
+                            top: menuTop,
+                            left: menuLeft,
+                            width: menuWidth,
+                            scrollTop,
+                            scrollLeft,
+                          });
+                        }
                       setBookingMenuOpen(b.id);
+                      }
                     }}
                   >
                     <div>
@@ -844,16 +1039,19 @@ export default function WeekViewGrid({
                       <span className={`text-[10px] font-mono ${statusColor.text} opacity-60`}>
                         {timeLabel}
                       </span>
-                      <span
-                        className={`text-[10px] font-bold ${statusColor.text} bg-white/50 px-1.5 py-0.5 rounded`}
-                      >
-                        {customerId}
-                      </span>
                     </div>
 
-                    {/* Hover Card */}
-                    {hoveredBooking === b.id && !isNewBookingOpen && (
-                      <div className="absolute top-0 left-full ml-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
+                    {/* Hover Card - Portal로 렌더링 */}
+                    {hoveredBooking === b.id && !isNewBookingOpen && !bookingMenuOpen && hoverCardPosition && typeof window !== 'undefined' && (() => {
+                      return createPortal(
+                        <div 
+                          data-hover-card
+                          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+                          style={{
+                            top: `${hoverCardPosition.top}px`,
+                            left: `${hoverCardPosition.left}px`,
+                          }}
+                        >
                         <div
                           className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}
                         >
@@ -884,91 +1082,189 @@ export default function WeekViewGrid({
                               {customerName} ({b.id || customerId})
                             </span>
                           </div>
-                          {/* phone */}
-                          {(statusColor.statusEnum === 'PAID' ||
-                            statusColor.statusEnum === 'BOOKED') &&
-                            customerPhone && (
+                            {/* phone - 모든 상태에서 표시 */}
+                            {customerPhone && (
                               <div className="flex items-center gap-2">
                                 <span className="text-gray-500 w-16 shrink-0">전화번호</span>
                                 <span className="text-gray-900">{customerPhone}</span>
                               </div>
                             )}
-                          {/* serviceName */}
-                          {(statusColor.statusEnum === 'ARRIVED' ||
-                            statusColor.statusEnum === 'PAID' ||
-                            statusColor.statusEnum === 'BOOKED') &&
-                            serviceName && (
+                            {/* serviceName - 모든 상태에서 표시 */}
+                            {serviceName && (
                               <div className="flex items-center gap-2">
                                 <span className="text-gray-500 w-16 shrink-0">시술명</span>
                                 <span className="text-gray-900">{serviceName}</span>
                               </div>
                             )}
-                          {/* memo */}
-                          {(statusColor.statusEnum === 'ARRIVED' ||
-                            statusColor.statusEnum === 'BOOKED' ||
-                            statusColor.statusEnum === 'NOSHOW') &&
-                            bookingMemo && (
+                            {/* memo - 모든 상태에서 표시 */}
+                            {bookingMemo && (
                               <>
                                 <div className="border-t border-gray-200 my-1.5" />
                                 <div className="text-gray-700">{bookingMemo}</div>
                               </>
                             )}
                         </div>
-                      </div>
-                    )}
+                        </div>,
+                        document.body
+                      );
+                    })()}
 
-                    {/* Context Menu - 통합 4개 항목 */}
-                    {bookingMenuOpen === b.id && !isNewBookingOpen && (
+                    {/* Context Menu - 상태별 메뉴 - Portal로 렌더링 */}
+                    {bookingMenuOpen === b.id && !isNewBookingOpen && bookingMenuPosition && typeof window !== 'undefined' && (() => {
+                      return createPortal(
                       <div
                         data-booking-menu
-                        className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                          className="fixed bg-transparent z-50"
+                          style={{
+                            top: `${bookingMenuPosition.top}px`,
+                            left: `${bookingMenuPosition.left}px`,
+                            width: `${bookingMenuPosition.width}px`,
+                          }}
+                          onMouseEnter={() => {
+                            // 메뉴로 다시 들어오면 타이머 취소
+                            if (menuCloseTimeoutRef.current) {
+                              clearTimeout(menuCloseTimeoutRef.current);
+                              menuCloseTimeoutRef.current = null;
+                            }
+                            setHoveredBooking(b.id || null);
+                          }}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget;
+                            // relatedTarget이 Element인지 확인
+                            if (relatedTarget && relatedTarget instanceof Element) {
+                              // 예약 카드나 메뉴 내부로 이동하는 경우는 무시
+                              if (
+                                relatedTarget.closest('[data-booking-card]') ||
+                                relatedTarget.closest('[data-booking-menu]')
+                              ) {
+                                return;
+                              }
+                            }
+                            // relatedTarget이 null이거나 없을 때도 카드 위에 마우스가 있는지 확인
+                            const cardElement = document.querySelector(`[data-booking-card="${b.id}"]:hover`);
+                            if (cardElement) {
+                              return;
+                            }
+                            // 기존 타이머가 있으면 취소
+                            if (menuCloseTimeoutRef.current) {
+                              clearTimeout(menuCloseTimeoutRef.current);
+                            }
+                            // 약간의 지연을 두고 메뉴 닫기 (마우스가 다시 메뉴로 돌아올 수 있도록)
+                            menuCloseTimeoutRef.current = setTimeout(() => {
+                              // 메뉴나 카드 위에 마우스가 없을 때만 닫기
+                              const menuElement = document.querySelector('[data-booking-menu]');
+                              const cardElement = document.querySelector(`[data-booking-card="${b.id}"]:hover`);
+                              if (!menuElement?.matches(':hover') && !cardElement) {
+                                setHoveredBooking(null);
+                                setHoverCardPosition(null);
+                                hoverCardOriginalPositionRef.current = null;
+                                setBookingMenuOpen(null);
+                                setBookingMenuPosition(null);
+                                if (bookingMenuOriginalPositionRef.current) {
+                                  bookingMenuOriginalPositionRef.current = null;
+                                }
+                              }
+                              menuCloseTimeoutRef.current = null;
+                            }, 200);
+                          }}
+                        >
+                          <BookingContextMenu
+                            booking={b}
+                            className="bg-white border border-gray-200 rounded-lg shadow-lg"
+                            style={{
+                              width: '100%',
+                            }}
+                            onNewBooking={() => {
                             setIsNewBookingOpen(true);
                             setBookingMenuOpen(null);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-                        >
-                          예약 등록
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingBooking(b);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onEditBooking={(booking) => {
+                              setEditingBooking(booking);
                             setBookingMenuOpen(null);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          예약 수정
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // TODO: 판매 상세 구현
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onViewDetail={(booking) => {
+                              setViewingBookingDetail(booking);
                             setBookingMenuOpen(null);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          판매 상세
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setViewingBookingDetail(b);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onViewCustomer={(booking) => {
+                              setViewingBookingDetail(booking);
                             setBookingMenuOpen(null);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-                        >
-                          고객 정보
-                        </button>
-                      </div>
-                    )}
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onStatusChange={async (booking, newStatus) => {
+                              console.log('🔄 WeekViewGrid 상태 변경:', { bookingId: booking.id, newStatus });
+                              if (onBookingStatusChange) {
+                                try {
+                                  await onBookingStatusChange(booking, newStatus);
+                                  console.log('✅ WeekViewGrid 상태 변경 완료');
+                                } catch (error) {
+                                  console.error('❌ WeekViewGrid 상태 변경 에러:', error);
+                                  throw error;
+                                }
+                              } else {
+                                console.warn('⚠️ onBookingStatusChange 핸들러가 없습니다.');
+                              }
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onMoveBooking={(booking) => {
+                              // TODO: 예약 이동 구현
+                              console.log('Move booking:', booking.id);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onCancelBooking={onCancelBooking ? (booking) => {
+                              onCancelBooking(booking);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            } : undefined}
+                            onRegisterSale={(booking) => {
+                              // TODO: 판매 등록 구현
+                              console.log('Register sale:', booking.id);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onViewSaleDetail={(booking) => {
+                              // TODO: 판매 상세 구현
+                              console.log('View sale detail:', booking.id);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                          />
+                        </div>,
+                        document.body
+                      );
+                    })()}
                   </div>
                 </div>
               );

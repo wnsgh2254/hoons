@@ -12,6 +12,8 @@ interface CustomerInfoDrawerProps {
   tab: 'sales' | 'prepaid';
   onClose: () => void;
   onTabChange: (tab: 'sales' | 'prepaid') => void;
+  onRegisterSale?: () => void;
+  onViewSalesDetail?: (item: any) => void;
 }
 
 export default function CustomerInfoDrawer({
@@ -21,6 +23,8 @@ export default function CustomerInfoDrawer({
   tab,
   onClose,
   onTabChange,
+  onRegisterSale,
+  onViewSalesDetail,
 }: CustomerInfoDrawerProps) {
   const [salesFilter, setSalesFilter] = useState('all');
 
@@ -83,18 +87,11 @@ export default function CustomerInfoDrawer({
                     totalSales={derivedTotalSales}
                     points={derivedPoints}
                     unpaidAmount={derivedUnpaidAmount}
-                    onEditPoints={() => {
-                      // TODO: Open edit points modal
-                      alert('포인트 편집 기능은 추후 구현 예정입니다.');
-                    }}
                     onEditUnpaid={() => {
                       // TODO: Open edit unpaid amount modal
                       alert('미수금 편집 기능은 추후 구현 예정입니다.');
                     }}
-                    onRegisterSale={() => {
-                      // TODO: Open register sale modal
-                      alert('판매 등록 기능은 추후 구현 예정입니다.');
-                    }}
+                    onRegisterSale={onRegisterSale}
                     onRegisterRefund={() => {
                       // TODO: Open register refund modal
                       alert('환불 등록 기능은 추후 구현 예정입니다.');
@@ -138,8 +135,9 @@ export default function CustomerInfoDrawer({
                   filter={salesFilter}
                   onFilterChange={setSalesFilter}
                   onViewDetail={(item) => {
-                    // TODO: Open detail modal
-                    console.log('View detail:', item);
+                    if (onViewSalesDetail) {
+                      onViewSalesDetail(item);
+                    }
                   }}
                 />
               )}

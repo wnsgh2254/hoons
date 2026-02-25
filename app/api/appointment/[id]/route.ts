@@ -8,11 +8,15 @@ export async function PATCH(
 ) {
   try {
     const { id } = await context.params;
+    console.log('🔵 API PATCH 요청 받음:', { id });
+    
     if (!id) {
+      console.error('❌ 유효하지 않은 예약 ID');
       return NextResponse.json({ error: '유효하지 않은 예약 ID 입니다.' }, { status: 400 });
     }
 
     const body = await request.json();
+    console.log('📥 요청 body:', body);
     const updates: any = {};
 
     // Comment: Get current booking to check end time
@@ -77,6 +81,7 @@ export async function PATCH(
     }
     if (typeof body.status === 'string') {
       updates.status = body.status;
+      console.log('✅ 상태 업데이트 추가:', { status: body.status });
     }
     if (typeof body.total_amount === 'number' || typeof body.total_amount === 'string') {
       updates.total_amount = Number(body.total_amount);
@@ -98,12 +103,24 @@ export async function PATCH(
     if (typeof body.memo === 'string' || body.memo === null) {
       updates.memo = body.memo === null ? null : body.memo;
     }
+    // Comment: cancellation_reason 필드는 선택적 (컬럼이 없을 수도 있음)
+    let cancellationReason: string | null | undefined = undefined;
+    if (body.cancellation_reason !== undefined) {
+      if (typeof body.cancellation_reason === 'string' || body.cancellation_reason === null) {
+        cancellationReason = body.cancellation_reason === null ? null : body.cancellation_reason;
+      }
+    }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && cancellationReason === undefined) {
+      console.warn('⚠️ 업데이트할 필드가 없습니다.');
       return NextResponse.json({ error: '업데이트할 필드가 없습니다.' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    console.log('📤 Supabase 업데이트 실행:', { id, updates, cancellationReason });
+    console.log('📋 업데이트할 status 값:', updates.status);
+    
+    // Comment: cancellation_reason을 제외한 업데이트 먼저 실행
+    let { data, error } = await supabase
       .from('bookings')
       .update(updates)
       .eq('id', id)
@@ -111,10 +128,53 @@ export async function PATCH(
       .single();
 
     if (error) {
-      console.error('Error updating booking:', error);
-      return NextResponse.json({ error: '예약 수정에 실패했습니다.' }, { status: 500 });
+      console.error('❌ Supabase 업데이트 에러:', error);
+      console.error('❌ 에러 상세:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      return NextResponse.json({ 
+        error: error.message || '예약 수정에 실패했습니다.',
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      }, { status: 500 });
     }
 
+    // 업데이트 후 실제 저장된 값 확인
+    if (data) {
+      console.log('✅ 업데이트 후 실제 저장된 status:', data.status);
+      if (updates.status && data.status !== updates.status) {
+        console.error('⚠️ 경고: 요청한 status와 저장된 status가 다릅니다!', {
+          requested: updates.status,
+          saved: data.status
+        });
+      }
+    }
+
+    // Comment: cancellation_reason이 있으면 별도로 업데이트 시도 (컬럼이 있을 경우)
+    if (cancellationReason !== undefined && data) {
+      const { data: updateData, error: updateError } = await supabase
+        .from('bookings')
+        .update({ cancellation_reason: cancellationReason })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (!updateError && updateData) {
+        data = updateData;
+        console.log('✅ cancellation_reason 업데이트 성공');
+      } else if (updateError) {
+        // Comment: cancellation_reason 컬럼이 없어도 메인 업데이트는 성공했으므로 경고만 로깅
+        console.warn('⚠️ cancellation_reason 업데이트 실패 (컬럼이 없을 수 있음):', updateError.message);
+      }
+    }
+
+    console.log('✅ Supabase 업데이트 성공:', data);
+    console.log('📋 업데이트된 예약 상태:', data?.status);
+    console.log('📋 전체 업데이트된 데이터:', JSON.stringify(data, null, 2));
     return NextResponse.json({ booking: data }, { status: 200 });
   } catch (error) {
     console.error('Error in appointment PATCH route:', error);

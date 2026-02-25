@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { EDIT_TIME_OPTIONS } from '@/lib/utils/appointment-utils';
 
 type TimeSlot = {
@@ -73,7 +72,6 @@ export default function NewBookingModal({
   setNewBookingCustomerSearchResults,
   setNewBookingIsCustomerSearching,
 }: NewBookingModalProps) {
-  const router = useRouter();
 
   // Comment: Duration options in 30-min steps only
   const durationOptions = [30, 60, 90, 120, 150, 180];
@@ -251,10 +249,9 @@ export default function NewBookingModal({
     }
   };
 
-  // Comment: Open full customer registration page in a new tab
+  // Comment: Open customer registration modal
   const handleOpenCustomerRegistration = () => {
     setIsCustomerRegistrationModalOpen(true);
-    router.push('/admin/customers');
   };
 
   if (!isOpen) return null;

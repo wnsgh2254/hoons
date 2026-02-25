@@ -2,24 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getPrepaidPasses,
   getPrepaidPassById,
+  getPrepaidPassByCustomerId,
   createPrepaidPass,
   updatePrepaidPass,
   deletePrepaidPass,
 } from '@/lib/data';
 
-// Comment: GET - Fetch all prepaid pass members or a single member by id query parameter
+// Comment: GET - Fetch all prepaid pass members or a single member by id or customer_id query parameter
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const customerId = searchParams.get('customer_id');
     const search = searchParams.get('search') || undefined;
     const page = Number(searchParams.get('page')) || 1;
     const limit = Number(searchParams.get('limit')) || 20;
 
-    // Comment: If id is provided, fetch single member
+    // Comment: If id is provided, fetch single member by id
     if (id) {
       const memberId = Number(id);
       const member = await getPrepaidPassById(memberId);
+      return NextResponse.json({ member }, { status: 200 });
+    }
+
+    // Comment: If customer_id is provided, fetch member by customer_id
+    if (customerId) {
+      const customerIdNum = Number(customerId);
+      const member = await getPrepaidPassByCustomerId(customerIdNum);
+      if (!member) {
+        return NextResponse.json({ error: '선불권 회원을 찾을 수 없습니다.' }, { status: 404 });
+      }
       return NextResponse.json({ member }, { status: 200 });
     }
 

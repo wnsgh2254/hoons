@@ -2,6 +2,8 @@
 
 import { getBookingStatusColor, GRID_START_HOUR, GRID_30MIN_HEIGHT } from '@/lib/utils/appointment-utils';
 import type { Booking } from '@/lib/types';
+import BookingContextMenu from './BookingContextMenu';
+import { createPortal } from 'react-dom';
 
 type BookingWithRelations = Booking & {
   designer?: { id: number; name: string } | null;
@@ -21,6 +23,7 @@ interface BookingCardProps {
   onEditBooking: (booking: BookingWithRelations) => void;
   onViewDetail: (booking: BookingWithRelations) => void;
   onViewCustomer: (booking: BookingWithRelations) => void;
+  onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => Promise<void>;
 }
 
 export default function BookingCard({
@@ -36,6 +39,7 @@ export default function BookingCard({
   onEditBooking,
   onViewDetail,
   onViewCustomer,
+  onStatusChange,
 }: BookingCardProps) {
   if (!booking.booking_time) return null;
 
@@ -67,10 +71,24 @@ export default function BookingCard({
 
   return (
     <div
+      data-booking-card={booking.id}
       className="absolute left-1 right-1"
       style={{ top, height, zIndex: emptySlotMenuOpen ? 0 : 1 }}
       onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseLeave={(e) => {
+        const relatedTarget = e.relatedTarget;
+        // relatedTarget이 Element인지 확인
+        if (relatedTarget && relatedTarget instanceof Element) {
+          // 드롭다운 메뉴나 호버 카드로 이동하는 경우는 무시
+          if (
+            relatedTarget.closest('[data-booking-menu]') ||
+            relatedTarget.closest('[data-booking-card]')
+          ) {
+            return;
+          }
+        }
+        onMouseLeave();
+      }}
     >
       <div
         className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
@@ -87,14 +105,27 @@ export default function BookingCard({
           <span className={`text-[10px] font-mono ${statusColor.text} opacity-60`}>
             {timeLabel}
           </span>
-          <span className={`text-[10px] font-bold ${statusColor.text} bg-white/50 px-1.5 py-0.5 rounded`}>
-            {customerId}
-          </span>
         </div>
 
-        {/* Hover Card */}
-        {isHovered && !isNewBookingOpen && (
-          <div className="absolute top-0 left-full ml-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3">
+        {/* Hover Card - Portal로 렌더링 */}
+        {isHovered && !isNewBookingOpen && !isMenuOpen && typeof window !== 'undefined' && (() => {
+          // 예약 카드의 위치를 계산하여 호버 카드 위치 결정
+          const cardElement = document.querySelector(`[data-booking-card="${booking.id}"]`) as HTMLElement;
+          if (!cardElement) return null;
+          
+          const cardRect = cardElement.getBoundingClientRect();
+          const hoverTop = cardRect.top;
+          const hoverLeft = cardRect.right + 4; // 카드 오른쪽에 4px 간격
+          
+          return createPortal(
+            <div 
+              data-hover-card
+              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+              style={{
+                top: `${hoverTop}px`,
+                left: `${hoverLeft}px`,
+              }}
+            >
             <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
               <p className="text-xs font-bold">{statusColor.label}</p>
             </div>
@@ -113,310 +144,102 @@ export default function BookingCard({
                 <span className="text-gray-500 w-16 shrink-0">고객명</span>
                 <span className="text-gray-900">{customerName} ({booking.id || customerId})</span>
               </div>
-              {(statusColor.statusEnum === 'PAID' || statusColor.statusEnum === 'BOOKED') && customerPhone && (
+                {/* phone - 모든 상태에서 표시 */}
+                {customerPhone && (
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500 w-16 shrink-0">전화번호</span>
                   <span className="text-gray-900">{customerPhone}</span>
                 </div>
               )}
-              {(statusColor.statusEnum === 'ARRIVED' || statusColor.statusEnum === 'PAID' || statusColor.statusEnum === 'BOOKED') && serviceName && (
+                {/* serviceName - 모든 상태에서 표시 */}
+                {serviceName && (
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500 w-16 shrink-0">시술명</span>
                   <span className="text-gray-900">{serviceName}</span>
                 </div>
               )}
-              {(statusColor.statusEnum === 'ARRIVED' || statusColor.statusEnum === 'BOOKED' || statusColor.statusEnum === 'NOSHOW') && bookingMemo && (
+                {/* memo - 모든 상태에서 표시 */}
+                {bookingMemo && (
                 <>
                   <div className="border-t border-gray-200 my-1.5"></div>
                   <div className="text-gray-700">{bookingMemo}</div>
                 </>
               )}
             </div>
-          </div>
-        )}
+            </div>,
+            document.body
+          );
+        })()}
 
-        {/* Context Menu */}
-        {isMenuOpen && !isNewBookingOpen && (
+        {/* Context Menu - Portal로 렌더링 */}
+        {isMenuOpen && !isNewBookingOpen && typeof window !== 'undefined' && (() => {
+          // 예약 카드의 위치를 계산하여 드롭다운 메뉴 위치 결정
+          const cardElement = document.querySelector(`[data-booking-card="${booking.id}"]`) as HTMLElement;
+          if (!cardElement) return null;
+          
+          const cardRect = cardElement.getBoundingClientRect();
+          // 셀 컨테이너의 전체 너비를 가져오기 위해 부모 요소 확인
+          const cellContainer = cardElement.closest('.relative.h-full.overflow-hidden') as HTMLElement;
+          const menuTop = cardRect.bottom + 4; // 카드 아래에 4px 간격
+          const menuLeft = cardRect.left; // 예약 카드의 왼쪽에 맞춤
+          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width; // 셀 전체 너비 (padding 제외)
+          
+          return createPortal(
+            <div
+              data-booking-menu
+              onMouseEnter={() => {
+                // 드롭다운 메뉴 위에 마우스가 있을 때는 메뉴를 유지
+                onMouseEnter();
+              }}
+              onMouseLeave={(e) => {
+                const relatedTarget = e.relatedTarget as HTMLElement | null;
+                // 예약 카드로 다시 이동하는 경우는 무시
+                if (relatedTarget?.closest('[data-booking-card]')) {
+                  return;
+                }
+                onMouseLeave();
+              }}
+            >
           <BookingContextMenu
             booking={booking}
-            statusColor={statusColor}
             onNewBooking={onNewBooking}
             onEditBooking={onEditBooking}
             onViewDetail={onViewDetail}
             onViewCustomer={onViewCustomer}
-          />
-        )}
+                onStatusChange={async (booking, newStatus) => {
+                  if (onStatusChange) {
+                    await onStatusChange(booking, newStatus);
+                  }
+                }}
+                onMoveBooking={(booking) => {
+                  // TODO: 예약 이동 구현
+                  console.log('Move booking:', booking.id);
+                }}
+                onCancelBooking={(booking) => {
+                  // TODO: 예약 취소 구현
+                  console.log('Cancel booking:', booking.id);
+                }}
+                onRegisterSale={(booking) => {
+                  // TODO: 판매 등록 구현
+                  console.log('Register sale:', booking.id);
+                }}
+                onViewSaleDetail={(booking) => {
+                  // TODO: 판매 상세 구현
+                  console.log('View sale detail:', booking.id);
+                }}
+                className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                style={{
+                  top: `${menuTop}px`,
+                  left: `${menuLeft}px`,
+                  width: `${menuWidth}px`,
+                }}
+              />
+            </div>,
+            document.body
+          );
+        })()}
       </div>
     </div>
   );
 }
 
-interface BookingContextMenuProps {
-  booking: BookingWithRelations;
-  statusColor: ReturnType<typeof getBookingStatusColor>;
-  onNewBooking: () => void;
-  onEditBooking: (booking: BookingWithRelations) => void;
-  onViewDetail: (booking: BookingWithRelations) => void;
-  onViewCustomer: (booking: BookingWithRelations) => void;
-}
-
-function BookingContextMenu({
-  booking,
-  statusColor,
-  onNewBooking,
-  onEditBooking,
-  onViewDetail,
-  onViewCustomer,
-}: BookingContextMenuProps) {
-  if (statusColor.statusEnum === 'ARRIVED') {
-    return (
-      <div data-booking-menu className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 판매 등록
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-        >
-          판매 등록
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewBooking();
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 등록
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditBooking(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 수정
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 예약 이동
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 이동
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewDetail(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          고객 정보
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 상태 변경
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined text-sm">check</span>
-          고객 입장
-        </button>
-      </div>
-    );
-  }
-
-  if (statusColor.label === '계산완료') {
-    return (
-      <div data-booking-menu className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewBooking();
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-        >
-          예약 등록
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditBooking(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 수정
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 판매 상세
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          판매 상세
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewDetail(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-        >
-          고객 정보
-        </button>
-      </div>
-    );
-  }
-
-  if (statusColor.statusEnum === 'BOOKED') {
-    return (
-      <div data-booking-menu className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 판매 등록
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-        >
-          판매 등록
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewBooking();
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 등록
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditBooking(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 수정
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 예약 이동
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 이동
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 예약 취소
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 취소
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewDetail(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          고객 정보
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 상태 변경 - 고객 입장
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          고객 입장
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 상태 변경 - 노쇼
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg"
-        >
-          노쇼
-        </button>
-      </div>
-    );
-  }
-
-  if (statusColor.statusEnum === 'NOSHOW') {
-    return (
-      <div data-booking-menu className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewBooking();
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
-        >
-          예약 등록
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEditBooking(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          예약 수정
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewDetail(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          고객 정보
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: 상태 변경 - 노쇼 해제
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined text-sm">check</span>
-          노쇼
-        </button>
-      </div>
-    );
-  }
-
-  return null;
-}

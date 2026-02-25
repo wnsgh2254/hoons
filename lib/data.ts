@@ -437,6 +437,30 @@ export async function getPrepaidPassById(id: number) {
   return data;
 }
 
+// Comment: Get a prepaid pass member by customer_id
+export async function getPrepaidPassByCustomerId(customerId: number) {
+  if (!customerId || Number.isNaN(customerId)) {
+    throw new Error('유효하지 않은 고객 ID입니다.');
+  }
+
+  const { data, error } = await supabase
+    .from('prepaid_passes')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('is_active', true)
+    .single();
+
+  if (error) {
+    // If no record found, return null instead of throwing
+    if (error.code === 'PGRST116') {
+      return null;
+    }
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
 // Comment: Create a new prepaid pass member
 export async function createPrepaidPass(payload: {
   name: string;
