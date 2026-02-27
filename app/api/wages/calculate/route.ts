@@ -187,7 +187,9 @@ export async function GET(request: NextRequest) {
 
         // Comment: Raw sales/deduction amounts from DB
         const serviceSalesRaw = toNum(sales.sales?.service?.amount || 0);
-        const serviceDeductionRaw = toNum(sales.membershipDeduction?.service?.amount ?? sales.membershipDeduction?.subtotal || 0);
+        const serviceDeductionRaw = toNum(
+          (sales.membershipDeduction?.service?.amount ?? sales.membershipDeduction?.subtotal) || 0
+        );
         const productSalesRaw = toNum(sales.sales?.product?.amount || 0);
         const productDeductionRaw = 0;
 

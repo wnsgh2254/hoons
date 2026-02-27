@@ -249,4 +249,3 @@ function BookingCard({
 }
 
 export default React.memo(BookingCard);
-
