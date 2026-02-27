@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         const { data: updated, error: updateError } = await supabase
           .from('staff_attendance')
           .update({
-            manual_total_minutes: value === '' || value == null ? null : Math.round(value),
+            manual_total_minutes: value == null ? null : Math.round(value),
             updated_at: new Date().toISOString(),
           })
           .eq('designer_id', designerId)
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
         .insert({
           designer_id: designerId,
           work_date: workDateStr,
-          manual_total_minutes: value === '' || value == null ? null : Math.round(value),
+          manual_total_minutes: value == null ? null : Math.round(value),
         })
         .select()
         .single();
