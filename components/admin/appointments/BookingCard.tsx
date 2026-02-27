@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { getBookingStatusColor, GRID_START_HOUR, GRID_30MIN_HEIGHT } from '@/lib/utils/appointment-utils';
 import type { Booking } from '@/lib/types';
 import BookingContextMenu from './BookingContextMenu';
@@ -26,7 +27,7 @@ interface BookingCardProps {
   onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
 }
 
-export default function BookingCard({
+function BookingCard({
   booking,
   emptySlotMenuOpen,
   isNewBookingOpen,
@@ -242,8 +243,10 @@ export default function BookingCard({
             document.body
           );
         })()}
-      </div>
+        </div>
     </div>
   );
 }
+
+export default React.memo(BookingCard);
 

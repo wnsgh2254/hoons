@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { getBookingStatusColor } from '@/lib/utils/appointment-utils';
 import type { Booking } from '@/lib/types';
 
@@ -23,7 +24,7 @@ interface BookingContextMenuProps {
   style?: React.CSSProperties;
 }
 
-export default function BookingContextMenu({
+function BookingContextMenu({
   booking,
   onNewBooking,
   onEditBooking,
@@ -37,7 +38,7 @@ export default function BookingContextMenu({
   className = 'absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]',
   style,
 }: BookingContextMenuProps) {
-  // fixed 포지셔닝을 위한 스타일 병합
+  // fixed positioning style merge
   const mergedStyle = style || {};
   const statusColor = getBookingStatusColor((booking as any).status || (booking as any).booking_status);
 
@@ -363,3 +364,5 @@ export default function BookingContextMenu({
     </div>
   );
 }
+
+export default React.memo(BookingContextMenu);

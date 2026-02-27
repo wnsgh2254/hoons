@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type React from 'react';
 import type { Booking } from '@/lib/types';
@@ -26,6 +26,9 @@ import ReservationHistoryModal from '@/components/admin/appointments/Reservation
 import HolidayCalendarModal from '@/components/admin/appointments/HolidayCalendarModal';
 import AttendanceModal from '../../../components/admin/appointments/AttendanceModal';
 import BookingContextMenu from '@/components/admin/appointments/BookingContextMenu';
+import ScheduleDayViewBookingCard, {
+  type ScheduleDayViewMenuHandlers,
+} from '@/components/admin/appointments/ScheduleDayViewBookingCard';
 import CancelBookingModal from '@/components/admin/appointments/CancelBookingModal';
 import EditPrepaidMemberModal from '@/components/admin/appointments/EditPrepaidMemberModal';
 import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
@@ -49,6 +52,8 @@ type BookingWithRelations = Booking & {
   designer?: { id: number; name: string } | null;
   service?: { id: number; name: string; duration_minutes?: number | null } | null;
 };
+
+const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
 
 export default function AppointmentsManagementPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
@@ -315,28 +320,27 @@ export default function AppointmentsManagementPage() {
       };
     }
     
+    const rafRef = { current: 0 };
     const handleScroll = () => {
-      if (!menuOriginalPositionRef.current || !emptySlotMenuPosition) return;
-      
-      // 메뉴 요소를 직접 찾아서 위치 업데이트 (fixed 포지셔닝용)
-      const menuElement = document.querySelector('[data-empty-slot-menu]') as HTMLElement;
-      if (menuElement) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const scrollTop = scrollContainer.scrollTop;
-        const scrollLeft = scrollContainer.scrollLeft;
-        
-        // 원래 셀의 뷰포트 기준 위치를 계산
-        const viewportTop = containerRect.top + menuOriginalPositionRef.current.top - scrollTop;
-        const viewportLeft = containerRect.left + menuOriginalPositionRef.current.left - scrollLeft;
-        
-        // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
-        menuElement.style.top = `${viewportTop}px`;
-        menuElement.style.left = `${viewportLeft}px`;
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        if (!menuOriginalPositionRef.current || !emptySlotMenuPosition) return;
+        const menuElement = document.querySelector('[data-empty-slot-menu]') as HTMLElement;
+        if (menuElement) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const scrollTop = scrollContainer.scrollTop;
+          const scrollLeft = scrollContainer.scrollLeft;
+          const viewportTop = containerRect.top + menuOriginalPositionRef.current.top - scrollTop;
+          const viewportLeft = containerRect.left + menuOriginalPositionRef.current.left - scrollLeft;
+          menuElement.style.top = `${viewportTop}px`;
+          menuElement.style.left = `${viewportLeft}px`;
+        }
+      });
     };
-    
-    scrollContainer.addEventListener('scroll', handleScroll);
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       scrollContainer.removeEventListener('scroll', handleScroll);
     };
   }, [emptySlotMenuOpen, emptySlotMenuPosition]);
@@ -371,28 +375,27 @@ export default function AppointmentsManagementPage() {
       };
     }
     
+    const rafRef = { current: 0 };
     const handleScroll = () => {
-      if (!hoverCardOriginalPositionRef.current || !hoverCardPosition) return;
-      
-      // 호버 카드 요소를 직접 찾아서 위치 업데이트 (fixed 포지셔닝용)
-      const hoverCardElement = document.querySelector('[data-hover-card]') as HTMLElement;
-      if (hoverCardElement) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const scrollTop = scrollContainer.scrollTop;
-        const scrollLeft = scrollContainer.scrollLeft;
-        
-        // 원래 카드의 뷰포트 기준 위치를 계산
-        const viewportTop = containerRect.top + hoverCardOriginalPositionRef.current.top - scrollTop;
-        const viewportLeft = containerRect.left + hoverCardOriginalPositionRef.current.left - scrollLeft;
-        
-        // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
-        hoverCardElement.style.top = `${viewportTop}px`;
-        hoverCardElement.style.left = `${viewportLeft}px`;
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        if (!hoverCardOriginalPositionRef.current || !hoverCardPosition) return;
+        const hoverCardElement = document.querySelector('[data-hover-card]') as HTMLElement;
+        if (hoverCardElement) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const scrollTop = scrollContainer.scrollTop;
+          const scrollLeft = scrollContainer.scrollLeft;
+          const viewportTop = containerRect.top + hoverCardOriginalPositionRef.current.top - scrollTop;
+          const viewportLeft = containerRect.left + hoverCardOriginalPositionRef.current.left - scrollLeft;
+          hoverCardElement.style.top = `${viewportTop}px`;
+          hoverCardElement.style.left = `${viewportLeft}px`;
+        }
+      });
     };
-    
-    scrollContainer.addEventListener('scroll', handleScroll);
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       scrollContainer.removeEventListener('scroll', handleScroll);
     };
   }, [hoveredBooking, hoverCardPosition]);
@@ -431,28 +434,27 @@ export default function AppointmentsManagementPage() {
       };
     }
     
+    const rafRef = { current: 0 };
     const handleScroll = () => {
-      if (!bookingMenuOriginalPositionRef.current || !bookingMenuPosition) return;
-      
-      // 메뉴 요소를 직접 찾아서 위치 업데이트 (fixed 포지셔닝용)
-      const menuElement = document.querySelector('[data-booking-menu]') as HTMLElement;
-      if (menuElement) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const scrollTop = scrollContainer.scrollTop;
-        const scrollLeft = scrollContainer.scrollLeft;
-        
-        // 원래 카드의 뷰포트 기준 위치를 계산
-        const viewportTop = containerRect.top + bookingMenuOriginalPositionRef.current.top - scrollTop;
-        const viewportLeft = containerRect.left + bookingMenuOriginalPositionRef.current.left - scrollLeft;
-        
-        // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
-        menuElement.style.top = `${viewportTop}px`;
-        menuElement.style.left = `${viewportLeft}px`;
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        if (!bookingMenuOriginalPositionRef.current || !bookingMenuPosition) return;
+        const menuElement = document.querySelector('[data-booking-menu]') as HTMLElement;
+        if (menuElement) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const scrollTop = scrollContainer.scrollTop;
+          const scrollLeft = scrollContainer.scrollLeft;
+          const viewportTop = containerRect.top + bookingMenuOriginalPositionRef.current.top - scrollTop;
+          const viewportLeft = containerRect.left + bookingMenuOriginalPositionRef.current.left - scrollLeft;
+          menuElement.style.top = `${viewportTop}px`;
+          menuElement.style.left = `${viewportLeft}px`;
+        }
+      });
     };
-    
-    scrollContainer.addEventListener('scroll', handleScroll);
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       scrollContainer.removeEventListener('scroll', handleScroll);
     };
   }, [bookingMenuOpen, bookingMenuPosition]);
@@ -540,18 +542,6 @@ export default function AppointmentsManagementPage() {
     }
   }, []);
 
-  // Comment: Save recent search
-  const saveRecentSearch = (name: string, phone?: string, id?: number) => {
-    try {
-      const newSearch = { name, phone, id };
-      const updated = [newSearch, ...recentSearches.filter(s => s.id !== id && s.name !== name)].slice(0, 10);
-      setRecentSearches(updated);
-      localStorage.setItem('recentSearches', JSON.stringify(updated));
-    } catch (err) {
-      console.error('Error saving recent search:', err);
-    }
-  };
-
   // Comment: Handle customer autocomplete search
   useEffect(() => {
     const searchTerm = searchInput.trim();
@@ -588,8 +578,8 @@ export default function AppointmentsManagementPage() {
     };
   }, [searchInput]);
 
-  // Comment: Load customer info for modal
-  const loadCustomerInfo = async (customerId: number) => {
+  // Comment: Load customer info for modal (memoized)
+  const loadCustomerInfo = useCallback(async (customerId: number) => {
     setCustomerInfoLoading(true);
     try {
       // Step 1: 빠른 기본 고객 정보 조회 (모달을 빨리 띄우기 위함)
@@ -724,44 +714,54 @@ export default function AppointmentsManagementPage() {
     } finally {
       setCustomerInfoLoading(false);
     }
-  };
+  }, []);
+
+  // Comment: Save recent search (memoized for stable callback)
+  const saveRecentSearchStable = useCallback((name: string, phone?: string, id?: number) => {
+    try {
+      setRecentSearches((prev) => {
+        const newSearch = { name, phone, id };
+        const updated = [newSearch, ...prev.filter((s) => s.id !== id && s.name !== name)].slice(0, 10);
+        localStorage.setItem('recentSearches', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (err) {
+      console.error('Error saving recent search:', err);
+    }
+  }, []);
 
   // Comment: Handle customer selection from autocomplete
-  const handleCustomerSelect = async (customer: { id: number; name: string; phone?: string }) => {
-    setSearchInput(customer.name);
-    setIsSearchDropdownOpen(false);
-    setSearchDropdownPosition(null);
-    setViewingCustomerId(customer.id);
-    await loadCustomerInfo(customer.id);
-    saveRecentSearch(customer.name, customer.phone, customer.id);
-  };
+  const handleCustomerSelect = useCallback(
+    async (customer: { id: number; name: string; phone?: string }) => {
+      setSearchInput(customer.name);
+      setIsSearchDropdownOpen(false);
+      setSearchDropdownPosition(null);
+      setViewingCustomerId(customer.id);
+      await loadCustomerInfo(customer.id);
+      saveRecentSearchStable(customer.name, customer.phone, customer.id);
+    },
+    [loadCustomerInfo, saveRecentSearchStable]
+  );
 
   // Comment: Handle search - open customer info modal
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     if (!searchInput.trim()) {
       alert('검색어를 입력하세요.');
       return;
     }
-
     setIsSearching(true);
     try {
       const searchTerm = searchInput.trim();
-      
-      // Search customers first
       const customerRes = await fetch(`/api/customers?search=${encodeURIComponent(searchTerm)}&limit=1`);
       const customerData = await customerRes.json();
-      
-        if (customerData.customers && customerData.customers.length > 0) {
-          const firstCustomer = customerData.customers[0];
-        // Open customer info modal
+      if (customerData.customers && customerData.customers.length > 0) {
+        const firstCustomer = customerData.customers[0];
         setViewingCustomerId(firstCustomer.id);
         await loadCustomerInfo(firstCustomer.id);
-        // Save to recent searches
-          saveRecentSearch(firstCustomer.name, firstCustomer.phone, firstCustomer.id);
+        saveRecentSearchStable(firstCustomer.name, firstCustomer.phone, firstCustomer.id);
       } else {
         alert('검색 결과가 없습니다.');
       }
-
       setIsSearchDropdownOpen(false);
       setSearchDropdownPosition(null);
     } catch (err) {
@@ -770,19 +770,21 @@ export default function AppointmentsManagementPage() {
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [searchInput, loadCustomerInfo, saveRecentSearchStable]);
 
-  // Comment: Handle delete recent search
-  const handleDeleteRecentSearch = (index: number, e: React.MouseEvent) => {
+  // Comment: Handle delete recent search (memoized)
+  const handleDeleteRecentSearch = useCallback((index: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updated = recentSearches.filter((_, idx) => idx !== index);
-    setRecentSearches(updated);
-    try {
-      localStorage.setItem('recentSearches', JSON.stringify(updated));
-    } catch (err) {
-      console.error('Error saving recent searches:', err);
-    }
-  };
+    setRecentSearches((prev) => {
+      const updated = prev.filter((_, idx) => idx !== index);
+      try {
+        localStorage.setItem('recentSearches', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Error saving recent searches:', err);
+      }
+      return updated;
+    });
+  }, []);
 
   // Comment: Precompute designer IDs that are fully off (하루 전체 휴무) on the selected date
   // 시간 단위 예약금지는 "휴무"가 아니라 단순 예약 불가 구간으로만 보고, 여기서는 제외한다.
@@ -1473,31 +1475,15 @@ export default function AppointmentsManagementPage() {
     weekDates.forEach((dateStr) => {
       map[dateStr] = {};
     });
-    filteredBookings.forEach((b) => {
-      // Comment: 취소된 예약은 타임테이블에서 제외
-      const status = (b as any).status || (b as any).booking_status || '';
-      const statusUpper = typeof status === 'string' ? status.toUpperCase() : '';
-      const statusLower = typeof status === 'string' ? status.toLowerCase() : '';
-      
-      // 모든 가능한 취소 상태 체크
-      if (
-        statusUpper === 'CANCELLED' || 
-        statusUpper === 'CANCELED' || 
-        statusLower === 'cancelled' ||
-        statusLower === 'canceled' ||
-        status === 'cancelled' ||
-        status === 'CANCELLED'
-      ) {
-        console.log('🚫 취소된 예약 필터링:', { id: b.id, status, statusUpper, statusLower });
-        return;
-      }
-      
+    for (const b of filteredBookings) {
+      const status = String((b as any).status || (b as any).booking_status || '').toLowerCase();
+      if (CANCELLED_STATUSES.has(status)) continue;
       const dateStr = b.booking_date;
-      if (!dateStr || !weekDates.includes(dateStr)) return;
+      if (!dateStr || !weekDates.includes(dateStr)) continue;
       const name = b.designer?.name || 'Unassigned';
       if (!map[dateStr][name]) map[dateStr][name] = [];
       map[dateStr][name].push(b);
-    });
+    }
     return map;
   }, [filteredBookings, weekDates]);
 
@@ -1592,11 +1578,6 @@ export default function AppointmentsManagementPage() {
     });
   }, [sortedBookings, selectedDate]);
 
-  const nonCancelledCount = useMemo(
-    () => upcomingBookings.length,
-    [upcomingBookings]
-  );
-
   const selectedDayLabel = useMemo(() => {
     const d = new Date(selectedDate);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1607,13 +1588,13 @@ export default function AppointmentsManagementPage() {
     [selectedDate]
   );
 
-  // Comment: Toggle custom inline date popover near the button
-  const handleOpenDatePicker = () => {
+  // Comment: Toggle custom inline date popover near the button (memoized)
+  const handleOpenDatePicker = useCallback(() => {
     setIsDatePopoverOpen((prev) => !prev);
-  };
+  }, []);
 
-  // Comment: Mouse handlers for drag-to-scroll on the schedule grid (horizontal + vertical)
-  const handleScheduleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Comment: Mouse handlers for drag-to-scroll on the schedule grid (memoized)
+  const handleScheduleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const el = scheduleRef.current;
     if (!el) return;
     isDraggingRef.current = true;
@@ -1622,9 +1603,9 @@ export default function AppointmentsManagementPage() {
     dragStartYRef.current = e.clientY;
     dragScrollTopRef.current = el.scrollTop;
     el.classList.add('cursor-grabbing');
-  };
+  }, []);
 
-  const handleScheduleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleScheduleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
     e.preventDefault();
     const el = scheduleRef.current;
@@ -1633,15 +1614,15 @@ export default function AppointmentsManagementPage() {
     const dy = e.clientY - dragStartYRef.current;
     el.scrollLeft = dragScrollLeftRef.current - dx;
     el.scrollTop = dragScrollTopRef.current - dy;
-  };
+  }, []);
 
-  const endScheduleDrag = () => {
+  const endScheduleDrag = useCallback(() => {
     const el = scheduleRef.current;
     isDraggingRef.current = false;
     if (el) {
       el.classList.remove('cursor-grabbing');
     }
-  };
+  }, []);
 
   // Comment: Helper function to get Monday of the week for a given date
   const getMondayOfWeek = (date: Date): string => {
@@ -1651,23 +1632,22 @@ export default function AppointmentsManagementPage() {
     return monday.toISOString().split('T')[0];
   };
 
-  // Comment: Handlers for designer header dropdown menu (week view, restrictions, holidays)
-  const handleOpenWeekView = (designerId: number, name: string) => {
+  // Comment: Handlers for designer header dropdown menu (memoized)
+  const handleOpenWeekView = useCallback((designerId: number, name: string) => {
     const mondayStr = getMondayOfWeek(new Date(selectedDate));
-
     setWeekViewDesignerId(designerId);
     setWeekViewDesignerName(name);
     setWeekViewStartDate(mondayStr);
     setIsWeekViewMode(true);
     setSelectedDesignerFilter(name);
-  };
+  }, [selectedDate]);
 
-  const handleCloseWeekView = () => {
+  const handleCloseWeekView = useCallback(() => {
     setIsWeekViewMode(false);
     setWeekViewDesignerId(null);
     setWeekViewDesignerName('');
     setWeekViewBookings([]);
-  };
+  }, []);
 
   // Comment: Handle designer filter changes when in week view mode
   useEffect(() => {
@@ -1692,26 +1672,323 @@ export default function AppointmentsManagementPage() {
     }
   }, [selectedDesignerFilter, isWeekViewMode, allDesigners, weekViewDesignerId, selectedDate]);
 
-  const handleOpenRestrictionModal = (designerId: number, name: string) => {
+  const handleOpenRestrictionModal = useCallback((designerId: number, name: string) => {
     setRestrictionDesignerId(designerId);
     setRestrictionDesignerName(name);
     setRestrictionDate(selectedDate);
     setIsRestrictionModalOpen(true);
-  };
+  }, [selectedDate]);
 
-  const handleOpenHolidayModal = (designerId: number, name: string) => {
+  const handleOpenHolidayModal = useCallback((designerId: number, name: string) => {
     setHolidayDesignerId(designerId);
     setHolidayDesignerName(name);
     setHolidayCurrentMonth(new Date(selectedDate));
     setHolidaySelectedDates([]);
     setIsHolidayModalOpen(true);
-  };
+  }, [selectedDate]);
 
-  const handleOpenAttendanceModal = (designerId: number, name: string) => {
+  const handleOpenAttendanceModal = useCallback((designerId: number, name: string) => {
     setAttendanceModalDesignerId(designerId);
     setAttendanceModalDesignerName(name);
     setIsAttendanceModalOpen(true);
-  };
+  }, []);
+
+  // Comment: Memo save handler (memoized to avoid AdminMemo re-renders)
+  const handleMemoSave = useCallback(async () => {
+    setMemoSaving(true);
+    try {
+      const res = await fetch('/api/admin-memo', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: memo }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save memo');
+      setMemoSuccessMessage('전달사항이 저장되었습니다.');
+      setTimeout(() => setMemoSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error saving memo:', err);
+      alert('전달사항 저장에 실패했습니다.');
+    } finally {
+      setMemoSaving(false);
+    }
+  }, [memo]);
+
+  // Comment: Schedule day view booking card - stable handlers for React.memo optimization
+  const handleDayViewCardClick = useCallback(
+    (e: React.MouseEvent, bookingId: number) => {
+      setHoveredBooking(null);
+      setHoverCardPosition(null);
+      hoverCardOriginalPositionRef.current = null;
+      if (bookingMenuOpen === bookingId) {
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+      } else {
+        const el = e.currentTarget as HTMLElement;
+        let cardElement = el?.closest?.('[data-booking-card]') as HTMLElement | null;
+        if (!cardElement) {
+          cardElement = document.querySelector(`[data-booking-card="${bookingId}"]`) as HTMLElement;
+        }
+        if (cardElement) {
+          const cardRect = cardElement.getBoundingClientRect();
+          const cellContainer = cardElement.closest('.relative.h-full.overflow-hidden') as HTMLElement;
+          const scrollContainer = document.getElementById('schedule-scroll-container');
+          const scrollTop = scrollContainer?.scrollTop || 0;
+          const scrollLeft = scrollContainer?.scrollLeft || 0;
+          const menuTop = cardRect.bottom + 4;
+          const menuLeft = cardRect.left;
+          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+          setBookingMenuPosition({
+            top: menuTop,
+            left: menuLeft,
+            width: menuWidth,
+            scrollTop,
+            scrollLeft,
+          });
+        }
+        setBookingMenuOpen(bookingId);
+      }
+    },
+    [bookingMenuOpen]
+  );
+
+  const handleDayViewMouseEnter = useCallback((bookingId: number) => {
+    const cardElement = document.querySelector(`[data-booking-card="${bookingId}"]`) as HTMLElement;
+    if (cardElement) {
+      const cardRect = cardElement.getBoundingClientRect();
+      setHoverCardPosition({ top: cardRect.top, left: cardRect.right + 4 });
+    }
+    setHoveredBooking(bookingId);
+  }, []);
+
+  const handleDayViewMouseLeave = useCallback(
+    (e: React.MouseEvent, bookingId: number) => {
+      const relatedTarget = e.relatedTarget;
+      if (relatedTarget && relatedTarget instanceof Element) {
+        if (
+          relatedTarget.closest('[data-booking-menu]') ||
+          relatedTarget.closest('[data-booking-card]')
+        ) {
+          return;
+        }
+      }
+      setHoveredBooking(null);
+      setHoverCardPosition(null);
+      hoverCardOriginalPositionRef.current = null;
+      if (bookingMenuOpen !== bookingId) {
+        setBookingMenuOpen(null);
+      }
+    },
+    [bookingMenuOpen]
+  );
+
+  const handleDayViewMenuMouseEnter = useCallback((bookingId: number) => {
+    if (menuCloseTimeoutRef.current) {
+      clearTimeout(menuCloseTimeoutRef.current);
+      menuCloseTimeoutRef.current = null;
+    }
+    setHoveredBooking(bookingId);
+  }, []);
+
+  const handleDayViewMenuMouseLeave = useCallback(
+    (e: React.MouseEvent, bookingId: number) => {
+      const relatedTarget = e.relatedTarget;
+      if (relatedTarget && relatedTarget instanceof Element) {
+        if (
+          relatedTarget.closest('[data-booking-card]') ||
+          relatedTarget.closest('[data-booking-menu]')
+        ) {
+          return;
+        }
+      }
+      const cardElement = document.querySelector(`[data-booking-card="${bookingId}"]:hover`);
+      if (cardElement) return;
+      if (menuCloseTimeoutRef.current) clearTimeout(menuCloseTimeoutRef.current);
+      menuCloseTimeoutRef.current = setTimeout(() => {
+        const menuElement = document.querySelector('[data-booking-menu]');
+        const cardEl = document.querySelector(`[data-booking-card="${bookingId}"]:hover`);
+        if (!menuElement?.matches(':hover') && !cardEl) {
+          setHoveredBooking(null);
+          setHoverCardPosition(null);
+          hoverCardOriginalPositionRef.current = null;
+          setBookingMenuOpen(null);
+          setBookingMenuPosition(null);
+          bookingMenuOriginalPositionRef.current = null;
+        }
+        menuCloseTimeoutRef.current = null;
+      }, 200);
+    },
+    []
+  );
+
+  const scheduleDayViewMenuHandlers: ScheduleDayViewMenuHandlers = useMemo(
+    () => ({
+      onNewBooking: (booking) => {
+        setNewBookingDate(booking.booking_date || selectedDate);
+        if (booking.booking_time) {
+          const [hourStr2, minuteStr2] = booking.booking_time.split(':');
+          const hourNum2 = Number(hourStr2);
+          const ampm2 = hourNum2 >= 12 ? 'PM' : 'AM';
+          const displayHour2 =
+            hourNum2 > 12 ? hourNum2 - 12 : hourNum2 === 0 ? 12 : hourNum2;
+          const timeLabel2 = `${displayHour2}:${minuteStr2} ${ampm2}`;
+          setNewBookingTimeSlots([
+            {
+              designerId: booking.designer?.id || null,
+              time: timeLabel2,
+              duration: 30,
+              serviceTab: 'service',
+              serviceId: null,
+            },
+          ]);
+        } else {
+          setNewBookingTimeSlots([
+            {
+              designerId: booking.designer?.id || null,
+              time: '10:00 AM',
+              duration: 30,
+              serviceTab: 'service',
+              serviceId: null,
+            },
+          ]);
+        }
+        setIsNewBookingOpen(true);
+        setBookingMenuOpen(null);
+      },
+      onEditBooking: (booking) => {
+        setEditingBooking(booking);
+        setBookingMenuOpen(null);
+      },
+      onViewDetail: async (booking) => {
+        setBookingMenuOpen(null);
+        const customerId =
+          (booking as any).customer?.id ||
+          (booking as any).customer_id ||
+          null;
+        if (!customerId) {
+          alert('고객 정보가 없습니다.');
+          return;
+        }
+        setViewingCustomerId(customerId);
+        await loadCustomerInfo(customerId);
+      },
+      onViewCustomer: async (booking) => {
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+        const customerId =
+          (booking as any).customer?.id ||
+          (booking as any).customer_id ||
+          null;
+        if (!customerId) {
+          alert('고객 정보가 없습니다.');
+          return;
+        }
+        setViewingCustomerId(customerId);
+        await loadCustomerInfo(customerId);
+      },
+      onStatusChange: async (booking, newStatus) => {
+        if (!booking.id) {
+          alert('예약 ID가 없습니다.');
+          return;
+        }
+        try {
+          const response = await fetch(`/api/appointment/${booking.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          });
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error('API error:', errorData);
+            throw new Error(errorData.error || '상태 변경에 실패했습니다.');
+          }
+          const responseData = await response.json();
+          if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
+            const startDate = new Date(weekViewStartDate);
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 6);
+            const startDateStr = startDate.toISOString().split('T')[0];
+            const endDateStr = endDate.toISOString().split('T')[0];
+            const weekRes = await fetch(
+              `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}&limit=1000`
+            );
+            const weekData = await weekRes.json();
+            if (weekRes.ok && weekData.bookings) {
+              setWeekViewBookings(weekData.bookings);
+            }
+          }
+          const weekStart = getWeekStart(selectedDate);
+          const weekEnd = getWeekEnd(selectedDate);
+          const res = await fetch(
+            `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+          );
+          const data = await res.json();
+          if (data.bookings) {
+            setBookings(data.bookings);
+          }
+          setBookingMenuOpen(null);
+          setBookingMenuPosition(null);
+          bookingMenuOriginalPositionRef.current = null;
+        } catch (error: any) {
+          console.error('Status change error:', error);
+          alert(error.message || '상태 변경에 실패했습니다.');
+          setBookingMenuOpen(null);
+          setBookingMenuPosition(null);
+          bookingMenuOriginalPositionRef.current = null;
+          throw error;
+        }
+      },
+      onMoveBooking: (booking) => {
+        setMovingBooking(booking);
+        setMoveTargetSlot(null);
+        setIsMoveConfirmOpen(false);
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+      },
+      onCancelBooking: (booking) => {
+        setBookingToCancel(booking);
+        setIsCancelBookingModalOpen(true);
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+      },
+      onRegisterSale: (booking) => {
+        const customerId = (booking as any).customer?.id || (booking as any).customer_id;
+        const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
+        const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
+        if (customerId) {
+          setViewingCustomerId(customerId);
+          loadCustomerInfo(customerId);
+          setSalesRegistrationCustomer({
+            id: customerId,
+            name: customerName,
+            phone: customerPhone,
+          });
+          setIsSalesRegistrationModalOpen(true);
+          setSalesItemPickerTab('service');
+          setIsSalesItemPickerModalOpen(true);
+        }
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+      },
+      onViewSaleDetail: (booking) => {
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+      },
+    }),
+    [
+      selectedDate,
+      isWeekViewMode,
+      weekViewDesignerId,
+      weekViewStartDate,
+      loadCustomerInfo,
+    ]
+  );
 
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
@@ -1841,30 +2118,7 @@ export default function AppointmentsManagementPage() {
                   memoLoading={memoLoading}
                   memoSaving={memoSaving}
                   onMemoChange={setMemo}
-                  onSave={async () => {
-                    setMemoSaving(true);
-                    try {
-                      const res = await fetch('/api/admin-memo', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ content: memo }),
-                      });
-                      const data = await res.json();
-                      if (!res.ok) {
-                        throw new Error(data.error || 'Failed to save memo');
-                      }
-                      // Success message
-                      setMemoSuccessMessage('전달사항이 저장되었습니다.');
-                      setTimeout(() => {
-                        setMemoSuccessMessage(null);
-                      }, 3000);
-                    } catch (err) {
-                      console.error('Error saving memo:', err);
-                      alert('전달사항 저장에 실패했습니다.');
-                    } finally {
-                      setMemoSaving(false);
-                    }
-                  }}
+                  onSave={handleMemoSave}
                 />
               </div>
               )}
@@ -2125,7 +2379,6 @@ export default function AppointmentsManagementPage() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        console.log('Restriction cell clicked (normal view):', { dateStr, designerId, slotTime, restriction });
                                         // 예약금지 셀 클릭 시 드롭다운 메뉴 표시
                                         const rect = e.currentTarget.getBoundingClientRect();
                                         if (!rect || rect.width === 0) {
@@ -2219,9 +2472,6 @@ export default function AppointmentsManagementPage() {
                                                    emptySlotMenuOpen?.time === slotTime;
                                 
                                 // Debug log
-                                if (isMenuOpen) {
-                                  console.log('Menu should be open:', { dateStr, designerId, slotTime, emptySlotMenuOpen });
-                                }
                                 
                                 const isMoveMode = !!movingBooking;
 
@@ -2256,11 +2506,6 @@ export default function AppointmentsManagementPage() {
                                           setIsMoveConfirmOpen(true);
                                           setHoveredEmptySlot(null);
                                         } else {
-                                          console.log('Empty slot clicked (day view - outer): opening new booking modal', {
-                                            dateStr,
-                                            designerId,
-                                            slotTime,
-                                          });
                                           setNewBookingDate(dateStr);
                                           const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
                                           setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
@@ -2306,7 +2551,6 @@ export default function AppointmentsManagementPage() {
                                               e.stopPropagation();
                                               e.preventDefault();
                                               const menuData = { date: dateStr, designerId: designerId || 0, time: slotTime };
-                                              console.log('Setting emptySlotMenuOpen:', menuData, 'isMenuOpen:', isMenuOpen);
                                               // 현재 메뉴가 이미 열려있으면 닫고, 아니면 열기
                                               if (isMenuOpen) {
                                                 setEmptySlotMenuOpen(null);
@@ -2370,20 +2614,12 @@ export default function AppointmentsManagementPage() {
                                           
                                           {/* Empty slot context menu - Portal로 렌더링 (빈 셀 슬롯 루프 내부) */}
                                           {isMenuOpen && !isNewBookingOpen && emptySlotMenuPosition && emptySlotMenuOpen && typeof window !== 'undefined' && (() => {
-                                            console.log('Menu render conditions:', { 
-                                              isMenuOpen, 
-                                              isNewBookingOpen, 
-                                              emptySlotMenuPosition, 
-                                              emptySlotMenuOpen,
-                                              hasWindow: typeof window !== 'undefined'
-                                            });
                                             // emptySlotMenuOpen 상태를 기반으로 해당 슬롯의 restriction 정보 찾기
                                             const menuSlotTime = emptySlotMenuOpen.time;
                                             // emptySlotMenuOpen의 designerId와 date에 맞는 restrictions만 필터링
                                             const menuDesignerRestrictions = bookingRestrictions.filter(
                                               (r) => r.designer_id === emptySlotMenuOpen.designerId && r.restriction_date === emptySlotMenuOpen.date
                                             );
-                                            console.log('Rendering menu:', { isMenuOpen, emptySlotMenuPosition, emptySlotMenuOpen, menuSlotTime, menuDesignerRestrictions });
                                             const menuSlotRestriction = menuDesignerRestrictions.find((r) => {
                                               if (r.restriction_type === 'date') return true;
                                               if (r.restriction_type === 'time' && r.start_time && r.end_time) {
@@ -2659,7 +2895,6 @@ export default function AppointmentsManagementPage() {
                                 const menuDesignerRestrictions = bookingRestrictions.filter(
                                   (r) => r.designer_id === emptySlotMenuOpen.designerId && r.restriction_date === emptySlotMenuOpen.date
                                 );
-                                console.log('Rendering menu (outside loop):', { emptySlotMenuPosition, emptySlotMenuOpen, menuSlotTime, menuDesignerRestrictions });
                                 const menuSlotRestriction = menuDesignerRestrictions.find((r) => {
                                   if (r.restriction_type === 'date') return true;
                                   if (r.restriction_type === 'time' && r.start_time && r.end_time) {
@@ -2674,13 +2909,6 @@ export default function AppointmentsManagementPage() {
                                   return false;
                                 });
                                 const isSlotRestricted = !!menuSlotRestriction;
-                                console.log('Menu restriction check:', { isSlotRestricted, menuSlotRestriction });
-                                
-                                console.log('Creating portal with position:', { 
-                                  top: emptySlotMenuPosition.top, 
-                                  left: emptySlotMenuPosition.left, 
-                                  width: emptySlotMenuPosition.width 
-                                });
                                 const scrollContainer = document.getElementById('schedule-scroll-container');
                                 if (!scrollContainer) return null;
                                 
@@ -2816,22 +3044,8 @@ export default function AppointmentsManagementPage() {
                               
                               {designerBookings
                                 .filter((b) => {
-                                  // Comment: 취소된 예약은 타임테이블에서 제외
-                                  const status = (b as any).status || (b as any).booking_status || '';
-                                  const statusUpper = typeof status === 'string' ? status.toUpperCase() : '';
-                                  const statusLower = typeof status === 'string' ? status.toLowerCase() : '';
-                                  const isCancelled = 
-                                    statusUpper === 'CANCELLED' || 
-                                    statusUpper === 'CANCELED' || 
-                                    statusLower === 'cancelled' ||
-                                    statusLower === 'canceled' ||
-                                    status === 'cancelled' ||
-                                    status === 'CANCELLED';
-                                  if (isCancelled) {
-                                    console.log('🚫 렌더링에서 취소된 예약 제외:', { id: b.id, status });
-                                    return false;
-                                  }
-                                  return true;
+                                  const status = String((b as any).status || (b as any).booking_status || '').toLowerCase();
+                                  return !CANCELLED_STATUSES.has(status);
                                 })
                                 .map((b) => {
                                 if (!b.booking_time) return null;
@@ -2882,495 +3096,29 @@ export default function AppointmentsManagementPage() {
                                 const widthPercent = hasOverlap ? 50 : 100;
                                 const leftPercent = hasOverlap && placeOnRight ? 50 : 0;
 
-                                const serviceName = b.service?.name || 'Service';
-                                const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
-                                const amount =
-                                  (b.total_amount ?? 0) > 0
-                                    ? `AU$${Number(b.total_amount).toFixed(0)}`
-                                    : 'Free';
-                                
-                                // Comment: Get booking status color
-                                const statusColor = getBookingStatusColor(
-                                  (b as any).status || (b as any).booking_status,
-                                );
-                                const customerName =
-                                  (b as any).customer?.name || (b as any).customer_name || '고객';
-                                const customerId =
-                                  (b as any).customer?.id || (b as any).customer_id || b.id;
-                                const customerPhone =
-                                  (b as any).customer?.phone || (b as any).customer_phone || '';
-                                const bookingMemo = (b as any).memo || (b as any).note || '';
-
                                 return (
-                                  <div
+                                  <ScheduleDayViewBookingCard
                                     key={b.id}
-                                    data-booking-card={b.id}
-                                    className="absolute"
-                                    style={{
-                                      top,
-                                      height,
-                                      zIndex: emptySlotMenuOpen ? 0 : 1,
-                                      left: `${leftPercent}%`,
-                                      width: `${widthPercent}%`,
-                                      paddingLeft: 4,
-                                      paddingRight: 4,
-                                    }}
-                                    onMouseEnter={() => {
-                                      if (b.id) {
-                                        // 호버 카드 위치 계산 및 저장
-                                        const cardElement = document.querySelector(`[data-booking-card="${b.id}"]`) as HTMLElement;
-                                        if (cardElement) {
-                                          const cardRect = cardElement.getBoundingClientRect();
-                                          setHoverCardPosition({
-                                            top: cardRect.top,
-                                            left: cardRect.right + 4,
-                                          });
-                                        }
-                                        setHoveredBooking(b.id);
-                                      }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      const relatedTarget = e.relatedTarget;
-                                      // relatedTarget이 Element인지 확인
-                                      if (relatedTarget && relatedTarget instanceof Element) {
-                                        // 드롭다운 메뉴나 호버 카드로 이동하는 경우는 무시
-                                        if (
-                                          relatedTarget.closest('[data-booking-menu]') ||
-                                          relatedTarget.closest('[data-booking-card]')
-                                        ) {
-                                          return;
-                                        }
-                                      }
-                                      setHoveredBooking(null);
-                                      setHoverCardPosition(null);
-                                      hoverCardOriginalPositionRef.current = null;
-                                      // 드롭다운 메뉴가 열려있지 않을 때만 닫기
-                                      if (bookingMenuOpen !== b.id) {
-                                        setBookingMenuOpen(null);
-                                      }
-                                    }}
-                                  >
-                                    <div
-                                      className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
-                                      style={{ zIndex: emptySlotMenuOpen ? 0 : 1 }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (b.id) {
-                                          setHoveredBooking(null); // 호버 popover 비활성화
-                                          setHoverCardPosition(null);
-                                          hoverCardOriginalPositionRef.current = null;
-                                          
-                                          // 메뉴가 이미 열려있으면 닫기
-                                          if (bookingMenuOpen === b.id) {
-                                            setBookingMenuOpen(null);
-                                            setBookingMenuPosition(null);
-                                            bookingMenuOriginalPositionRef.current = null;
-                                          } else {
-                                            // 메뉴 위치 계산 및 저장
-                                            const cardElement = e.currentTarget.closest('[data-booking-card]') as HTMLElement;
-                                            if (cardElement) {
-                                              const cardRect = cardElement.getBoundingClientRect();
-                                              const cellContainer = cardElement.closest('.relative.h-full.overflow-hidden') as HTMLElement;
-                                              const scrollContainer = document.getElementById('schedule-scroll-container');
-                                              const scrollTop = scrollContainer?.scrollTop || 0;
-                                              const scrollLeft = scrollContainer?.scrollLeft || 0;
-                                              
-                                              const menuTop = cardRect.bottom + 4;
-                                              const menuLeft = cardRect.left;
-                                              const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
-                                              
-                                              setBookingMenuPosition({
-                                                top: menuTop,
-                                                left: menuLeft,
-                                                width: menuWidth,
-                                                scrollTop,
-                                                scrollLeft,
-                                              });
-                                            }
-                                            setBookingMenuOpen(b.id);
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <div>
-                                        <p className={`text-xs font-bold ${statusColor.text} mb-0.5`}>
-                                          {customerName}
-                                        </p>
-                                        <p className={`text-[11px] ${statusColor.text} opacity-70`}>{serviceName}</p>
-                                      </div>
-                                      <div className="flex items-center justify-between mt-1">
-                                        <span className={`text-[10px] font-mono ${statusColor.text} opacity-60`}>
-                                          {timeLabel}
-                                      </span>
-                                  </div>
-                                  
-                                  {/* Hover Card - Portal로 렌더링 */}
-                                  {hoveredBooking === b.id && !isNewBookingOpen && !bookingMenuOpen && hoverCardPosition && typeof window !== 'undefined' && (() => {
-                                    return createPortal(
-                                      <div 
-                                        data-hover-card
-                                        className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
-                                        style={{
-                                          top: `${hoverCardPosition.top}px`,
-                                          left: `${hoverCardPosition.left}px`,
-                                        }}
-                                      >
-                                      <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
-                                        <p className="text-xs font-bold">{statusColor.label}</p>
-                                      </div>
-                                      <div className="space-y-1.5 text-xs">
-                                        {/* timeRange - 공통 */}
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-gray-500 w-16 shrink-0">시간</span>
-                                          <span className="text-gray-900">{timeLabel} ~ {(() => {
-                                            const endTime = new Date(`2000-01-01T${hourStr}:${minuteStr}`);
-                                            endTime.setMinutes(endTime.getMinutes() + durationMinutes);
-                                            return `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
-                                          })()}</span>
-                                        </div>
-                                        {/* customerName (reservationId) - 공통 */}
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-gray-500 w-16 shrink-0">고객명</span>
-                                          <span className="text-gray-900">{customerName} ({b.id || customerId})</span>
-                                        </div>
-                                          {/* phone - 모든 상태에서 표시 */}
-                                          {customerPhone && (
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-gray-500 w-16 shrink-0">전화번호</span>
-                                            <span className="text-gray-900">{customerPhone}</span>
-                                          </div>
-                                        )}
-                                          {/* serviceName - 모든 상태에서 표시 */}
-                                          {serviceName && (
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-gray-500 w-16 shrink-0">시술명</span>
-                                            <span className="text-gray-900">{serviceName}</span>
-                                          </div>
-                                        )}
-                                          {/* memo - 모든 상태에서 표시 */}
-                                          {bookingMemo && (
-                                          <>
-                                            <div className="border-t border-gray-200 my-1.5"></div>
-                                            <div className="text-gray-700">{bookingMemo}</div>
-                                          </>
-                                        )}
-                                      </div>
-                                      </div>,
-                                      document.body
-                                    );
-                                  })()}
-                                  
-                                  {/* Context Menu - 상태별 메뉴 - Portal로 렌더링 */}
-                                  {bookingMenuOpen === b.id && !isNewBookingOpen && bookingMenuPosition && typeof window !== 'undefined' && (() => {
-                                    const scrollContainer = document.getElementById('schedule-scroll-container');
-                                    if (!scrollContainer) return null;
-                                    
-                                    // 스크롤 컨테이너 내부의 상대 위치 계산
-                                    const containerRect = scrollContainer.getBoundingClientRect();
-                                    if (!containerRect || containerRect.width === 0 || containerRect.height === 0) return null;
-                                    
-                                    const scrollTop = scrollContainer.scrollTop;
-                                    const scrollLeft = scrollContainer.scrollLeft;
-                                    
-                                    // 카드의 절대 위치를 스크롤 컨테이너 기준 상대 위치로 변환
-                                    const relativeTop = bookingMenuPosition.top - containerRect.top + scrollTop;
-                                    const relativeLeft = bookingMenuPosition.left - containerRect.left + scrollLeft;
-                                    
-                                    // 유효한 위치 값인지 확인 (NaN이나 Infinity 체크)
-                                    if (isNaN(relativeTop) || isNaN(relativeLeft) || !isFinite(relativeTop) || !isFinite(relativeLeft)) {
-                                      return null;
-                                    }
-                                    
-                                    // 원래 위치 저장 (한 번만) - 렌더링 시에도 설정
-                                    if (!bookingMenuOriginalPositionRef.current) {
-                                      bookingMenuOriginalPositionRef.current = {
-                                        top: relativeTop,
-                                        left: relativeLeft,
-                                        width: bookingMenuPosition.width
-                                      };
-                                    }
-                                    
-                                    return createPortal(
-                                      <div
-                                        data-booking-menu
-                                        className="fixed bg-transparent z-50"
-                                        style={{
-                                          top: `${bookingMenuPosition.top}px`,
-                                          left: `${bookingMenuPosition.left}px`,
-                                          width: `${bookingMenuPosition.width}px`,
-                                        }}
-                                        onMouseEnter={() => {
-                                          // 메뉴로 다시 들어오면 타이머 취소
-                                          if (menuCloseTimeoutRef.current) {
-                                            clearTimeout(menuCloseTimeoutRef.current);
-                                            menuCloseTimeoutRef.current = null;
-                                          }
-                                          setHoveredBooking(b.id || null);
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          // 메뉴를 벗어날 때 약간의 지연을 두고 닫기
-                                          const relatedTarget = e.relatedTarget;
-                                          // 카드나 메뉴 내부로 이동하는 경우는 무시
-                                          if (relatedTarget && relatedTarget instanceof Element) {
-                                            if (
-                                              relatedTarget.closest('[data-booking-card]') ||
-                                              relatedTarget.closest('[data-booking-menu]')
-                                            ) {
-                                              return;
-                                            }
-                                          }
-                                          // relatedTarget이 null이거나 없을 때도 카드 위에 마우스가 있는지 확인
-                                          const cardElement = document.querySelector(`[data-booking-card="${b.id}"]:hover`);
-                                          if (cardElement) {
-                                            return;
-                                          }
-                                          // 기존 타이머가 있으면 취소
-                                          if (menuCloseTimeoutRef.current) {
-                                            clearTimeout(menuCloseTimeoutRef.current);
-                                          }
-                                          // 약간의 지연을 두고 메뉴 닫기 (마우스가 다시 메뉴로 돌아올 수 있도록)
-                                          menuCloseTimeoutRef.current = setTimeout(() => {
-                                            // 메뉴나 카드 위에 마우스가 없을 때만 닫기
-                                            const menuElement = document.querySelector('[data-booking-menu]');
-                                            const cardElement = document.querySelector(`[data-booking-card="${b.id}"]:hover`);
-                                            if (!menuElement?.matches(':hover') && !cardElement) {
-                                              setHoveredBooking(null);
-                                              setHoverCardPosition(null);
-                                              hoverCardOriginalPositionRef.current = null;
-                                          setBookingMenuOpen(null);
-                                              setBookingMenuPosition(null);
-                                              bookingMenuOriginalPositionRef.current = null;
-                                            }
-                                            menuCloseTimeoutRef.current = null;
-                                          }, 200);
-                                        }}
-                                      >
-                                        <BookingContextMenu
-                                          booking={b}
-                                          className="bg-white border border-gray-200 rounded-lg shadow-lg"
-                                          style={{
-                                            width: '100%',
-                                          }}
-                                          onNewBooking={() => {
-                                          // Comment: 예약 등록 - 선택한 예약의 디자이너/시간을 기본값으로 사용
-                                          setNewBookingDate(b.booking_date || selectedDate);
-                                          if (b.booking_time) {
-                                            const [hourStr2, minuteStr2] = b.booking_time.split(':');
-                                            const hourNum2 = Number(hourStr2);
-                                            const ampm2 = hourNum2 >= 12 ? 'PM' : 'AM';
-                                            const displayHour2 =
-                                              hourNum2 > 12 ? hourNum2 - 12 : hourNum2 === 0 ? 12 : hourNum2;
-                                            const timeLabel2 = `${displayHour2}:${minuteStr2} ${ampm2}`;
-                                            setNewBookingTimeSlots([
-                                              {
-                                                designerId: b.designer?.id || null,
-                                                time: timeLabel2,
-                                                duration: 30,
-                                                serviceTab: 'service',
-                                                serviceId: null,
-                                              },
-                                            ]);
-                                          } else {
-                                            setNewBookingTimeSlots([
-                                              {
-                                                designerId: b.designer?.id || null,
-                                                time: '10:00 AM',
-                                                duration: 30,
-                                                serviceTab: 'service',
-                                                serviceId: null,
-                                              },
-                                            ]);
-                                          }
-                                          setIsNewBookingOpen(true);
-                                          setBookingMenuOpen(null);
-                                        }}
-                                          onEditBooking={(booking) => {
-                                            setEditingBooking(booking);
-                                          setBookingMenuOpen(null);
-                                        }}
-                                          onViewDetail={async (booking) => {
-                                          setBookingMenuOpen(null);
-                                            const customerId =
-                                              (booking as any).customer?.id ||
-                                              (booking as any).customer_id ||
-                                              null;
-                                            if (!customerId) {
-                                              alert('고객 정보가 없습니다.');
-                                              return;
-                                            }
-                                            setViewingCustomerId(customerId);
-                                            await loadCustomerInfo(customerId);
-                                          }}
-                                          onViewCustomer={async (booking) => {
-                                          setBookingMenuOpen(null);
-                                          setBookingMenuPosition(null);
-                                          bookingMenuOriginalPositionRef.current = null;
-                                          const customerId =
-                                              (booking as any).customer?.id ||
-                                              (booking as any).customer_id ||
-                                            null;
-                                          if (!customerId) {
-                                            alert('고객 정보가 없습니다.');
-                                            return;
-                                          }
-                                          setViewingCustomerId(customerId);
-                                          await loadCustomerInfo(customerId);
-                                        }}
-                                          onStatusChange={async (booking, newStatus) => {
-                                            console.log('🔄 상태 변경 시작:', { bookingId: booking.id, newStatus });
-                                            
-                                            if (!booking.id) {
-                                              console.error('❌ 예약 ID가 없습니다.');
-                                              alert('예약 ID가 없습니다.');
-                                              return;
-                                            }
-                                            
-                                            try {
-                                              console.log('📤 API 요청 전송:', {
-                                                url: `/api/appointment/${booking.id}`,
-                                                method: 'PATCH',
-                                                body: { status: newStatus }
-                                              });
-                                              
-                                              const response = await fetch(`/api/appointment/${booking.id}`, {
-                                                method: 'PATCH',
-                                                headers: {
-                                                  'Content-Type': 'application/json',
-                                                },
-                                                body: JSON.stringify({
-                                                  status: newStatus,
-                                                }),
-                                              });
-                                              
-                                              console.log('📥 API 응답:', {
-                                                status: response.status,
-                                                statusText: response.statusText,
-                                                ok: response.ok
-                                              });
-                                              
-                                              if (!response.ok) {
-                                                const errorData = await response.json();
-                                                console.error('❌ API 에러:', errorData);
-                                                throw new Error(errorData.error || '상태 변경에 실패했습니다.');
-                                              }
-                                              
-                                              const responseData = await response.json();
-                                              console.log('✅ 상태 변경 성공:', responseData);
-                                              
-                                              // 상태 변경 성공 후 예약 목록 다시 불러오기
-                                              console.log('🔄 예약 목록 다시 불러오기 시작...');
-                                              
-                                              // WeekView 모드인 경우 weekViewBookings 먼저 업데이트
-                                              if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
-                                                console.log('🔄 WeekView 예약 목록 업데이트 중...');
-                                                const startDate = new Date(weekViewStartDate);
-                                                const endDate = new Date(startDate);
-                                                endDate.setDate(endDate.getDate() + 6);
-                                                
-                                                const startDateStr = startDate.toISOString().split('T')[0];
-                                                const endDateStr = endDate.toISOString().split('T')[0];
-                                                
-                                                const weekRes = await fetch(
-                                                  `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}&limit=1000`
-                                                );
-                                                const weekData = await weekRes.json();
-                                                if (weekRes.ok && weekData.bookings) {
-                                                  setWeekViewBookings(weekData.bookings);
-                                                  console.log('✅ WeekView 예약 목록 업데이트 완료:', { count: weekData.bookings.length });
-                                                } else {
-                                                  console.warn('⚠️ WeekView 예약 목록 업데이트 실패:', weekData);
-                                                }
-                                              }
-                                              
-                                              // 일반 모드인 경우 bookings 업데이트
-                                              const weekStart = getWeekStart(selectedDate);
-                                              const weekEnd = getWeekEnd(selectedDate);
-                                              const res = await fetch(
-                                                `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
-                                              );
-                                              const data = await res.json();
-                                              console.log('📥 예약 목록 응답:', { count: data.bookings?.length, bookings: data.bookings });
-                                              
-                                              if (data.bookings) {
-                                                setBookings(data.bookings);
-                                                console.log('✅ 예약 목록 업데이트 완료');
-                                              } else {
-                                                console.warn('⚠️ 예약 목록이 응답에 없습니다:', data);
-                                              }
-                                              
-                                          setBookingMenuOpen(null);
-                                          setBookingMenuPosition(null);
-                                          bookingMenuOriginalPositionRef.current = null;
-                                            } catch (error: any) {
-                                              console.error('❌ 상태 변경 에러:', error);
-                                              console.error('에러 상세:', {
-                                                message: error.message,
-                                                stack: error.stack,
-                                                name: error.name
-                                              });
-                                              alert(error.message || '상태 변경에 실패했습니다.');
-                                              setBookingMenuOpen(null);
-                                              setBookingMenuPosition(null);
-                                              bookingMenuOriginalPositionRef.current = null;
-                                            }
-                                          }}
-                                          onMoveBooking={(booking) => {
-                                            // Comment: Enter move mode for the selected booking
-                                            console.log('Move booking clicked:', booking.id);
-                                            setMovingBooking(booking);
-                                            setMoveTargetSlot(null);
-                                            setIsMoveConfirmOpen(false);
-                                            setBookingMenuOpen(null);
-                                            setBookingMenuPosition(null);
-                                            bookingMenuOriginalPositionRef.current = null;
-                                          }}
-                                          onCancelBooking={(booking) => {
-                                            setBookingToCancel(booking);
-                                            setIsCancelBookingModalOpen(true);
-                                          setBookingMenuOpen(null);
-                                            setBookingMenuPosition(null);
-                                            bookingMenuOriginalPositionRef.current = null;
-                                          }}
-                                          onRegisterSale={(booking) => {
-                                            // 고객 정보 모달 먼저 열기
-                                            const customerId = (booking as any).customer?.id || (booking as any).customer_id;
-                                            const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
-                                            const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
-                                            
-                                            if (customerId) {
-                                              setViewingCustomerId(customerId);
-                                              // 고객 정보 로드
-                                              loadCustomerInfo(customerId);
-                                              // 판매 등록 모달 열기
-                                              setSalesRegistrationCustomer({
-                                                id: customerId,
-                                                name: customerName,
-                                                phone: customerPhone,
-                                              });
-                                              setIsSalesRegistrationModalOpen(true);
-                                              // 판매 항목 선택 모달도 함께 열기
-                                              setSalesItemPickerTab('service');
-                                              setIsSalesItemPickerModalOpen(true);
-                                            }
-                                            
-                                          setBookingMenuOpen(null);
-                                            setBookingMenuPosition(null);
-                                            bookingMenuOriginalPositionRef.current = null;
-                                          }}
-                                          onViewSaleDetail={(booking) => {
-                                          // TODO: 판매 상세 구현
-                                            console.log('View sale detail:', booking.id);
-                                          setBookingMenuOpen(null);
-                                          setBookingMenuPosition(null);
-                                          bookingMenuOriginalPositionRef.current = null;
-                                        }}
-                                        />
-                                      </div>,
-                                      document.body
-                                    );
-                                  })()}
-                                </div>
-                              </div>
+                                    booking={b}
+                                    top={top}
+                                    height={height}
+                                    widthPercent={widthPercent}
+                                    leftPercent={leftPercent}
+                                    emptySlotMenuOpen={emptySlotMenuOpen}
+                                    isMenuOpen={bookingMenuOpen === b.id}
+                                    isHovered={hoveredBooking === b.id}
+                                    isNewBookingOpen={isNewBookingOpen}
+                                    hoverCardPosition={hoverCardPosition}
+                                    bookingMenuPosition={bookingMenuPosition}
+                                    onCardClick={handleDayViewCardClick}
+                                    onMouseEnter={handleDayViewMouseEnter}
+                                    onMouseLeave={handleDayViewMouseLeave}
+                                    menuHandlers={scheduleDayViewMenuHandlers}
+                                    onMenuMouseEnter={handleDayViewMenuMouseEnter}
+                                    onMenuMouseLeave={handleDayViewMenuMouseLeave}
+                                    menuCloseTimeoutRef={menuCloseTimeoutRef}
+                                    bookingMenuOriginalPositionRef={bookingMenuOriginalPositionRef}
+                                  />
                                 );
                               })}
                                     </div>
