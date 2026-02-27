@@ -68,6 +68,8 @@ export async function POST(request: NextRequest) {
       depositAmount: typeof depositAmount === "number" ? depositAmount : null,
       fullDate: typeof fullDate === "string" ? fullDate : undefined,
       customerId: customerId,
+      customServiceName: serviceName,
+      customServiceDuration: null,
     });
 
     const amountInCents =

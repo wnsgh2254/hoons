@@ -95,8 +95,10 @@ interface WeekViewGridProps {
   setBookingMenuOpen: (id: number | null) => void;
   setEditingBooking: (booking: BookingWithRelations | null) => void;
   setViewingBookingDetail: (booking: BookingWithRelations | null) => void;
-  onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => Promise<void>;
+  onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
   onCancelBooking?: (booking: BookingWithRelations) => void;
+  movingBooking: BookingWithRelations | null;
+  onSelectMoveTarget: (target: { date: string; designerId: number; time: string }) => void;
 }
 
 export default function WeekViewGrid({
@@ -141,6 +143,8 @@ export default function WeekViewGrid({
   setViewingBookingDetail,
   onBookingStatusChange,
   onCancelBooking,
+  movingBooking,
+  onSelectMoveTarget,
 }: WeekViewGridProps) {
   // Comment: If designer not selected, nothing to render
   if (!weekViewDesignerId || !weekViewStartDate) return null;
@@ -442,6 +446,8 @@ export default function WeekViewGrid({
                 });
               }
 
+              const isMoveMode = !!movingBooking;
+
               return (
                 <div
                   key={slotKey}
@@ -469,28 +475,37 @@ export default function WeekViewGrid({
                     }
                     e.preventDefault();
                     e.stopPropagation();
-                    // Comment: Open "New Booking" modal immediately on click (week view)
+                    // Comment: If move mode is active, select this slot as target; otherwise open "New Booking" modal
                     if (!isRestricted && weekViewDesignerId) {
-                      console.log('Empty slot clicked (week view - outer): opening new booking modal', {
-                        dateStr,
-                        weekViewDesignerId,
-                        slotTime,
-                      });
-                      setNewBookingDate(dateStr);
-                      const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
-                        slotMin,
-                      ).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                      setNewBookingTimeSlots([
-                        {
+                      if (movingBooking) {
+                        onSelectMoveTarget({
+                          date: dateStr,
                           designerId: weekViewDesignerId,
-                          time: timeStr,
-                          duration: 30,
-                          serviceTab: 'service',
-                          serviceId: null,
-                        },
-                      ]);
-                      setIsNewBookingOpen(true);
-                      setHoveredEmptySlot(null);
+                          time: slotTime,
+                        });
+                        setHoveredEmptySlot(null);
+                      } else {
+                        console.log('Empty slot clicked (week view - outer): opening new booking modal', {
+                          dateStr,
+                          weekViewDesignerId,
+                          slotTime,
+                        });
+                        setNewBookingDate(dateStr);
+                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
+                          slotMin,
+                        ).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
+                        setNewBookingTimeSlots([
+                          {
+                            designerId: weekViewDesignerId,
+                            time: timeStr,
+                            duration: 30,
+                            serviceTab: 'service',
+                            serviceId: null,
+                          },
+                        ]);
+                        setIsNewBookingOpen(true);
+                        setHoveredEmptySlot(null);
+                      }
                     }
                   }}
                   onMouseEnter={() => {
@@ -515,7 +530,9 @@ export default function WeekViewGrid({
                   {/* More button - 메뉴가 열려있을 때도 보이도록 별도 렌더링 */}
                   {isHovered && (
                       <div
-                        className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button ${
+                          isMoveMode ? 'bg-blue-100/70' : ''
+                        }`}
                         style={{ pointerEvents: 'auto' }}
                       >
                         <button
@@ -930,7 +947,10 @@ export default function WeekViewGrid({
               const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
               const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
 
-              const serviceName = b.service?.name || 'Service';
+              const serviceName =
+                (b as any).custom_service_name ||
+                b.service?.name ||
+                'Service';
               const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
               const statusColor = getBookingStatusColor(
                 (b as any).status || (b as any).booking_status,
@@ -1226,12 +1246,16 @@ export default function WeekViewGrid({
                               }
                             }}
                             onMoveBooking={(booking) => {
-                              // TODO: 예약 이동 구현
-                              console.log('Move booking:', booking.id);
+                              // Comment: Enter move mode for the selected booking (week view)
+                              console.log('Move booking (week view):', booking.id);
                               setBookingMenuOpen(null);
                               setBookingMenuPosition(null);
                               if (bookingMenuOriginalPositionRef.current) {
                                 bookingMenuOriginalPositionRef.current = null;
+                              }
+                              // Parent controls movingBooking state; here we only close the menu
+                              if (movingBooking && movingBooking.id === booking.id) {
+                                return;
                               }
                             }}
                             onCancelBooking={onCancelBooking ? (booking) => {

@@ -70,11 +70,18 @@ export default function AppointmentsManagementPage() {
   const [newBookingShopId, setNewBookingShopId] = useState<number | null>(null);
   const [newBookingServiceId, setNewBookingServiceId] = useState<number | null>(null);
   const [newBookingDate, setNewBookingDate] = useState<string>(selectedDate);
-  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<Array<{ designerId: number | null; time: string; duration: number; serviceTab: 'service' | 'appointment'; serviceId: number | null }>>([
-    { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null }
+  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<
+    Array<{
+      designerId: number | null;
+      time: string;
+      duration: number;
+      serviceTab: 'service' | 'appointment';
+      serviceId: number | null;
+    }>
+  >([
+    { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null },
   ]);
   const [newBookingSubmitting, setNewBookingSubmitting] = useState(false);
-  const [newBookingLoadingShops, setNewBookingLoadingShops] = useState(false);
   const [newBookingLoadingOptions, setNewBookingLoadingOptions] = useState(false);
   const [availableDesignerIds, setAvailableDesignerIds] = useState<number[]>([]);
   const [loadingDesignerAvailability, setLoadingDesignerAvailability] = useState(false);
@@ -275,6 +282,15 @@ export default function AppointmentsManagementPage() {
     scrollTop: number;
     scrollLeft: number;
   } | null>(null);
+
+  // Comment: Booking move state (for moving an existing booking to another slot)
+  const [movingBooking, setMovingBooking] = useState<BookingWithRelations | null>(null);
+  const [moveTargetSlot, setMoveTargetSlot] = useState<{
+    date: string;
+    designerId: number;
+    time: string;
+  } | null>(null);
+  const [isMoveConfirmOpen, setIsMoveConfirmOpen] = useState(false);
   
   // Comment: 스크롤 이벤트 감지하여 메뉴 위치 업데이트
   useEffect(() => {
@@ -1184,63 +1200,49 @@ export default function AppointmentsManagementPage() {
   useEffect(() => {
     if (!isNewBookingOpen) return;
 
+    setNewBookingLoadingOptions(true);
+
+    const targetDate = newBookingDate || selectedDate;
+
     const loadShops = async () => {
-      try {
-        setNewBookingLoadingShops(true);
-        const res = await fetch('/api/shops');
-        const json = await res.json();
-        if (res.ok) {
-          const shops = json.shops || [];
-          setNewBookingShops(shops);
-          // Comment: Default to first shop if none selected yet
-          if (shops.length > 0) {
-            setNewBookingShopId((prev) => prev ?? shops[0].id);
-          }
-        } else {
-          console.error('Failed to load shops for new booking:', json.error);
+      const res = await fetch('/api/shops');
+      const json = await res.json();
+      if (res.ok) {
+        const shops = json.shops || [];
+        setNewBookingShops(shops);
+        if (shops.length > 0) {
+          setNewBookingShopId((prev) => prev ?? shops[0].id);
         }
-      } catch (err) {
-        console.error('Unexpected error loading shops for new booking:', err);
-      } finally {
-        setNewBookingLoadingShops(false);
+      } else {
+        console.error('Failed to load shops for new booking:', json.error);
       }
     };
 
     const loadDesigners = async () => {
-      try {
-        const targetDate = newBookingDate || selectedDate;
-        const res = await fetch(
-          `/api/working-designers?date=${encodeURIComponent(targetDate)}`
-        );
-        const json = await res.json();
-        if (res.ok) {
-          setNewBookingDesigners(json.designers || []);
-        } else {
-          console.error('Failed to load designers for new booking:', json.error);
-        }
-      } catch (err) {
-        console.error('Unexpected error loading designers for new booking:', err);
+      const res = await fetch(
+        `/api/working-designers?date=${encodeURIComponent(targetDate)}`
+      );
+      const json = await res.json();
+      if (res.ok) {
+        setNewBookingDesigners(json.designers || []);
+      } else {
+        console.error('Failed to load designers for new booking:', json.error);
       }
     };
 
     const loadServices = async () => {
-      try {
-        // Comment: Load all active services (no shop filter) so dropdown always has options
-        const res = await fetch('/api/services');
-        const json = await res.json();
-        if (res.ok) {
-          setNewBookingServices(json.services || []);
-        } else {
-          console.error('Failed to load services for new booking:', json.error);
-        }
-      } catch (err) {
-        console.error('Unexpected error loading services for new booking:', err);
+      const res = await fetch('/api/services');
+      const json = await res.json();
+      if (res.ok) {
+        setNewBookingServices(json.services || []);
+      } else {
+        console.error('Failed to load services for new booking:', json.error);
       }
     };
 
-    loadShops();
-    loadDesigners();
-    loadServices();
+    Promise.all([loadShops(), loadDesigners(), loadServices()]).finally(() => {
+      setNewBookingLoadingOptions(false);
+    });
   }, [isNewBookingOpen, newBookingDate, selectedDate]);
 
   // Comment: Load designers and time off records when Time Off modal opens
@@ -2046,6 +2048,12 @@ export default function AppointmentsManagementPage() {
                             setBookingToCancel(booking);
                             setIsCancelBookingModalOpen(true);
                           }}
+                          movingBooking={movingBooking}
+                          onSelectMoveTarget={(target) => {
+                            if (!movingBooking) return;
+                            setMoveTargetSlot(target);
+                            setIsMoveConfirmOpen(true);
+                          }}
                         />
                       ) : (
                         // Comment: Normal view - week dates with designer columns
@@ -2215,6 +2223,8 @@ export default function AppointmentsManagementPage() {
                                   console.log('Menu should be open:', { dateStr, designerId, slotTime, emptySlotMenuOpen });
                                 }
                                 
+                                const isMoveMode = !!movingBooking;
+
                                 return (
                                   <div
                                     key={slotKey}
@@ -2235,18 +2245,28 @@ export default function AppointmentsManagementPage() {
                                       }
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      // Comment: Open "New Booking" modal immediately on click (day view)
+                                      // Comment: If move mode is active, select this slot as target; otherwise open "New Booking" modal
                                       if (!isRestricted && designerId) {
-                                        console.log('Empty slot clicked (day view - outer): opening new booking modal', {
-                                          dateStr,
-                                          designerId,
-                                          slotTime,
-                                        });
-                                        setNewBookingDate(dateStr);
-                                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                                        setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
-                                        setIsNewBookingOpen(true);
-                                        setHoveredEmptySlot(null);
+                                        if (movingBooking) {
+                                          setMoveTargetSlot({
+                                            date: dateStr,
+                                            designerId,
+                                            time: slotTime,
+                                          });
+                                          setIsMoveConfirmOpen(true);
+                                          setHoveredEmptySlot(null);
+                                        } else {
+                                          console.log('Empty slot clicked (day view - outer): opening new booking modal', {
+                                            dateStr,
+                                            designerId,
+                                            slotTime,
+                                          });
+                                          setNewBookingDate(dateStr);
+                                          const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
+                                          setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null }]);
+                                          setIsNewBookingOpen(true);
+                                          setHoveredEmptySlot(null);
+                                        }
                                       }
                                     }}
                                     onMouseEnter={() => {
@@ -2269,7 +2289,12 @@ export default function AppointmentsManagementPage() {
                                     }}
                                   >
                                     {isHovered && !isRestricted && (
-                                      <div className="h-full w-full relative group" style={{ zIndex: isMenuOpen ? 10000 : undefined }}>
+                                      <div
+                                        className={`h-full w-full relative group ${
+                                          isMoveMode ? 'bg-blue-100/70' : ''
+                                        }`}
+                                        style={{ zIndex: isMenuOpen ? 10000 : undefined }}
+                                      >
                                         {/* 빈 셀 more(≡) 버튼 - 예약 금지 셀은 미노출 */}
                                         <div 
                                           className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
@@ -3290,12 +3315,15 @@ export default function AppointmentsManagementPage() {
                                             }
                                           }}
                                           onMoveBooking={(booking) => {
-                                            // TODO: 예약 이동 구현
-                                            console.log('Move booking:', booking.id);
-                                          setBookingMenuOpen(null);
-                                          setBookingMenuPosition(null);
-                                          bookingMenuOriginalPositionRef.current = null;
-                                        }}
+                                            // Comment: Enter move mode for the selected booking
+                                            console.log('Move booking clicked:', booking.id);
+                                            setMovingBooking(booking);
+                                            setMoveTargetSlot(null);
+                                            setIsMoveConfirmOpen(false);
+                                            setBookingMenuOpen(null);
+                                            setBookingMenuPosition(null);
+                                            bookingMenuOriginalPositionRef.current = null;
+                                          }}
                                           onCancelBooking={(booking) => {
                                             setBookingToCancel(booking);
                                             setIsCancelBookingModalOpen(true);
@@ -3375,6 +3403,7 @@ export default function AppointmentsManagementPage() {
         newBookingServices={newBookingServices}
         newBookingMemo={newBookingMemo}
         newBookingSubmitting={newBookingSubmitting}
+        newBookingLoadingOptions={newBookingLoadingOptions}
         newBookingShopId={newBookingShopId}
         setNewBookingCustomerSearch={setNewBookingCustomerSearch}
         setNewBookingDate={setNewBookingDate}
@@ -3385,6 +3414,7 @@ export default function AppointmentsManagementPage() {
         setIsCustomerRegistrationModalOpen={setIsCustomerRegistrationModalOpen}
         setBookingSuccessMessage={setBookingSuccessMessage}
         setBookings={setBookings}
+        setFilteredBookings={setFilteredBookings}
         newBookingSelectedCustomerId={newBookingSelectedCustomerId}
         newBookingCustomerSearchResults={newBookingCustomerSearchResults}
         newBookingIsCustomerSearching={newBookingIsCustomerSearching}
@@ -3463,6 +3493,114 @@ export default function AppointmentsManagementPage() {
             }
           }}
         />
+      )}
+
+      {/* Move Booking Confirm Modal */}
+      {isMoveConfirmOpen && movingBooking && moveTargetSlot && (
+        <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsMoveConfirmOpen(false);
+                setMoveTargetSlot(null);
+              }}
+              className="absolute right-4 top-4 text-gray-400 hover:text-black"
+            >
+              <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+            <h2 className="text-lg font-bold text-black mb-3">예약 이동</h2>
+            <p className="text-sm text-gray-700 mb-4">
+              선택하신 예약을 아래 시간과 디자이너로 이동하시겠습니까?
+            </p>
+            <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-800 mb-4 space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-500">예약 번호</span>
+                <span className="font-semibold">#{movingBooking.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">날짜</span>
+                <span className="font-medium">{moveTargetSlot.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">시간</span>
+                <span className="font-medium">{moveTargetSlot.time}</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMoveConfirmOpen(false);
+                  setMoveTargetSlot(null);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!movingBooking?.id || !moveTargetSlot) return;
+                  try {
+                    const dbTime = `${moveTargetSlot.time}:00`; // Comment: Convert "HH:MM" to "HH:MM:00" for DB
+                    const res = await fetch(`/api/appointment/${movingBooking.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        booking_date: moveTargetSlot.date,
+                        booking_time: dbTime,
+                        designer_id: moveTargetSlot.designerId,
+                      }),
+                    });
+                    if (!res.ok) {
+                      const data = await res.json();
+                      alert(data.error || '예약 이동에 실패했습니다.');
+                      return;
+                    }
+
+                    // Refresh day view bookings for selectedDate
+                    const dayRes = await fetch(
+                      `/api/appointment?date=${encodeURIComponent(selectedDate)}`
+                    );
+                    const dayData = await dayRes.json();
+                    if (dayRes.ok && dayData.bookings) {
+                      setBookings(dayData.bookings);
+                      setFilteredBookings(dayData.bookings);
+                    }
+
+                    // Refresh week view bookings if in week view mode
+                    if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
+                      const startDate = new Date(weekViewStartDate);
+                      const endDate = new Date(startDate);
+                      endDate.setDate(endDate.getDate() + 6);
+                      const startDateStr = startDate.toISOString().split('T')[0];
+                      const endDateStr = endDate.toISOString().split('T')[0];
+                      const weekRes = await fetch(
+                        `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${encodeURIComponent(
+                          startDateStr
+                        )}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`
+                      );
+                      const weekData = await weekRes.json();
+                      if (weekRes.ok && weekData.bookings) {
+                        setWeekViewBookings(weekData.bookings);
+                      }
+                    }
+
+                    setIsMoveConfirmOpen(false);
+                    setMoveTargetSlot(null);
+                    setMovingBooking(null);
+                  } catch (error: any) {
+                    alert(error.message || '예약 이동에 실패했습니다.');
+                  }
+                }}
+                className="px-5 py-2 rounded-lg text-sm font-semibold text-white bg-black hover:bg-gray-800"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Reservation History Modal */}

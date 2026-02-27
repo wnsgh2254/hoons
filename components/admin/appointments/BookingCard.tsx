@@ -23,7 +23,7 @@ interface BookingCardProps {
   onEditBooking: (booking: BookingWithRelations) => void;
   onViewDetail: (booking: BookingWithRelations) => void;
   onViewCustomer: (booking: BookingWithRelations) => void;
-  onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => Promise<void>;
+  onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
 }
 
 export default function BookingCard({
@@ -58,7 +58,11 @@ export default function BookingCard({
   const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
   const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
 
-  const serviceName = booking.service?.name || 'Service';
+  const serviceName =
+    (booking as any).service_for_display ||
+    (booking as any).custom_service_name ||
+    booking.service?.name ||
+    'Service';
   const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
   const statusColor = getBookingStatusColor((booking as any).status || (booking as any).booking_status);
   const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';

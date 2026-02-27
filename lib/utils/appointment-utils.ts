@@ -187,21 +187,75 @@ export const EDIT_TIME_OPTIONS = [
 export function getServiceCategoryForPicker(name: string): string {
   const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
   const lowerName = cleanName.toLowerCase();
-  if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
-  if (lowerName.includes('- magic')) return 'Magic';
-  if (lowerName.includes('- hot perm')) return 'Hot Perm';
-  if (lowerName.includes('- color')) return 'Color';
-  if (lowerName.includes('- clinic')) return 'Clinic';
-  if (lowerName.includes('- package')) return 'Package';
-  if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
-  if (lowerName.includes('mucota') || lowerName.includes('ahyunchae') || lowerName.includes('keratin') || lowerName.includes('scalp') || lowerName.includes('sleek') || lowerName.includes('clinic')) return 'Clinic';
-  if (lowerName.includes('color') || lowerName.includes('bleach') || lowerName.includes('toning')) return 'Color';
-  if (lowerName.includes('special perm') || lowerName.includes('setting perm') || lowerName.includes('design setting perm')) return 'Hot Perm';
-  if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
-  if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
-  if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
-  if (lowerName.includes('cut') || lowerName.includes('length addition') || lowerName.includes('hair extension') || lowerName.includes('director level') || lowerName.includes('manager level') || lowerName.includes('kids cut') || lowerName.includes('bangs cut')) return 'Cut';
-  return 'Others';
+
+  // Cut / 커트
+  if (
+    lowerName.includes('cut') ||
+    lowerName.includes('컷') ||
+    lowerName.includes('커트') ||
+    lowerName.includes('bangs cut') ||
+    lowerName.includes('kids cut')
+  ) {
+    return '커트';
+  }
+
+  // Dry / 드라이
+  if (
+    lowerName.includes('dry') ||
+    lowerName.includes('드라이') ||
+    lowerName.includes('styling') ||
+    lowerName.includes('shampoo')
+  ) {
+    return '드라이';
+  }
+
+  // Magic / 매직
+  if (lowerName.includes('magic') || lowerName.includes('매직') || lowerName.includes('iron perm')) {
+    return '매직';
+  }
+
+  // Hot Perm / 핫펌 (디지털/셋팅 포함)
+  if (
+    lowerName.includes('hot perm') ||
+    lowerName.includes('hot') ||
+    lowerName.includes('digital') ||
+    lowerName.includes('setting') ||
+    lowerName.includes('셋팅')
+  ) {
+    return '핫펌';
+  }
+
+  // 일반 Perm / 펌
+  if (lowerName.includes('perm') || lowerName.includes('펌')) {
+    return '펌';
+  }
+
+  // Color / 염색
+  if (
+    lowerName.includes('color') ||
+    lowerName.includes('bleach') ||
+    lowerName.includes('tint') ||
+    lowerName.includes('toning') ||
+    lowerName.includes('염색')
+  ) {
+    return '염색';
+  }
+
+  // Clinic / 클리닉
+  if (
+    lowerName.includes('clinic') ||
+    lowerName.includes('클리닉') ||
+    lowerName.includes('treatment') ||
+    lowerName.includes('protein') ||
+    lowerName.includes('care') ||
+    lowerName.includes('keratin') ||
+    lowerName.includes('scalp')
+  ) {
+    return '클리닉';
+  }
+
+  // 기타는 예약 등록 단계에서는 노출하지 않으므로 구분값만 남겨둠
+  return '기타';
 }
 
-export const SERVICE_PICKER_CATEGORY_ORDER = ['Cut', 'Dry', 'Perm', 'Magic', 'Hot Perm', 'Color', 'Clinic', 'Package', 'Others'];
+export const SERVICE_PICKER_CATEGORY_ORDER = ['커트', '드라이', '펌', '매직', '핫펌', '염색', '클리닉'];

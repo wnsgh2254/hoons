@@ -41,7 +41,7 @@ export default function AppointmentDetailModal({
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">시술</span>
             <span className="font-medium text-gray-900">
-              {booking.service?.name || '—'}
+              {(booking as any).custom_service_name || booking.service?.name || '—'}
             </span>
           </div>
           <div className="flex justify-between text-sm">

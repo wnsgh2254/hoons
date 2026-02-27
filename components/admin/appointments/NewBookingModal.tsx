@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { EDIT_TIME_OPTIONS } from '@/lib/utils/appointment-utils';
+import { EDIT_TIME_OPTIONS, getWeekStart, getWeekEnd } from '@/lib/utils/appointment-utils';
 
 type TimeSlot = {
   designerId: number | null;
@@ -24,6 +24,7 @@ interface NewBookingModalProps {
   newBookingServices: { id: number; name: string; duration_minutes: number }[];
   newBookingMemo: string;
   newBookingSubmitting: boolean;
+  newBookingLoadingOptions: boolean;
   newBookingShopId: number | null;
   newBookingSelectedCustomerId: number | null;
   newBookingCustomerSearchResults: any[];
@@ -38,6 +39,7 @@ interface NewBookingModalProps {
   setIsCustomerRegistrationModalOpen: (value: boolean) => void;
   setBookingSuccessMessage: (value: string | null) => void;
   setBookings: (value: any[]) => void;
+  setFilteredBookings: (value: any[]) => void;
   setNewBookingSelectedCustomerId: (value: number | null) => void;
   setNewBookingCustomerSearchResults: (value: any[]) => void;
   setNewBookingIsCustomerSearching: (value: boolean) => void;
@@ -55,6 +57,7 @@ export default function NewBookingModal({
   newBookingServices,
   newBookingMemo,
   newBookingSubmitting,
+  newBookingLoadingOptions,
   newBookingShopId,
   newBookingSelectedCustomerId,
   newBookingCustomerSearchResults,
@@ -68,6 +71,7 @@ export default function NewBookingModal({
   setIsCustomerRegistrationModalOpen,
   setBookingSuccessMessage,
   setBookings,
+  setFilteredBookings,
   setNewBookingSelectedCustomerId,
   setNewBookingCustomerSearchResults,
   setNewBookingIsCustomerSearching,
@@ -76,16 +80,11 @@ export default function NewBookingModal({
   // Comment: Duration options in 30-min steps only
   const durationOptions = [30, 60, 90, 120, 150, 180];
 
-  // Comment: Show only card services (like customer booking), and strip (card)/(cash) from display name
-  const servicesForDropdown = Array.isArray(newBookingServices)
-    ? newBookingServices.filter((s) => {
-        const name = (s.name || '').toLowerCase();
-        const isCardService = name.includes('(card)') || (!name.includes('(cash)') && !name.includes('(card)'));
-        return isCardService;
-      })
+  // Comment: 7 category services (must exist in services table) - only these appear in dropdown
+  const CATEGORY_NAMES = ['커트', '드라이', '펌', '매직', '핫펌', '염색', '클리닉'] as const;
+  const categoryServices = Array.isArray(newBookingServices)
+    ? newBookingServices.filter((s) => CATEGORY_NAMES.includes(s.name as any))
     : [];
-  const getServiceDisplayName = (name: string) =>
-    name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
 
   const handleCancel = () => {
     onClose();
@@ -189,10 +188,19 @@ export default function NewBookingModal({
         { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null },
       ]);
 
-      const res = await fetch(`/api/appointment?date=${encodeURIComponent(selectedDate)}`);
+      // Comment: Refetch full week range (same as main schedule) so UI shows correct data
+      const weekStart = getWeekStart(selectedDate);
+      const weekEnd = getWeekEnd(selectedDate);
+      const res = await fetch(
+        `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+      );
       const data = await res.json();
       if (res.ok) {
-        setBookings(data.bookings || []);
+        const bookings = Array.isArray(data.bookings) ? data.bookings : [];
+        let updatedBookings = bookings;
+
+        setBookings(updatedBookings);
+        setFilteredBookings(updatedBookings);
       }
     } finally {
       setNewBookingSubmitting(false);
@@ -395,33 +403,36 @@ export default function NewBookingModal({
                 {newBookingTimeSlots.map((slot, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
-                      {/* Service */}
+                      {/* Service - category services only (saved with service_id) */}
                       <div className="min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
                         <select
+                          disabled={newBookingLoadingOptions}
                           value={slot.serviceId != null ? String(slot.serviceId) : ''}
                           onChange={(e) => {
                             const updated = [...newBookingTimeSlots];
                             const val = e.target.value;
                             updated[index].serviceId = val ? Number(val) : null;
                             if (val) {
-                              const svc = newBookingServices.find((s) => s.id === Number(val));
+                              const svc = categoryServices.find((s) => s.id === Number(val));
                               if (svc?.duration_minutes) {
-                                // Round to nearest 30 min for duration options
                                 const rounded = Math.round(svc.duration_minutes / 30) * 30;
                                 updated[index].duration = Math.min(180, Math.max(30, rounded));
                               }
                             }
                             setNewBookingTimeSlots(updated);
                           }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
                         >
-                          <option value="">선택하세요</option>
-                          {servicesForDropdown.map((s) => (
-                            <option key={s.id} value={String(s.id)}>
-                              {getServiceDisplayName(s.name)} ({s.duration_minutes}분)
-                            </option>
-                          ))}
+                          <option value="">
+                            {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
+                          </option>
+                          {!newBookingLoadingOptions &&
+                            categoryServices.map((s) => (
+                              <option key={s.id} value={String(s.id)}>
+                                {s.name}
+                              </option>
+                            ))}
                         </select>
                       </div>
 
@@ -429,20 +440,24 @@ export default function NewBookingModal({
                       <div className="min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
                         <select
+                          disabled={newBookingLoadingOptions}
                           value={slot.designerId ?? ''}
                           onChange={(e) => {
                             const updated = [...newBookingTimeSlots];
                             updated[index].designerId = e.target.value ? Number(e.target.value) : null;
                             setNewBookingTimeSlots(updated);
                           }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
                         >
-                          <option value="">선택하세요</option>
-                          {newBookingDesigners.map((d: any) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))}
+                          <option value="">
+                            {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
+                          </option>
+                          {!newBookingLoadingOptions &&
+                            newBookingDesigners.map((d: any) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
                         </select>
                       </div>
 

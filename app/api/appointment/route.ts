@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
       customerName, // Comment: Customer name from booking flow
       customerPhone, // Comment: Customer phone number from booking flow
       existingCustomerId, // Comment: Optional existing customer ID if already looked up
+      serviceCategory, // Comment: Optional big category name from admin booking (e.g. 커트)
     } = body;
 
     if (!shopId || !day || !timeLabel) {
@@ -118,6 +119,11 @@ export async function POST(request: NextRequest) {
       depositAmount: typeof depositAmount === 'number' ? depositAmount : null,
       fullDate: typeof fullDate === 'string' ? fullDate : undefined,
       customerId: customerId,
+      customServiceName:
+        typeof serviceCategory === 'string' && serviceCategory.trim()
+          ? serviceCategory.trim()
+          : null,
+      customServiceDuration: null,
     });
     return NextResponse.json(
       {
