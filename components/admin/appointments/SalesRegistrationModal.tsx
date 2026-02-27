@@ -945,7 +945,7 @@ export default function SalesRegistrationModal({
                 ...item,
                 discount: update.discount,
                 discountType: shouldClearDiscount ? undefined : update.discountType,
-                discountValue: shouldClearDiscount ? undefined : update.discountValue,
+                discountValue: shouldClearDiscount ? undefined : (update.discountValue ?? undefined),
                 amount: newAmount > 0 ? newAmount : 0,
               };
             }
