@@ -1,13 +1,12 @@
 'use client';
 
 import React from 'react';
-import { getBookingStatusColor, GRID_START_HOUR, GRID_30MIN_HEIGHT } from '@/lib/utils/appointment-utils';
-import type { Booking } from '@/lib/types';
-import BookingContextMenu from './BookingContextMenu';
 import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
 import {
   getBookingStatusColor,
+  GRID_START_HOUR,
+  GRID_30MIN_HEIGHT,
   COLOR_LABEL_MAP,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
@@ -45,20 +44,31 @@ interface BookingCardProps {
   onViewDetail: (booking: BookingWithRelations) => void;
   onViewCustomer: (booking: BookingWithRelations) => void;
   onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
+  children?: React.ReactNode;
+  // Optional (used when card is used in day view with full menu)
+  emptySlotMenuOpen?: unknown;
+  onMoveBooking?: (booking: BookingWithRelations) => void;
+  onCancelBooking?: (booking: BookingWithRelations) => void;
+  onRegisterSale?: (booking: BookingWithRelations) => void;
+  onViewSaleDetail?: (booking: BookingWithRelations) => void;
+  hasTempSale?: boolean;
+  onOpenTempSale?: (booking: BookingWithRelations) => void;
 }
 
 function BookingCard({
   booking,
+  children,
+  className,
+  style: outerStyle,
   emptySlotMenuOpen,
   isNewBookingOpen,
   hoveredBooking,
   bookingMenuOpen,
   hoverCardPosition,
   bookingMenuPosition,
-  isNewBookingOpen,
+  hoverCardOriginalPositionRef,
   setHoveredBooking,
   setHoverCardPosition,
-  hoverCardOriginalPositionRef,
   setBookingMenuOpen,
   setBookingMenuPosition,
   bookingMenuOriginalPositionRef,
@@ -75,6 +85,7 @@ function BookingCard({
   hasTempSale,
   onOpenTempSale,
 }: BookingCardProps) {
+  const b = booking;
   if (!b.booking_time) return null;
 
   const [hourStr, minuteStr] = b.booking_time.split(':');

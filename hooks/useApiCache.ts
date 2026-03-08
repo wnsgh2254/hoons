@@ -54,30 +54,24 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const extractRef = useRef(extract);
+  const filterRef = useRef(filter);
+  const errorMessageRef = useRef(errorMessage);
+  extractRef.current = extract;
+  filterRef.current = filter;
+  errorMessageRef.current = errorMessage;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  const extractData = useCallback((json: any): T[] => {
-    if (extract) return extract(json);
-    // Auto-detect: find first array property
-    for (const value of Object.values(json)) {
-      if (Array.isArray(value)) return value as T[];
-    }
-    return Array.isArray(json) ? json : [];
-  }, [extract]);
-
-  const applyFilter = useCallback((items: T[]): T[] => {
-    return filter ? filter(items) : items;
-  }, [filter]);
-
   const fetchData = useCallback((skipCache = false) => {
     if (!skipCache) {
       const cached = isCacheValid<T>(url, cacheKey);
       if (cached) {
-        setData(applyFilter(cached));
+        const fn = filterRef.current;
+        setData(fn ? fn(cached) : cached);
         return;
       }
     }
@@ -90,17 +84,26 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
       .then((res) => res.json())
       .then((json) => {
         if (cancelled) return;
-        const list = extractData(json);
+        const extractFn = extractRef.current;
+        const list: T[] = extractFn
+          ? extractFn(json)
+          : (() => {
+              for (const value of Object.values(json)) {
+                if (Array.isArray(value)) return value as T[];
+              }
+              return Array.isArray(json) ? json : [];
+            })();
         updateCache(url, list, cacheKey);
         if (mountedRef.current) {
-          setData(applyFilter(list));
+          const filterFn = filterRef.current;
+          setData(filterFn ? filterFn(list) : list);
         }
       })
       .catch((err) => {
         if (cancelled) return;
         console.error(`useApiCache(${url}) fetch error:`, err);
         if (mountedRef.current) {
-          setError(errorMessage);
+          setError(errorMessageRef.current);
         }
       })
       .finally(() => {
@@ -110,7 +113,7 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
       });
 
     return () => { cancelled = true; };
-  }, [url, cacheKey, extractData, applyFilter, errorMessage]);
+  }, [url, cacheKey]);
 
   useEffect(() => {
     if (!enabled) return;

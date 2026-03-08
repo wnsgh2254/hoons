@@ -2,14 +2,9 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import type { Booking } from '@/lib/types';
+import type { BookingWithRelations } from '@/lib/types';
 import { getBookingStatusColor } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
-
-type BookingWithRelations = Booking & {
-  designer?: { id: number; name: string } | null;
-  service?: { id: number; name: string; duration_minutes?: number | null } | null;
-};
 
 export interface ScheduleDayViewMenuHandlers {
   onNewBooking: (booking: BookingWithRelations) => void;

@@ -75,7 +75,9 @@ export function useAdminMemo() {
     setMemo,
     memoLoading,
     memoSaving,
+    setMemoSaving,
     memoSuccessMessage,
+    setMemoSuccessMessage,
     saveMemo,
   };
 }

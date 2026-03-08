@@ -78,6 +78,10 @@ interface WeekViewGridProps {
   onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
   onCancelBooking?: (booking: BookingWithRelations) => void;
   movingBooking: BookingWithRelations | null;
+  weekViewAvailableDates?: Set<string>;
+  setNewBookingDate?: (date: string) => void;
+  setNewBookingTimeSlots?: (slots: any[]) => void;
+  setIsNewBookingOpen?: (open: boolean) => void;
   onSelectMoveTarget: (target: { date: string; designerId: number; time: string }) => void;
 }
 
@@ -119,6 +123,10 @@ export default function WeekViewGrid({
   onCancelBooking,
   movingBooking,
   onSelectMoveTarget,
+  weekViewAvailableDates = new Set<string>(),
+  setNewBookingDate,
+  setNewBookingTimeSlots,
+  setIsNewBookingOpen,
 }: WeekViewGridProps) {
   // Comment: If designer not selected, nothing to render
   if (!weekViewDesignerId || !weekViewStartDate) return null;
@@ -469,20 +477,21 @@ export default function WeekViewGrid({
                           weekViewDesignerId,
                           slotTime,
                         });
-                        setNewBookingDate(dateStr);
+                        setNewBookingDate?.(dateStr);
                         const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
                           slotMin,
                         ).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                        setNewBookingTimeSlots([
+                        setNewBookingTimeSlots?.([
                           {
                             designerId: weekViewDesignerId,
                             time: timeStr,
                             duration: 30,
                             serviceTab: 'service',
                             serviceId: null,
+                            selectedItems: [],
                           },
                         ]);
-                        setIsNewBookingOpen(true);
+                        setIsNewBookingOpen?.(true);
                         setHoveredEmptySlot(null);
                       }
                     }
@@ -916,8 +925,19 @@ export default function WeekViewGrid({
                 }
               });
 
+              const leftPercent = hasOverlap && placeOnRight ? 50 : 0;
+              const widthPercent = hasOverlap ? 50 : 100;
+
               const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
               const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
+
+              const closeMenu = () => {
+                setBookingMenuOpen(null);
+                setBookingMenuPosition(null);
+                if (bookingMenuOriginalPositionRef.current) {
+                  bookingMenuOriginalPositionRef.current = null;
+                }
+              };
 
               const serviceName =
                 (b as any).custom_service_name ||
@@ -1175,7 +1195,7 @@ export default function WeekViewGrid({
                               width: '100%',
                             }}
                             onNewBooking={() => {
-                            setIsNewBookingOpen(true);
+                            setIsNewBookingOpen?.(true);
                             setBookingMenuOpen(null);
                               setBookingMenuPosition(null);
                               if (bookingMenuOriginalPositionRef.current) {
@@ -1270,7 +1290,7 @@ export default function WeekViewGrid({
                       );
                     })()}
                   </div>
-                </div>
+                </BookingCard>
               );
             })}
           </div>

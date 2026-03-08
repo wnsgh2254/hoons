@@ -1,8 +1,15 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { EDIT_TIME_OPTIONS, getWeekStart, getWeekEnd } from '@/lib/utils/appointment-utils';
+import React, { useEffect, useState, useRef } from 'react';
+import { EDIT_TIME_OPTIONS, getWeekStart, getWeekEnd, COLOR_LABEL_OPTIONS } from '@/lib/utils/appointment-utils';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
+import { Z } from '@/lib/constants';
+import { useServices } from '@/hooks/useServices';
+import BookingItemPickerModal from './BookingItemPickerModal';
 
+type SelectedBookingItem = { id: number; type: string; name: string; durationMinutes?: number };
 type TimeSlot = {
   designerId: number | null;
   time: string;
@@ -44,6 +51,8 @@ interface NewBookingModalProps {
   setNewBookingSelectedCustomerId: (value: number | null) => void;
   setNewBookingCustomerSearchResults: (value: any[]) => void;
   setNewBookingIsCustomerSearching: (value: boolean) => void;
+  onViewCustomer?: (customerId: number) => void;
+  onOpenCustomerRegistration?: () => void;
 }
 
 export default function NewBookingModal({
@@ -76,6 +85,8 @@ export default function NewBookingModal({
   setNewBookingSelectedCustomerId,
   setNewBookingCustomerSearchResults,
   setNewBookingIsCustomerSearching,
+  onViewCustomer,
+  onOpenCustomerRegistration,
 }: NewBookingModalProps) {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
@@ -100,11 +111,39 @@ export default function NewBookingModal({
   const shopManuallySet = useRef(false);
   const [designers, setDesigners] = useState<any[]>([]);
   const { services } = useServices();
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [datePickerMonth, setDatePickerMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
 
-  const durationOptions = Array.from({ length: (300 - 30) / 5 + 1 }, (_, i) => 30 + i * 5);
+  const selectedCustomerDetail = customerSearchResults.find((r: any) => r.id === selectedCustomerId) ?? null;
+  type CustomerStats = { lastVisitDate?: string; daysSinceLastVisit?: number; appointmentsCount?: number; cancelledCount?: number };
+  const customerStats: CustomerStats = {};
 
-  // Comment: Duration options in 30-min steps only
+  // Duration options in 30-min steps only
   const durationOptions = [30, 60, 90, 120, 150, 180];
+
+  const formatDurationLabel = (min: number) => `${min}분`;
+
+  const handleRemoveBookingItem = (slotIndex: number, itemId: number, itemType: string) => {
+    const next = newBookingTimeSlots.map((slot: TimeSlot, i: number) =>
+      i === slotIndex
+        ? { ...slot, selectedItems: slot.selectedItems.filter((it: SelectedBookingItem) => it.id !== itemId || it.type !== itemType) }
+        : slot
+    );
+    setNewBookingTimeSlots(next);
+  };
+
+  const handleBookingItemsSelected = (items: SelectedBookingItem[]) => {
+    if (activeSlotIndex === null) return;
+    const next = newBookingTimeSlots.map((slot: TimeSlot, i: number) =>
+      i === activeSlotIndex ? { ...slot, selectedItems: [...slot.selectedItems, ...items] } : slot
+    );
+    setNewBookingTimeSlots(next);
+    setIsBookingItemPickerOpen(false);
+  };
 
   // Comment: 7 category services (must exist in services table) - only these appear in dropdown
   const CATEGORY_NAMES = ['커트', '드라이', '펌', '매직', '핫펌', '염색', '클리닉'] as const;
@@ -115,7 +154,7 @@ export default function NewBookingModal({
   const handleCancel = () => {
     onClose();
     setNewBookingTimeSlots([
-      { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null },
+      { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] },
     ]);
     setNewBookingSelectedCustomerId(null);
     setNewBookingCustomerSearchResults([]);
@@ -204,12 +243,12 @@ export default function NewBookingModal({
           alert('예약 생성에 실패했습니다.');
         }
       } else {
-        onSuccess('예약이 성공적으로 등록되었습니다.');
+        setBookingSuccessMessage('예약이 성공적으로 등록되었습니다.');
       }
 
       onClose();
       setNewBookingTimeSlots([
-        { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null },
+        { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] },
       ]);
 
       // Comment: Refetch full week range (same as main schedule) so UI shows correct data
@@ -402,7 +441,7 @@ export default function NewBookingModal({
                   <p className="text-xs text-gray-500 w-20 flex-shrink-0">최근 1년 예약</p>
                   <p className="text-sm font-medium text-black">
                     {customerStats
-                      ? `${customerStats.appointmentsCount}건${customerStats.cancelledCount > 0 ? ` (취소 ${customerStats.cancelledCount}건)` : ''}`
+                      ? `${customerStats.appointmentsCount}건${(customerStats.cancelledCount ?? 0) > 0 ? ` (취소 ${customerStats.cancelledCount ?? 0}건)` : ''}`
                       : '-'}
                   </p>
                 </div>
@@ -629,9 +668,10 @@ export default function NewBookingModal({
                     }}
                     wrapperClassName="min-w-0"
                   />
-                  바로 방문
-                  <span className="material-symbols-outlined text-sm text-gray-400">help</span>
-                </label>
+                  <span className="flex items-center gap-1 text-sm text-gray-500">
+                    바로 방문
+                    <span className="material-symbols-outlined text-sm text-gray-400">help</span>
+                  </span>
               </div>
 
               {/* Designer, Start Time, Duration Groups */}
@@ -696,6 +736,7 @@ export default function NewBookingModal({
                             ))}
                         </select>
                       </div>
+                    </div>
 
                 {/* Row 2: Item selection buttons */}
                 <div className="flex items-center gap-3">
@@ -734,11 +775,11 @@ export default function NewBookingModal({
                       >
                         <div>
                           <span className="text-sm text-gray-900">{item.name}</span>
-                          <span className="text-xs text-gray-500 ml-2">{formatDurationLabel(item.durationMinutes)}</span>
+                          <span className="text-xs text-gray-500 ml-2">{formatDurationLabel(item.durationMinutes ?? 0)}</span>
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleRemoveBookingItem(idx, item.id, item.type)}
+                          onClick={() => handleRemoveBookingItem(index, item.id, item.type)}
                           className="text-gray-400 hover:text-red-500 transition-colors"
                         >
                           <span className="material-symbols-outlined text-base">close</span>
@@ -748,6 +789,9 @@ export default function NewBookingModal({
                   </div>
                 )}
               </div>
+            ))}
+          </div>
+            </div>
             ))}
           </div>
 
