@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { getBookingStatusColor } from '@/lib/utils/appointment-utils';
 import type { BookingWithRelations } from '@/lib/types';
 
@@ -9,7 +10,7 @@ interface BookingContextMenuProps {
   onEditBooking: (booking: BookingWithRelations) => void;
   onViewDetail?: (booking: BookingWithRelations) => void;
   onViewCustomer: (booking: BookingWithRelations) => void;
-  onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => void;
+  onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => void;
   onMoveBooking?: (booking: BookingWithRelations) => void;
   onCancelBooking?: (booking: BookingWithRelations) => void;
   onRegisterSale?: (booking: BookingWithRelations) => void;
@@ -18,7 +19,7 @@ interface BookingContextMenuProps {
   style?: React.CSSProperties;
 }
 
-export default function BookingContextMenu({
+function BookingContextMenu({
   booking,
   onNewBooking,
   onEditBooking,
@@ -32,7 +33,7 @@ export default function BookingContextMenu({
   className = 'absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]',
   style,
 }: BookingContextMenuProps) {
-  // fixed 포지셔닝을 위한 스타일 병합
+  // fixed positioning style merge
   const mergedStyle = style || {};
   const statusColor = getBookingStatusColor((booking as any).status || (booking as any).booking_status);
 
@@ -96,17 +97,19 @@ export default function BookingContextMenu({
             고객 정보
           </button>
         )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewCustomer(booking);
-          }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined text-sm text-purple-500">check</span>
-          고객 입장
-        </button>
+        {onStatusChange && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onStatusChange(booking, 'BOOKED'); // Comment: Toggle back to BOOKED when already ARRIVED
+            }}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-sm text-purple-500">check</span>
+            고객 입장
+          </button>
+        )}
       </div>
     );
   }
@@ -306,7 +309,7 @@ export default function BookingContextMenu({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onStatusChange(booking, 'NOSHOW');
+              onStatusChange(booking, 'BOOKED'); // Comment: Toggle back to BOOKED when already NOSHOW
             }}
             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 last:rounded-b-lg flex items-center gap-2"
           >
@@ -356,3 +359,5 @@ export default function BookingContextMenu({
     </div>
   );
 }
+
+export default React.memo(BookingContextMenu);

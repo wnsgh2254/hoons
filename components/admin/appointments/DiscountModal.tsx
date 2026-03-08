@@ -61,11 +61,14 @@ export default function DiscountModal({
       // 기존 할인 정보를 itemDiscounts에 저장
       const initialDiscounts = new Map<string, { type: DiscountType; value: number | string }>();
       items.forEach(item => {
-        if (item.discountType && item.discountValue !== undefined) {
-          initialDiscounts.set(item.id, {
-            type: item.discountType,
-            value: item.discountValue,
-          });
+        if (item.discountType) {
+          const value = item.discountValue !== undefined ? item.discountValue : (item.discountType === 'category' ? item.discount : undefined);
+          if (value !== undefined) {
+            initialDiscounts.set(item.id, {
+              type: item.discountType,
+              value,
+            });
+          }
         }
       });
       setItemDiscounts(initialDiscounts);
@@ -171,6 +174,8 @@ export default function DiscountModal({
       } else if (discountInfo.type === 'amount') {
         const amount = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value);
         finalDiscount = amount;
+      } else if (discountInfo.type === 'category') {
+        finalDiscount = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value) || item.discount;
       }
 
       updates.push({
@@ -233,6 +238,8 @@ export default function DiscountModal({
     } else if (item.discountType === 'amount' && item.discountValue !== undefined) {
       const value = typeof item.discountValue === 'number' ? item.discountValue : Number(item.discountValue);
       return value.toLocaleString();
+    } else if (item.discountType === 'category' && item.discount > 0) {
+      return item.discount.toLocaleString();
     }
     return '';
   };

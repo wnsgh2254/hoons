@@ -11,10 +11,11 @@ export interface PublicBookingPayload {
   depositAmount: number | null;
   // Comment: Optional full date override (YYYY-MM-DD). When provided, 'day' is ignored.
   fullDate?: string;
-   // Comment: Optional customer ID to link booking to a customer
+  // Comment: Optional customer ID to link booking to a customer
   customerId?: number | null;
-  memo?: string;
-  colorLabel?: string;
+  // Comment: Optional custom service name/duration when not using a predefined service_id
+  customServiceName?: string | null;
+  customServiceDuration?: number | null;
 }
 
 // Comment: Convert display time like "2:00 PM" to 24h "14:00:00" string for DB
@@ -113,8 +114,8 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
     depositAmount,
     fullDate,
     customerId,
-    memo,
-    colorLabel,
+    customServiceName,
+    customServiceDuration,
   } =
     payload;
 
@@ -137,8 +138,8 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
       status: 'pending', // Comment: Public booking starts as pending after deposit step
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
-      ...(memo != null && { memo }),
-      ...(colorLabel != null && { color_label: colorLabel }),
+      custom_service_name: customServiceName ?? null,
+      custom_service_duration: customServiceDuration ?? null,
     })
     .select()
     .single();

@@ -169,7 +169,7 @@ export default function ReservationHistoryTable({
               const statusLabel = STATUS_LABELS[status] || status || '-';
               const customerName = b.customer?.name || b.customer_name || '';
               const customerPhone = b.customer?.phone || b.customer_phone || '';
-              const serviceName = b.service?.name || '';
+              const serviceName = (b as any).custom_service_name || b.service?.name || '';
               const durationMinutes = b.service?.duration_minutes || 60;
 
               const statusClass =

@@ -1,6 +1,9 @@
 'use client';
 
 import React from 'react';
+import { getBookingStatusColor, GRID_START_HOUR, GRID_30MIN_HEIGHT } from '@/lib/utils/appointment-utils';
+import type { Booking } from '@/lib/types';
+import BookingContextMenu from './BookingContextMenu';
 import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
 import {
@@ -41,20 +44,13 @@ interface BookingCardProps {
   onEditBooking: (booking: BookingWithRelations) => void;
   onViewDetail: (booking: BookingWithRelations) => void;
   onViewCustomer: (booking: BookingWithRelations) => void;
-  onStatusChange: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => Promise<void>;
-  onMoveBooking?: (booking: BookingWithRelations) => void;
-  onCancelBooking?: (booking: BookingWithRelations) => void;
-  onRegisterSale?: (booking: BookingWithRelations) => void;
-  onViewSaleDetail?: (booking: BookingWithRelations) => void;
-  // 임시저장 관련
-  hasTempSale?: boolean;
-  onOpenTempSale?: (booking: BookingWithRelations) => void;
+  onStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
 }
 
-export default function BookingCard({
-  booking: b,
-  className = 'absolute',
-  style: outerStyle,
+function BookingCard({
+  booking,
+  emptySlotMenuOpen,
+  isNewBookingOpen,
   hoveredBooking,
   bookingMenuOpen,
   hoverCardPosition,
@@ -91,7 +87,11 @@ export default function BookingCard({
       ? b.service.duration_minutes
       : 60;
 
-  const serviceName = b.service?.name || 'Service';
+  const serviceName =
+    (booking as any).service_for_display ||
+    (booking as any).custom_service_name ||
+    booking.service?.name ||
+    'Service';
   const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
   const statusColor = getBookingStatusColor(
     (b as any).status || (b as any).booking_status,
@@ -357,7 +357,9 @@ export default function BookingCard({
             document.body
           );
         })()}
-      </div>
+        </div>
     </div>
   );
 }
+
+export default React.memo(BookingCard);

@@ -75,14 +75,10 @@ interface WeekViewGridProps {
   setBookingMenuOpen: (id: number | null) => void;
   setEditingBooking: (booking: BookingWithRelations | null) => void;
   setViewingBookingDetail: (booking: BookingWithRelations | null) => void;
-  onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW') => Promise<void>;
+  onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
   onCancelBooking?: (booking: BookingWithRelations) => void;
-  onRegisterSale?: (booking: BookingWithRelations) => void;
-  onViewSaleDetail?: (booking: BookingWithRelations) => void;
-  weekViewAvailableDates?: Set<string>;
-  // 임시저장 관련
-  tempSaleBookingIds?: Set<number>;
-  onOpenTempSale?: (booking: BookingWithRelations) => void;
+  movingBooking: BookingWithRelations | null;
+  onSelectMoveTarget: (target: { date: string; designerId: number; time: string }) => void;
 }
 
 export default function WeekViewGrid({
@@ -121,11 +117,8 @@ export default function WeekViewGrid({
   setViewingBookingDetail,
   onBookingStatusChange,
   onCancelBooking,
-  onRegisterSale,
-  onViewSaleDetail,
-  weekViewAvailableDates = new Set(),
-  tempSaleBookingIds = new Set(),
-  onOpenTempSale,
+  movingBooking,
+  onSelectMoveTarget,
 }: WeekViewGridProps) {
   // Comment: If designer not selected, nothing to render
   if (!weekViewDesignerId || !weekViewStartDate) return null;
@@ -432,6 +425,8 @@ export default function WeekViewGrid({
                 });
               }
 
+              const isMoveMode = !!movingBooking;
+
               return (
                 <div
                   key={slotKey}
@@ -459,18 +454,37 @@ export default function WeekViewGrid({
                     }
                     e.preventDefault();
                     e.stopPropagation();
-                    // Comment: Open "New Booking" modal immediately on click (week view)
+                    // Comment: If move mode is active, select this slot as target; otherwise open "New Booking" modal
                     if (!isRestricted && weekViewDesignerId) {
-                      console.log('Empty slot clicked (week view - outer): opening new booking modal', {
-                        dateStr,
-                        weekViewDesignerId,
-                        slotTime,
-                      });
-                      const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
-                        slotMin,
-                      ).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
-                      onOpenNewBooking({ date: dateStr, designerId: weekViewDesignerId, time: timeStr });
-                      setHoveredEmptySlot(null);
+                      if (movingBooking) {
+                        onSelectMoveTarget({
+                          date: dateStr,
+                          designerId: weekViewDesignerId,
+                          time: slotTime,
+                        });
+                        setHoveredEmptySlot(null);
+                      } else {
+                        console.log('Empty slot clicked (week view - outer): opening new booking modal', {
+                          dateStr,
+                          weekViewDesignerId,
+                          slotTime,
+                        });
+                        setNewBookingDate(dateStr);
+                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
+                          slotMin,
+                        ).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
+                        setNewBookingTimeSlots([
+                          {
+                            designerId: weekViewDesignerId,
+                            time: timeStr,
+                            duration: 30,
+                            serviceTab: 'service',
+                            serviceId: null,
+                          },
+                        ]);
+                        setIsNewBookingOpen(true);
+                        setHoveredEmptySlot(null);
+                      }
                     }
                   }}
                   onMouseEnter={() => {
@@ -495,7 +509,9 @@ export default function WeekViewGrid({
                   {/* More button - 메뉴가 열려있을 때도 보이도록 별도 렌더링 */}
                   {isHovered && (
                       <div
-                        className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button ${
+                          isMoveMode ? 'bg-blue-100/70' : ''
+                        }`}
                         style={{ pointerEvents: 'auto' }}
                       >
                         <button
@@ -902,16 +918,22 @@ export default function WeekViewGrid({
 
               const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
               const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
-              const widthPercent = hasOverlap ? 50 : 100;
-              const leftPercent = hasOverlap && placeOnRight ? 50 : 0;
 
-              const closeMenu = () => {
-                setBookingMenuOpen(null);
-                setBookingMenuPosition(null);
-                if (bookingMenuOriginalPositionRef.current) {
-                  bookingMenuOriginalPositionRef.current = null;
-                }
-              };
+              const serviceName =
+                (b as any).custom_service_name ||
+                b.service?.name ||
+                'Service';
+              const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
+              const statusColor = getBookingStatusColor(
+                (b as any).status || (b as any).booking_status,
+              );
+              const customerName =
+                (b as any).customer?.name || (b as any).customer_name || '고객';
+              const customerId =
+                (b as any).customer?.id || (b as any).customer_id || b.id;
+              const customerPhone =
+                (b as any).customer?.phone || (b as any).customer_phone || '';
+              const bookingMemo = (b as any).memo || (b as any).note || '';
 
               return (
                 <BookingCard
@@ -961,25 +983,294 @@ export default function WeekViewGrid({
                     }
                     closeMenu();
                   }}
-                  onMoveBooking={(booking) => {
-                    console.log('Move booking:', booking.id);
-                    closeMenu();
-                  }}
-                  onCancelBooking={onCancelBooking ? (booking) => {
-                    onCancelBooking(booking);
-                    closeMenu();
-                  } : undefined}
-                  onRegisterSale={onRegisterSale ? (booking) => {
-                    onRegisterSale(booking);
-                    closeMenu();
-                  } : undefined}
-                  onViewSaleDetail={onViewSaleDetail ? (booking) => {
-                    onViewSaleDetail(booking);
-                    closeMenu();
-                  } : undefined}
-                  hasTempSale={tempSaleBookingIds.has(b.id)}
-                  onOpenTempSale={onOpenTempSale}
-                />
+                >
+                  <div
+                    className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
+                    style={{ zIndex: 1 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!b.id) return;
+                      setHoveredBooking(null); // 호버 popover 비활성화
+                      setHoverCardPosition(null);
+                      hoverCardOriginalPositionRef.current = null;
+                      
+                      // 메뉴가 이미 열려있으면 닫기
+                      if (bookingMenuOpen === b.id) {
+                        setBookingMenuOpen(null);
+                        setBookingMenuPosition(null);
+                        if (bookingMenuOriginalPositionRef.current) {
+                          bookingMenuOriginalPositionRef.current = null;
+                        }
+                      } else {
+                        // 메뉴 위치 계산 및 저장
+                        const cardElement = e.currentTarget.closest('[data-booking-card]') as HTMLElement;
+                        if (cardElement) {
+                          const cardRect = cardElement.getBoundingClientRect();
+                          const cellContainer = cardElement.closest('.relative.h-full.overflow-hidden') as HTMLElement;
+                          const scrollContainer = document.getElementById('schedule-scroll-container');
+                          const scrollTop = scrollContainer?.scrollTop || 0;
+                          const scrollLeft = scrollContainer?.scrollLeft || 0;
+                          
+                          const menuTop = cardRect.bottom + 4;
+                          const menuLeft = cardRect.left;
+                          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+                          
+                          setBookingMenuPosition({
+                            top: menuTop,
+                            left: menuLeft,
+                            width: menuWidth,
+                            scrollTop,
+                            scrollLeft,
+                          });
+                        }
+                      setBookingMenuOpen(b.id);
+                      }
+                    }}
+                  >
+                    <div>
+                      <p className={`text-xs font-bold ${statusColor.text} mb-0.5`}>
+                        {customerName}
+                      </p>
+                      <p className={`text-[11px] ${statusColor.text} opacity-70`}>
+                        {serviceName}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className={`text-[10px] font-mono ${statusColor.text} opacity-60`}>
+                        {timeLabel}
+                      </span>
+                    </div>
+
+                    {/* Hover Card - Portal로 렌더링 */}
+                    {hoveredBooking === b.id && !isNewBookingOpen && !bookingMenuOpen && hoverCardPosition && typeof window !== 'undefined' && (() => {
+                      return createPortal(
+                        <div 
+                          data-hover-card
+                          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+                          style={{
+                            top: `${hoverCardPosition.top}px`,
+                            left: `${hoverCardPosition.left}px`,
+                          }}
+                        >
+                        <div
+                          className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}
+                        >
+                          <p className="text-xs font-bold">{statusColor.label}</p>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          {/* timeRange */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 w-16 shrink-0">시간</span>
+                            <span className="text-gray-900">
+                              {timeLabel} ~
+                              {(() => {
+                                const endTime = new Date(
+                                  `2000-01-01T${hourStr}:${minuteStr}`,
+                                );
+                                endTime.setMinutes(endTime.getMinutes() + durationMinutes);
+                                return ` ${String(endTime.getHours()).padStart(
+                                  2,
+                                  '0',
+                                )}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+                              })()}
+                            </span>
+                          </div>
+                          {/* customerName */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 w-16 shrink-0">고객명</span>
+                            <span className="text-gray-900">
+                              {customerName} ({b.id || customerId})
+                            </span>
+                          </div>
+                            {/* phone - 모든 상태에서 표시 */}
+                            {customerPhone && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-500 w-16 shrink-0">전화번호</span>
+                                <span className="text-gray-900">{customerPhone}</span>
+                              </div>
+                            )}
+                            {/* serviceName - 모든 상태에서 표시 */}
+                            {serviceName && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-500 w-16 shrink-0">시술명</span>
+                                <span className="text-gray-900">{serviceName}</span>
+                              </div>
+                            )}
+                            {/* memo - 모든 상태에서 표시 */}
+                            {bookingMemo && (
+                              <>
+                                <div className="border-t border-gray-200 my-1.5" />
+                                <div className="text-gray-700">{bookingMemo}</div>
+                              </>
+                            )}
+                        </div>
+                        </div>,
+                        document.body
+                      );
+                    })()}
+
+                    {/* Context Menu - 상태별 메뉴 - Portal로 렌더링 */}
+                    {bookingMenuOpen === b.id && !isNewBookingOpen && bookingMenuPosition && typeof window !== 'undefined' && (() => {
+                      return createPortal(
+                      <div
+                        data-booking-menu
+                          className="fixed bg-transparent z-50"
+                          style={{
+                            top: `${bookingMenuPosition.top}px`,
+                            left: `${bookingMenuPosition.left}px`,
+                            width: `${bookingMenuPosition.width}px`,
+                          }}
+                          onMouseEnter={() => {
+                            // 메뉴로 다시 들어오면 타이머 취소
+                            if (menuCloseTimeoutRef.current) {
+                              clearTimeout(menuCloseTimeoutRef.current);
+                              menuCloseTimeoutRef.current = null;
+                            }
+                            setHoveredBooking(b.id || null);
+                          }}
+                          onMouseLeave={(e) => {
+                            const relatedTarget = e.relatedTarget;
+                            // relatedTarget이 Element인지 확인
+                            if (relatedTarget && relatedTarget instanceof Element) {
+                              // 예약 카드나 메뉴 내부로 이동하는 경우는 무시
+                              if (
+                                relatedTarget.closest('[data-booking-card]') ||
+                                relatedTarget.closest('[data-booking-menu]')
+                              ) {
+                                return;
+                              }
+                            }
+                            // relatedTarget이 null이거나 없을 때도 카드 위에 마우스가 있는지 확인
+                            const cardElement = document.querySelector(`[data-booking-card="${b.id}"]:hover`);
+                            if (cardElement) {
+                              return;
+                            }
+                            // 기존 타이머가 있으면 취소
+                            if (menuCloseTimeoutRef.current) {
+                              clearTimeout(menuCloseTimeoutRef.current);
+                            }
+                            // 약간의 지연을 두고 메뉴 닫기 (마우스가 다시 메뉴로 돌아올 수 있도록)
+                            menuCloseTimeoutRef.current = setTimeout(() => {
+                              // 메뉴나 카드 위에 마우스가 없을 때만 닫기
+                              const menuElement = document.querySelector('[data-booking-menu]');
+                              const cardElement = document.querySelector(`[data-booking-card="${b.id}"]:hover`);
+                              if (!menuElement?.matches(':hover') && !cardElement) {
+                                setHoveredBooking(null);
+                                setHoverCardPosition(null);
+                                hoverCardOriginalPositionRef.current = null;
+                                setBookingMenuOpen(null);
+                                setBookingMenuPosition(null);
+                                if (bookingMenuOriginalPositionRef.current) {
+                                  bookingMenuOriginalPositionRef.current = null;
+                                }
+                              }
+                              menuCloseTimeoutRef.current = null;
+                            }, 200);
+                          }}
+                        >
+                          <BookingContextMenu
+                            booking={b}
+                            className="bg-white border border-gray-200 rounded-lg shadow-lg"
+                            style={{
+                              width: '100%',
+                            }}
+                            onNewBooking={() => {
+                            setIsNewBookingOpen(true);
+                            setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onEditBooking={(booking) => {
+                              setEditingBooking(booking);
+                            setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onViewDetail={(booking) => {
+                              setViewingBookingDetail(booking);
+                            setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onViewCustomer={(booking) => {
+                              setViewingBookingDetail(booking);
+                            setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onStatusChange={async (booking, newStatus) => {
+                              console.log('🔄 WeekViewGrid 상태 변경:', { bookingId: booking.id, newStatus });
+                              if (onBookingStatusChange) {
+                                try {
+                                  await onBookingStatusChange(booking, newStatus);
+                                  console.log('✅ WeekViewGrid 상태 변경 완료');
+                                } catch (error) {
+                                  console.error('❌ WeekViewGrid 상태 변경 에러:', error);
+                                  throw error;
+                                }
+                              } else {
+                                console.warn('⚠️ onBookingStatusChange 핸들러가 없습니다.');
+                              }
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onMoveBooking={(booking) => {
+                              // Comment: Enter move mode for the selected booking (week view)
+                              console.log('Move booking (week view):', booking.id);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                              // Parent controls movingBooking state; here we only close the menu
+                              if (movingBooking && movingBooking.id === booking.id) {
+                                return;
+                              }
+                            }}
+                            onCancelBooking={onCancelBooking ? (booking) => {
+                              onCancelBooking(booking);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            } : undefined}
+                            onRegisterSale={(booking) => {
+                              // TODO: 판매 등록 구현
+                              console.log('Register sale:', booking.id);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                            onViewSaleDetail={(booking) => {
+                              // TODO: 판매 상세 구현
+                              console.log('View sale detail:', booking.id);
+                              setBookingMenuOpen(null);
+                              setBookingMenuPosition(null);
+                              if (bookingMenuOriginalPositionRef.current) {
+                                bookingMenuOriginalPositionRef.current = null;
+                              }
+                            }}
+                          />
+                        </div>,
+                        document.body
+                      );
+                    })()}
+                  </div>
+                </div>
               );
             })}
           </div>
