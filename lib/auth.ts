@@ -75,12 +75,13 @@ export function getAllowedRoutes(role: UserRole): string[] {
   const allRoutes = [
     '/admin/appointments',
     '/admin/staff',
-    '/admin/services',
     '/admin/inventory',
     '/admin/prepaid',
     '/admin/customers',
     '/admin/service-history',
     '/admin/settings',
+    '/admin/settings/reservation',
+    '/admin/settings/services',
     '/admin/sales',
     '/admin/wages',
   ];

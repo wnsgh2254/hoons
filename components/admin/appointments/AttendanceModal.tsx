@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import { Z } from '@/lib/constants';
 
 // Comment: Format time string "HH:mm:ss" or "HH:mm" to "HH:mm"
 function formatTime(t: string | null | undefined): string {
@@ -207,113 +210,106 @@ export default function AttendanceModal({
     : '';
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100001] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">출/퇴근 관리</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-black transition-colors"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="출/퇴근 관리"
+      zIndex={Z.MODAL_PRIMARY}
+      maxWidth="max-w-md"
+    >
+      <div className="space-y-6">
+        <div>
+          <p className="text-sm font-medium text-gray-700">{designerName}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{dateLabel} ({workDate})</p>
         </div>
-        <div className="p-6 space-y-6">
-          <div>
-            <p className="text-sm font-medium text-gray-700">{designerName}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{dateLabel} ({workDate})</p>
-          </div>
 
-          {loading ? (
-            <p className="text-sm text-gray-500">불러오는 중...</p>
-          ) : (
-            <>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={handleClockIn}
+        {loading ? (
+          <p className="text-sm text-gray-500">불러오는 중...</p>
+        ) : (
+          <>
+            <div className="flex gap-3">
+              <Button
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleClockIn}
+                disabled={actionLoading !== null}
+                loading={actionLoading === 'clock_in'}
+              >
+                출근
+              </Button>
+              <Button
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleClockOut}
+                disabled={actionLoading !== null}
+                loading={actionLoading === 'clock_out'}
+              >
+                퇴근
+              </Button>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-gray-500">출근 시간</span>
+                <span className="font-medium text-right">
+                  {formatTime(attendance?.clock_in ?? null)}
+                </span>
+                <span className="text-gray-500">퇴근 시간</span>
+                <span className="font-medium text-right">
+                  {formatTime(attendance?.clock_out ?? null)}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-gray-100">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-gray-500">총 근무 시간</span>
+                  <span className="font-bold text-black">{displayTotalText}</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                총 근무 시간 직접 입력
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="0"
+                    value={manualHours}
+                    onChange={(e) => setManualHours(e.target.value)}
+                    className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent text-center"
+                  />
+                  <span className="text-sm text-gray-600">시간</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={0}
+                    max={59}
+                    step={1}
+                    placeholder="0"
+                    value={manualMinutes}
+                    onChange={(e) => setManualMinutes(e.target.value)}
+                    className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent text-center"
+                  />
+                  <span className="text-sm text-gray-600">분</span>
+                </div>
+                <Button
+                  loading={actionLoading === 'manual'}
                   disabled={actionLoading !== null}
-                  className="flex-1 px-4 py-3 rounded-lg bg-green-600 text-white font-medium text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  onClick={handleSaveManualTotal}
                 >
-                  {actionLoading === 'clock_in' ? '저장 중...' : '출근'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClockOut}
-                  disabled={actionLoading !== null}
-                  className="flex-1 px-4 py-3 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {actionLoading === 'clock_out' ? '저장 중...' : '퇴근'}
-                </button>
+                  적용
+                </Button>
               </div>
-
-              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <span className="text-gray-500">출근 시간</span>
-                  <span className="font-medium text-right">
-                    {formatTime(attendance?.clock_in ?? null)}
-                  </span>
-                  <span className="text-gray-500">퇴근 시간</span>
-                  <span className="font-medium text-right">
-                    {formatTime(attendance?.clock_out ?? null)}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-gray-500">총 근무 시간</span>
-                    <span className="font-bold text-black">{displayTotalText}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">
-                  총 근무 시간 직접 입력
-                </label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      placeholder="0"
-                      value={manualHours}
-                      onChange={(e) => setManualHours(e.target.value)}
-                      className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent text-center"
-                    />
-                    <span className="text-sm text-gray-600">시간</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      step={1}
-                      placeholder="0"
-                      value={manualMinutes}
-                      onChange={(e) => setManualMinutes(e.target.value)}
-                      className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent text-center"
-                    />
-                    <span className="text-sm text-gray-600">분</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSaveManualTotal}
-                    disabled={actionLoading !== null}
-                    className="px-4 py-2 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {actionLoading === 'manual' ? '저장 중...' : '적용'}
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">
-                  빈칸이면 출근/퇴근 시간으로 자동 계산됩니다. 시간·분 입력 후 적용하세요.
-                </p>
-              </div>
-            </>
-          )}
-        </div>
+              <p className="text-xs text-gray-400 mt-1">
+                빈칸이면 출근/퇴근 시간으로 자동 계산됩니다. 시간·분 입력 후 적용하세요.
+              </p>
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

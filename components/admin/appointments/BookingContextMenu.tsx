@@ -2,12 +2,7 @@
 
 import React from 'react';
 import { getBookingStatusColor } from '@/lib/utils/appointment-utils';
-import type { Booking } from '@/lib/types';
-
-type BookingWithRelations = Booking & {
-  designer?: { id: number; name: string } | null;
-  service?: { id: number; name: string; duration_minutes?: number | null } | null;
-};
+import type { BookingWithRelations } from '@/lib/types';
 
 interface BookingContextMenuProps {
   booking: BookingWithRelations;

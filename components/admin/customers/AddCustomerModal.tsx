@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useStaff } from '@/hooks/useStaff';
 
 interface AddCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (customer?: { id: number; name: string; phone: string }) => void;
 }
 
 export default function AddCustomerModal({
@@ -16,7 +17,7 @@ export default function AddCustomerModal({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [assignedDesignerId, setAssignedDesignerId] = useState<number | null>(null);
-  const [designers, setDesigners] = useState<any[]>([]);
+  const { staff: designers } = useStaff({ onlyActive: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,22 +30,6 @@ export default function AddCustomerModal({
       setError(null);
     }
   }, [isOpen]);
-
-  // Comment: Load designers on mount
-  useEffect(() => {
-    const fetchDesigners = async () => {
-      try {
-        const res = await fetch('/api/staff');
-        const data = await res.json();
-        if (res.ok && data.staff) {
-          setDesigners(data.staff.filter((d: any) => d.is_active));
-        }
-      } catch (error) {
-        console.error('Error fetching designers:', error);
-      }
-    };
-    fetchDesigners();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +61,7 @@ export default function AddCustomerModal({
 
       if (res.ok) {
         if (onSuccess) {
-          onSuccess();
+          onSuccess(data.customer ? { id: data.customer.id, name: data.customer.name, phone: data.customer.phone } : undefined);
         }
         onClose();
       } else {
@@ -92,7 +77,7 @@ export default function AddCustomerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100011] p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100011] p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full">
         <div className="bg-black text-white p-4 rounded-t-2xl flex items-center justify-between">
           <h2 className="text-xl font-bold">고객등록</h2>
@@ -100,7 +85,7 @@ export default function AddCustomerModal({
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5.5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               고객명 <span className="text-red-500">*</span>

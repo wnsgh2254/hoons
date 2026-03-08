@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { handleApiError } from '@/lib/api-utils';
 
 // Comment: Load supplier list for purchases dropdown / supplier management
 export async function GET(request: NextRequest) {
@@ -19,14 +20,12 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching inventory suppliers:', error);
-      return NextResponse.json({ suppliers: [] }, { status: 200 });
+      return handleApiError(error, 'inventory-suppliers GET', '매입처 목록을 불러오지 못했습니다.');
     }
 
     return NextResponse.json({ suppliers: data ?? [] }, { status: 200 });
   } catch (error) {
-    console.error('Unexpected error in inventory-suppliers GET route:', error);
-    return NextResponse.json({ suppliers: [] }, { status: 200 });
+    return handleApiError(error, 'inventory-suppliers GET', '매입처 목록을 불러오지 못했습니다.');
   }
 }
 
@@ -69,20 +68,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating supplier:', error);
-      return NextResponse.json(
-        { error: '매입처를 저장하지 못했습니다.' },
-        { status: 500 }
-      );
+      return handleApiError(error, 'inventory-suppliers POST', '매입처를 저장하지 못했습니다.');
     }
 
     return NextResponse.json({ supplier: data }, { status: 201 });
   } catch (error) {
-    console.error('Unexpected error in inventory-suppliers POST route:', error);
-    return NextResponse.json(
-      { error: '매입처를 저장하지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory-suppliers POST', '매입처를 저장하지 못했습니다.');
   }
 }
 
@@ -113,20 +104,12 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error updating supplier:', error);
-      return NextResponse.json(
-        { error: '매입처를 수정하지 못했습니다.' },
-        { status: 500 }
-      );
+      return handleApiError(error, 'inventory-suppliers PATCH', '매입처를 수정하지 못했습니다.');
     }
 
     return NextResponse.json({ supplier: data }, { status: 200 });
   } catch (error) {
-    console.error('Unexpected error in inventory-suppliers PATCH route:', error);
-    return NextResponse.json(
-      { error: '매입처를 수정하지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory-suppliers PATCH', '매입처를 수정하지 못했습니다.');
   }
 }
 
@@ -145,20 +128,12 @@ export async function DELETE(request: NextRequest) {
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting supplier:', error);
-      return NextResponse.json(
-        { error: '매입처를 삭제하지 못했습니다.' },
-        { status: 500 }
-      );
+      return handleApiError(error, 'inventory-suppliers DELETE', '매입처를 삭제하지 못했습니다.');
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error('Unexpected error in inventory-suppliers DELETE route:', error);
-    return NextResponse.json(
-      { error: '매입처를 삭제하지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory-suppliers DELETE', '매입처를 삭제하지 못했습니다.');
   }
 }
 

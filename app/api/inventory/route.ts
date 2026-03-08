@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getInventoryStatus } from '@/lib/utils/inventory-utils';
+import { handleApiError } from '@/lib/api-utils';
 
 // Comment: Fetch inventory items from Supabase with optional filtering
 export async function GET(request: NextRequest) {
@@ -36,12 +38,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      // Comment: If inventory table does not exist or other DB error
-      console.error('Error fetching inventory items:', error);
-      return NextResponse.json(
-        { error: '인벤토리 목록을 불러오지 못했습니다.' },
-        { status: 500 }
-      );
+      return handleApiError(error, 'inventory GET', '인벤토리 목록을 불러오지 못했습니다.');
     }
 
     let items = (data || []).map((item: any) => {
@@ -65,11 +62,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ items }, { status: 200 });
   } catch (error) {
-    console.error('Unexpected error in inventory GET route:', error);
-    return NextResponse.json(
-      { error: '인벤토리 목록을 불러오지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory GET', '인벤토리 목록을 불러오지 못했습니다.');
   }
 }
 
@@ -89,9 +82,6 @@ export async function POST(request: NextRequest) {
     const numericPrice = Number(price);
     const numericStock = Number(stock);
 
-    const status =
-      numericStock <= 0 ? 'Out of Stock' : numericStock <= 5 ? 'Low Stock' : 'In Stock';
-
     const { data, error } = await supabase
       .from('inventory_items')
       .insert({
@@ -101,18 +91,14 @@ export async function POST(request: NextRequest) {
         category: String(category).trim(),
         price: numericPrice,
         stock: numericStock,
-        status,
+        status: getInventoryStatus(numericStock),
         icon: icon ? String(icon).trim() : null,
       })
       .select()
       .single();
 
     if (error) {
-      console.error('Error inserting inventory item:', error);
-      return NextResponse.json(
-        { error: '인벤토리 상품을 추가하지 못했습니다.' },
-        { status: 500 }
-      );
+      return handleApiError(error, 'inventory POST', '인벤토리 상품을 추가하지 못했습니다.');
     }
 
     const item = {
@@ -123,11 +109,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
-    console.error('Unexpected error in inventory POST route:', error);
-    return NextResponse.json(
-      { error: '인벤토리 상품을 추가하지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory POST', '인벤토리 상품을 추가하지 못했습니다.');
   }
 }
 
@@ -148,12 +130,9 @@ export async function PUT(request: NextRequest) {
         const stock = Number(item.stock);
         if (!id || Number.isNaN(stock)) return null;
 
-        const status =
-          stock <= 0 ? 'Out of Stock' : stock <= 5 ? 'Low Stock' : 'In Stock';
-
         const { error } = await supabase
           .from('inventory_items')
-          .update({ stock, status })
+          .update({ stock, status: getInventoryStatus(stock) })
           .eq('id', id);
 
         if (error) {
@@ -169,11 +148,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ updated: updatedCount }, { status: 200 });
   } catch (error) {
-    console.error('Unexpected error in inventory PUT route:', error);
-    return NextResponse.json(
-      { error: '인벤토리 수량을 저장하지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory PUT', '인벤토리 수량을 저장하지 못했습니다.');
   }
 }
 
@@ -205,11 +180,7 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error updating inventory item:', error);
-      return NextResponse.json(
-        { error: '인벤토리 상품을 수정하지 못했습니다.' },
-        { status: 500 }
-      );
+      return handleApiError(error, 'inventory PATCH', '인벤토리 상품을 수정하지 못했습니다.');
     }
 
     const item = {
@@ -220,11 +191,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ item }, { status: 200 });
   } catch (error) {
-    console.error('Unexpected error in inventory PATCH route:', error);
-    return NextResponse.json(
-      { error: '인벤토리 상품을 수정하지 못했습니다.' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'inventory PATCH', '인벤토리 상품을 수정하지 못했습니다.');
   }
 }
 

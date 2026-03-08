@@ -179,6 +179,7 @@ export async function PATCH(request: NextRequest) {
       product_deduction_pct,
       instagramLink,
       is_active,
+      weekly_deduction,
     } = body;
 
     const designer = await updateDesigner(Number(id), {
@@ -193,6 +194,7 @@ export async function PATCH(request: NextRequest) {
       product_deduction_pct,
       instagramLink,
       is_active,
+      weekly_deduction,
     });
 
     return NextResponse.json({ designer }, { status: 200 });

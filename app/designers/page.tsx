@@ -118,13 +118,13 @@ export default function DesignersPage() {
   return (
     <div className="min-h-screen bg-[#F4F4F4] pt-24">
        <div className="pt-8 px-6 md:px-12 border-b border-black flex flex-col md:flex-row justify-between items-end pb-6">
-            <h1 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-black">
+            <h1 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-black">
                 Designers
             </h1>
             <div className="flex gap-4 mb-2 md:mb-4">
                 <button 
                     onClick={() => setSelectedShop('all')}
-                    className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black transition-colors ${selectedShop === 'all' ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
+                    className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black transition-colors ${selectedShop === 'all' ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
                 >
                     All
                 </button>
@@ -132,7 +132,7 @@ export default function DesignersPage() {
                     <button 
                         key={shop.id}
                         onClick={() => setSelectedShop(shop.id)}
-                        className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black transition-colors ${selectedShop === shop.id ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
+                        className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black transition-colors ${selectedShop === shop.id ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
                     >
                         {shop.name.replace('HAEYOOM ', '')}
                     </button>
@@ -162,16 +162,16 @@ export default function DesignersPage() {
                   </div>
                   
                   <div className="p-8">
-                      <h3 className="font-display font-light text-4xl uppercase tracking-tighter mb-3 text-black">{designer.name}</h3>
+                      <h3 className="font-display font-normal text-4xl uppercase tracking-tighter mb-3 text-black">{designer.name}</h3>
                       <p className="text-sm font-mono uppercase text-black mb-8">{shops.find(s => s.id === designer.shopId)?.name.replace('HAEYOOM ', '') || ''}</p>
                       
-                      <p className="text-base leading-tight mb-8 min-h-[3em] font-light text-black">
+                      <p className="text-base leading-tight mb-8 min-h-[3em] font-normal text-black">
                         {designer.description}
                       </p>
 
                       <div className="flex flex-wrap gap-2">
                         {designer.specialties.map(spec => (
-                            <span key={spec} className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-light tracking-wider text-black">
+                            <span key={spec} className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-normal tracking-wider text-black">
                                 {spec}
                             </span>
                         ))}
@@ -187,7 +187,7 @@ export default function DesignersPage() {
                 key={`filler-${i}`} 
                 className="hidden md:flex border-b border-black md:border-r md:[&:nth-child(4n)]:border-r-0 bg-[#EAEAEA] min-h-[400px] items-center justify-center"
              >
-                 <span className="font-display font-light text-7xl text-gray-300 uppercase tracking-tighter">Haeyoom</span>
+                 <span className="font-display font-normal text-7xl text-gray-300 uppercase tracking-tighter">Haeyoom</span>
              </div>
           ))}
        </div>

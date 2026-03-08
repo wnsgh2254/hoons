@@ -23,7 +23,7 @@ function BookingConfirmedContent() {
             <span>Booking Confirmed</span>
           </div>
           <div className="space-y-3">
-            <h1 className="text-3xl md:text-4xl font-light tracking-tight text-slate-900 uppercase">
+            <h1 className="text-3xl md:text-4xl font-normal tracking-tight text-slate-900 uppercase">
               Your appointment is confirmed
             </h1>
             <p className="text-gray-500">
@@ -68,13 +68,13 @@ function BookingConfirmedContent() {
           <div className="flex justify-center gap-4 pt-4">
             <Link
               href="/booking"
-              className="px-6 py-3 text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
+              className="px-6 py-3 text-sm font-normal uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
             >
               Make another booking
             </Link>
             <Link
               href="/"
-              className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
+              className="px-6 py-3  text-sm font-normal uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
             >
               Back to home
             </Link>

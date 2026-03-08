@@ -144,17 +144,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Comment: Fetch all active designers or specific designer
+    // Comment: Fetch all active designers or specific designer (try with weekly_deduction, fallback without)
+    let designers: any[] | null = null;
+    let designersError: any = null;
+
     let designersQuery = supabase
       .from('designers')
-      .select('id, name, wage_type, percent_rate, hourly_rate, is_active')
+      .select('id, name, wage_type, percent_rate, hourly_rate, weekly_deduction, is_active')
       .eq('is_active', true);
 
     if (designerId) {
       designersQuery = designersQuery.eq('id', designerId);
     }
 
-    const { data: designers, error: designersError } = await designersQuery;
+    const result = await designersQuery;
+    if (result.error && result.error.code === '42703') {
+      let fallbackQuery = supabase
+        .from('designers')
+        .select('id, name, wage_type, percent_rate, hourly_rate, is_active')
+        .eq('is_active', true);
+      if (designerId) {
+        fallbackQuery = fallbackQuery.eq('id', designerId);
+      }
+      const fallbackResult = await fallbackQuery;
+      designers = fallbackResult.data;
+      designersError = fallbackResult.error;
+    } else {
+      designers = result.data;
+      designersError = result.error;
+    }
 
     if (designersError) {
       console.error('Error fetching designers:', designersError);
@@ -259,7 +277,6 @@ export async function GET(request: NextRequest) {
             product: sales.total?.product?.amount || 0,
             membership: sales.sales?.membership?.amount || 0,
             membershipDeduction: sales.membershipDeduction?.subtotal || 0,
-            ticket: sales.sales?.ticket?.amount || 0,
             // Comment: Incentive amounts for payslip (percent: rate applied; hourly: 시급 only)
             serviceSales,
             serviceDeduction,

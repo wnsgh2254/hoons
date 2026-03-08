@@ -25,7 +25,9 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: '/admin/appointments', icon: 'calendar_month', label: 'Appointments' },
-  { href: '/admin/staff', icon: 'groups', label: 'Staff' },
+  { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
+  { href: '/admin/customers', icon: 'people', label: 'Customers' },
+  { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
   {
     href: '/admin/inventory?view=overview',
     icon: 'inventory_2',
@@ -49,11 +51,22 @@ const navItems: NavItem[] = [
       },
     ],
   },
-  { href: '/admin/services', icon: 'content_cut', label: 'Services' },
-  { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
-  { href: '/admin/customers', icon: 'people', label: 'Customers' },
-  { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
+  { href: '/admin/staff', icon: 'groups', label: 'Staff' },
   { href: '/admin/wages', icon: 'payments', label: 'Wages' },
+  {
+    href: '/admin/settings/reservation',
+    icon: 'settings',
+    label: 'Settings',
+    submenu: [
+      {
+        title: '설정',
+        items: [
+          { href: '/admin/settings/services', icon: 'content_cut', label: '서비스 및 제품' },
+          { href: '/admin/settings/reservation', icon: 'calendar_clock', label: '예약 설정' },
+        ],
+      },
+    ],
+  },
 ];
 
 export default function AdminTopNav() {
@@ -90,7 +103,10 @@ export default function AdminTopNav() {
     }
   };
 
-  const isActive = (path: string) => pathname === path;
+  const isActive = (path: string) => {
+    const basePath = path.split('?')[0];
+    return pathname === basePath || pathname.startsWith(basePath + '/');
+  };
 
   // Comment: Filter nav items based on user role
   const filteredNavItems = navItems.filter((item) => {
@@ -101,7 +117,7 @@ export default function AdminTopNav() {
 
   // Comment: Keep admin top nav above other overlays so inventory menu is always visible on hover
   return (
-    <header className="h-16 flex items-center px-6 md:px-12 py-5 bg-white border-b border-gray-200 z-[12000] sticky top-0">
+    <header className="h-16 flex items-center px-5.5 md:px-11.5 py-4.5 bg-white border-b border-gray-200 z-[12000] sticky top-0">
       <div className="container mx-auto flex items-center justify-between w-full">
         {/* Logo */}
         <Link href="/admin/appointments" className="flex items-center hover:opacity-70 transition-opacity">
@@ -147,8 +163,8 @@ export default function AdminTopNav() {
                   >
                     <span className="material-symbols-outlined text-xl">{item.icon}</span>
                   </Link>
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-0 w-[360px] rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto z-[9999]">
-                    <div className="p-4 grid grid-cols-2 gap-4">
+                  <div className={`absolute top-full left-1/2 -translate-x-1/2 mt-0 rounded-2xl bg-white text-gray-900 shadow-2xl border border-gray-200 opacity-0 translate-y-1 pointer-events-none transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto z-[9999] ${item.submenu.length > 1 ? 'w-[360px]' : 'w-auto min-w-[200px]'}`}>
+                    <div className={`p-4 grid gap-4 ${item.submenu.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       {item.submenu.map((section) => (
                         <div key={section.title} className="flex flex-col gap-3">
                           <p className="text-sm font-semibold text-gray-900">{section.title}</p>
@@ -218,7 +234,7 @@ export default function AdminTopNav() {
       {mobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/40 z-[11998] md:hidden"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[11998] md:hidden"
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />

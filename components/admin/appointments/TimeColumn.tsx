@@ -53,11 +53,18 @@ export default function TimeColumn({ isWeekViewMode }: TimeColumnProps) {
     );
   }
 
-  // Week view time column - not sticky
+  // Week view time column - sticky left
   return (
-    <div 
-      className="w-20 shrink-0 border-r border-[#e2e8f0] bg-white text-xs font-medium text-[#94a3b8] flex flex-col" 
-      style={timeColumnStyle}
+    <div
+      className="w-20 shrink-0 border-r border-[#e2e8f0] bg-white text-xs font-medium text-[#94a3b8] flex flex-col"
+      style={{
+        position: 'sticky',
+        left: 0,
+        zIndex: 50,
+        backgroundColor: 'white',
+        boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+        ...timeColumnStyle
+      }}
     >
       <div className="pt-2 pb-2">
         {Array.from({ length: (GRID_END_HOUR - GRID_START_HOUR) * 2 }).map((_, i) => {

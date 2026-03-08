@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Button, Input, Select } from '@/components/ui';
 
 type ReservationStatusFilter =
   | 'all'
@@ -50,19 +51,20 @@ export default function ReservationHistoryFilters({
   designers,
 }: ReservationHistoryFiltersProps) {
   return (
-    <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/60">
+    <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
       <div className="flex flex-col gap-4">
         {/* 첫 번째 줄: 날짜 기준 선택 및 날짜 입력 */}
         <div className="flex flex-wrap gap-4 items-center">
           {/* 날짜 기준 선택 */}
-          <select
+          <Select
             value={dateType}
             onChange={(e) => setDateType(e.target.value as 'booking' | 'created')}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[120px] focus:ring-2 focus:ring-black focus:border-transparent"
-          >
-            <option value="booking">예약일</option>
-            <option value="created">등록일</option>
-          </select>
+            options={[
+              { value: 'booking', label: '예약일' },
+              { value: 'created', label: '등록일' },
+            ]}
+            className="min-w-[120px]"
+          />
 
           {/* 날짜/기간별 선택 */}
           <div className="flex items-center gap-2 h-[38px]">
@@ -91,30 +93,27 @@ export default function ReservationHistoryFilters({
           {/* 날짜 입력 */}
           {dateMode === 'range' ? (
             <div className="flex items-center gap-2">
-              <input
+              <Input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               />
               <span className="text-xs text-gray-500">~</span>
-              <input
+              <Input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               />
             </div>
           ) : (
             <div>
-              <input
+              <Input
                 type="date"
                 value={startDate}
                 onChange={(e) => {
                   setStartDate(e.target.value);
                   setEndDate(e.target.value);
                 }}
-                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
               />
             </div>
           )}
@@ -123,49 +122,42 @@ export default function ReservationHistoryFilters({
         {/* 두 번째 줄: 자원, 상태, 검색 */}
         <div className="flex flex-wrap gap-4 items-end">
           {/* 자원 필터 */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">자원</span>
-            <select
-              value={designerFilter === 'all' ? 'all' : String(designerFilter)}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === 'all') setDesignerFilter('all');
-                else setDesignerFilter(Number(v));
-              }}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[140px] focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="all">전체</option>
-              {designers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="자원"
+            value={designerFilter === 'all' ? 'all' : String(designerFilter)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === 'all') setDesignerFilter('all');
+              else setDesignerFilter(Number(v));
+            }}
+            options={[
+              { value: 'all', label: '전체' },
+              ...designers.map((d) => ({ value: String(d.id), label: d.name })),
+            ]}
+            className="min-w-[140px]"
+          />
 
           {/* 상태 필터 */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">상태</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as ReservationStatusFilter)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[140px] focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="all">전체(취소포함)</option>
-              <option value="BOOKED">예약</option>
-              <option value="ARRIVED">고객입장</option>
-              <option value="PAID">계산완료</option>
-              <option value="NOSHOW">노쇼</option>
-              <option value="CANCELLED">취소</option>
-            </select>
-          </div>
+          <Select
+            label="상태"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as ReservationStatusFilter)}
+            options={[
+              { value: 'all', label: '전체(취소포함)' },
+              { value: 'BOOKED', label: '예약' },
+              { value: 'ARRIVED', label: '고객입장' },
+              { value: 'PAID', label: '계산완료' },
+              { value: 'NOSHOW', label: '노쇼' },
+              { value: 'CANCELLED', label: '취소' },
+            ]}
+            className="min-w-[140px]"
+          />
 
           {/* 검색 입력 */}
           <div className="flex flex-1 min-w-[200px] flex-col gap-1">
             <span className="text-xs text-gray-500">고객명 또는 휴대폰번호</span>
             <div className="flex items-center gap-2">
-              <input
-                type="text"
+              <Input
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
                 onKeyDown={(e) => {
@@ -174,15 +166,9 @@ export default function ReservationHistoryFilters({
                   }
                 }}
                 placeholder="고객명 또는 휴대폰 번호"
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                wrapperClassName="flex-1"
               />
-              <button
-                type="button"
-                onClick={onSearch}
-                className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap"
-              >
-                검색
-              </button>
+              <Button onClick={onSearch}>검색</Button>
             </div>
           </div>
         </div>

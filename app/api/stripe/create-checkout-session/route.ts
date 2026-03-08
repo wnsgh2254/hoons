@@ -1,39 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { createPublicBooking } from "@/lib/data";
-
-// Comment: Helper to normalize AU phone numbers into local / E.164 formats (same logic as appointment route)
-function buildPhoneVariants(phoneRaw: string | undefined | null) {
-  if (!phoneRaw) return { local: null as string | null, e164: null as string | null };
-  const digitsOnly = phoneRaw.replace(/[^0-9+]/g, "");
-  // Already in +61 form
-  if (digitsOnly.startsWith("+61")) {
-    const withoutCountry = digitsOnly.slice(3);
-    const local =
-      withoutCountry.length === 9 && !withoutCountry.startsWith("0")
-        ? `0${withoutCountry}`
-        : digitsOnly;
-    return { local, e164: digitsOnly };
-  }
-  // Starts with 61...
-  if (!digitsOnly.startsWith("+") && digitsOnly.startsWith("61")) {
-    const e164 = `+${digitsOnly}`;
-    const withoutCountry = digitsOnly.slice(2);
-    const local =
-      withoutCountry.length === 9 && !withoutCountry.startsWith("0")
-        ? `0${withoutCountry}`
-        : e164;
-    return { local, e164 };
-  }
-  // Local 04.. style
-  if (digitsOnly.startsWith("0") && digitsOnly.length >= 9) {
-    const local = digitsOnly;
-    const e164 = `+61${digitsOnly.slice(1)}`;
-    return { local, e164 };
-  }
-  return { local: digitsOnly, e164: null as string | null };
-}
+import { createPublicBooking, buildPhoneVariants } from "@/lib/data";
 
 export async function POST(request: NextRequest) {
   try {

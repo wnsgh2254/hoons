@@ -1,19 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import type { Booking } from '@/lib/types';
-
-type BookingWithRelations = Booking & {
-  designer?: { id: number; name: string } | null;
-  service?: { id: number; name: string; duration_minutes?: number | null } | null;
-  customer?: { id: number; name: string; phone?: string | null } | null;
-};
+import type { BookingWithRelations } from '@/lib/types';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import Select from '@/components/ui/Select';
+import { Z } from '@/lib/constants';
 
 interface CancelBookingModalProps {
   isOpen: boolean;
   booking: BookingWithRelations | null;
   onClose: () => void;
-  onConfirm: (booking: BookingWithRelations, cancellationReason: string) => Promise<void>;
+  onSuccess: () => void;
 }
 
 const CANCELLATION_REASONS = [
@@ -29,7 +27,7 @@ export default function CancelBookingModal({
   isOpen,
   booking,
   onClose,
-  onConfirm,
+  onSuccess,
 }: CancelBookingModalProps) {
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,15 +39,30 @@ export default function CancelBookingModal({
 
   const handleConfirm = async () => {
     if (isSubmitting) return;
-    
+
     setIsSubmitting(true);
     try {
-      await onConfirm(booking, selectedReason);
+      const res = await fetch(`/api/appointment/${booking.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'CANCELLED',
+          cancellation_reason: selectedReason || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || '예약 취소에 실패했습니다.');
+      }
+
+      alert('예약이 취소되었습니다.');
       setSelectedReason('');
       onClose();
-    } catch (error) {
+      onSuccess();
+    } catch (error: any) {
       console.error('Error cancelling booking:', error);
-      alert('예약 취소 중 오류가 발생했습니다.');
+      alert(error.message || '예약 취소 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -61,74 +74,30 @@ export default function CancelBookingModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={handleCancel}
+    <Modal
+      isOpen={isOpen && !!booking}
+      onClose={handleCancel}
+      title="예약 취소"
+      zIndex={Z.MODAL_PRIMARY}
+      maxWidth="max-w-md"
+      footer={
+        <>
+          <Button variant="ghost" disabled={isSubmitting} onClick={handleCancel}>취소</Button>
+          <Button loading={isSubmitting} onClick={handleConfirm}>저장</Button>
+        </>
+      }
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={handleCancel}
-          className="absolute right-4 top-4 text-gray-400 hover:text-black"
-        >
-          <span className="material-symbols-outlined text-xl">close</span>
-        </button>
-
-        {/* Title */}
-        <h2 className="text-lg font-bold text-black mb-2">예약 취소</h2>
-
-        {/* Body */}
-        <div className="space-y-4 text-sm">
-          {/* Cancellation Reason Dropdown */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">
-              취소 사유
-            </label>
-            <select
-              value={selectedReason}
-              onChange={(e) => setSelectedReason(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-            >
-              {CANCELLATION_REASONS.map((reason) => (
-                <option key={reason.value} value={reason.value}>
-                  {reason.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Confirmation Message */}
-          <p className="text-sm text-gray-900">
-            {customerName} 고객님의 {bookingDate} 예약이 취소됩니다.
-          </p>
-        </div>
-
-        {/* Footer Buttons */}
-        <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={isSubmitting}
-            className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={isSubmitting}
-            className={`px-5 py-2 rounded-lg text-xs md:text-sm font-semibold text-white flex items-center gap-2 ${
-              isSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-black hover:bg-gray-800'
-            }`}
-          >
-            {isSubmitting ? '저장 중...' : '저장'}
-          </button>
-        </div>
+      <div className="space-y-4 text-sm">
+        <Select
+          label="취소 사유"
+          options={CANCELLATION_REASONS}
+          value={selectedReason}
+          onChange={(e) => setSelectedReason(e.target.value)}
+        />
+        <p className="text-sm text-gray-900">
+          {customerName} 고객님의 {bookingDate} 예약이 취소됩니다.
+        </p>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -10,6 +10,30 @@ export async function GET(request: NextRequest) {
     const shopId = searchParams.get('shopId');
     const designerId = searchParams.get('designer_id');
 
+    // Comment: If all=true, return all active schedules for all designers (used by HolidayCalendarModal)
+    const allParam = searchParams.get('all');
+    if (!designerId && !date && allParam === 'true') {
+      let query = supabase
+        .from('designer_schedules')
+        .select('id, designer_id, weekday, start_time, end_time')
+        .is('effective_to', null)
+        .order('designer_id', { ascending: true })
+        .order('weekday', { ascending: true });
+
+      if (shopId) {
+        query = query.eq('shop_id', Number(shopId));
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching all schedules:', error);
+        return NextResponse.json({ error: '전체 스케줄 조회에 실패했습니다.' }, { status: 500 });
+      }
+
+      return NextResponse.json({ schedules: data || [] }, { status: 200 });
+    }
+
     // Comment: If designer_id is provided, return full schedule for that designer
     if (designerId) {
       let query = supabase

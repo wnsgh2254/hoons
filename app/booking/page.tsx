@@ -131,6 +131,8 @@ export default function BookingPage() {
   const [availableDesignerIds, setAvailableDesignerIds] = useState<number[]>([]);
   const [loadingDesigners, setLoadingDesigners] = useState<boolean>(false);
   const [servicesForShop, setServicesForShop] = useState<any[]>([]);
+  const [bookingItemsForShop, setBookingItemsForShop] = useState<any[]>([]);
+  const [businessHoursForShop, setBusinessHoursForShop] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
@@ -189,6 +191,23 @@ export default function BookingPage() {
   useEffect(() => {
     void loadAllServices();
   }, []);
+
+  // Load booking items on mount (shared across all shops)
+  useEffect(() => {
+    void loadBookingItems();
+  }, []);
+
+  // Load business hours when shop is selected
+  useEffect(() => {
+    if (selectedShop && shopsDb.length > 0) {
+      const currentShop = shopsDb.find((s) => String(s.id) === selectedShop);
+      if (currentShop?.id) {
+        void loadBusinessHours(currentShop.id);
+      }
+    } else {
+      void loadBusinessHours();
+    }
+  }, [selectedShop, shopsDb]);
 
   // Comment: Load available designers when date and shop are selected
   useEffect(() => {
@@ -267,6 +286,35 @@ export default function BookingPage() {
       setServicesForShop(json.services || []);
     } catch (error) {
       console.error('Unexpected error fetching services:', error);
+    }
+  };
+
+  // Load booking items from admin reservation settings
+  const loadBookingItems = async () => {
+    try {
+      const params = new URLSearchParams({ activeOnly: 'true' });
+      const res = await fetch(`/api/booking-items?${params.toString()}`);
+      const json = await res.json();
+      if (res.ok) {
+        setBookingItemsForShop(json.bookingItems || []);
+      }
+    } catch (error) {
+      console.error('Error fetching booking items:', error);
+    }
+  };
+
+  // Load business hours from admin reservation settings
+  const loadBusinessHours = async (shopIdDb?: number | null) => {
+    try {
+      const params = new URLSearchParams();
+      if (shopIdDb) params.set('shopId', String(shopIdDb));
+      const res = await fetch(`/api/business-hours?${params.toString()}`);
+      const json = await res.json();
+      if (res.ok) {
+        setBusinessHoursForShop(json.businessHours || []);
+      }
+    } catch (error) {
+      console.error('Error fetching business hours:', error);
     }
   };
 
@@ -373,6 +421,96 @@ export default function BookingPage() {
 
   // Define category order
   const categoryOrder = ['Cut', 'Dry', 'Perm', 'Magic', 'Hot Perm', 'Color', 'Clinic', 'Package', 'Other'];
+
+  // Map booking items from admin reservation settings to Service interface for customer booking
+  const bookingItemServices: Service[] = bookingItemsForShop.map((item: any) => {
+    const totalMinutes = (item.duration_hours || 0) * 60 + (item.duration_minutes || 0);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const durationParts: string[] = [];
+    if (hours > 0) durationParts.push(`${hours}hr`);
+    if (mins > 0) durationParts.push(`${mins}min`);
+    return {
+      id: `booking_item_${item.id}`,
+      name: item.name,
+      price: 0,
+      priceLabel: '',
+      duration: durationParts.join(' ') || '0min',
+      description: '',
+      image: '',
+      selected: selectedService ? selectedService.id === `booking_item_${item.id}` : false,
+    };
+  });
+
+  // Use booking items if available, otherwise fallback to services
+  const displayServices = bookingItemServices.length > 0 ? bookingItemServices : services;
+
+  // Generate dynamic time slots from business hours
+  const dynamicTimeSlots = useMemo(() => {
+    if (businessHoursForShop.length === 0 || !selectedDate) {
+      return { morning: [] as string[], afternoon: [] as string[], evening: [] as string[] };
+    }
+
+    // Convert JS day (0=Sun) to Korean day
+    const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayOfWeek = DAYS_KO[new Date(selectedDate).getDay()];
+
+    // Find matching business hours for this day
+    const matchingHours = businessHoursForShop.filter((h: any) =>
+      Array.isArray(h.days) && h.days.includes(dayOfWeek),
+    );
+
+    if (matchingHours.length === 0) {
+      return { morning: [] as string[], afternoon: [] as string[], evening: [] as string[] };
+    }
+
+    // Generate 30-min slots
+    const allSlots: string[] = [];
+    for (const h of matchingHours) {
+      const [startH, startM] = (h.start_time as string).split(':').map(Number);
+      const [endH, endM] = (h.end_time as string).split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+
+      for (let m = startMinutes; m < endMinutes; m += 30) {
+        const hour = Math.floor(m / 60);
+        const minute = m % 60;
+        const isPM = hour >= 12;
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        const timeStr = `${displayHour}:${String(minute).padStart(2, '0')} ${isPM ? 'PM' : 'AM'}`;
+        if (!allSlots.includes(timeStr)) {
+          allSlots.push(timeStr);
+        }
+      }
+    }
+
+    // Sort slots chronologically
+    const parseTime = (t: string) => {
+      const [timePart, ampm] = t.split(' ');
+      const [h, min] = timePart.split(':').map(Number);
+      let hour24 = h;
+      if (ampm === 'PM' && h !== 12) hour24 += 12;
+      if (ampm === 'AM' && h === 12) hour24 = 0;
+      return hour24 * 60 + min;
+    };
+    allSlots.sort((a, b) => parseTime(a) - parseTime(b));
+
+    // Group into Morning/Afternoon/Evening
+    const morning: string[] = [];
+    const afternoon: string[] = [];
+    const evening: string[] = [];
+
+    for (const slot of allSlots) {
+      const mins = parseTime(slot);
+      if (mins < 720) morning.push(slot); // Before 12:00
+      else if (mins < 1020) afternoon.push(slot); // 12:00 - 17:00
+      else evening.push(slot); // 17:00+
+    }
+
+    return { morning, afternoon, evening };
+  }, [businessHoursForShop, selectedDate]);
+
+  const hasTimeSlots = dynamicTimeSlots.morning.length > 0 || dynamicTimeSlots.afternoon.length > 0 || dynamicTimeSlots.evening.length > 0;
 
   const handleDateChange = (date: string) => {
     setSelectedDate(date);
@@ -712,12 +850,12 @@ export default function BookingPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
             <section className="lg:col-span-8 space-y-8">
               <div>
-                <h1 className="text-3xl md:text-4xl font-light tracking-tight text-slate-900 mb-2 uppercase">Secure Your Booking</h1>
+                <h1 className="text-3xl md:text-4xl font-normal tracking-tight text-slate-900 mb-2 uppercase">Secure Your Booking</h1>
                 <p className="text-gray-500">Pay your deposit by card to confirm your appointment.</p>
                 {customerGreeting && (
                   <div className="mt-4 inline-flex items-center gap-3 border border-black px-4 py-2 bg-[#F4F4F4]">
                     <span className="material-symbols-outlined text-base">person</span>
-                    <span className="text-sm font-light tracking-widest uppercase">{customerGreeting}</span>
+                    <span className="text-sm font-normal tracking-widest uppercase">{customerGreeting}</span>
                   </div>
                 )}
               </div>
@@ -814,7 +952,7 @@ export default function BookingPage() {
               <div className="flex items-center justify-between pt-4">
                 <button
                   onClick={handleBack}
-                  className="px-6 py-3 text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors flex items-center gap-2"
+                  className="px-6 py-3 text-sm font-normal uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors flex items-center gap-2"
                 >
                   <span className="material-symbols-outlined">arrow_back</span>
                   Back
@@ -884,7 +1022,7 @@ export default function BookingPage() {
               <span>Booking Confirmed</span>
             </div>
             <div className="space-y-3">
-              <h1 className="text-3xl md:text-4xl font-light tracking-tight text-slate-900 uppercase">
+              <h1 className="text-3xl md:text-4xl font-normal tracking-tight text-slate-900 uppercase">
                 Your appointment is confirmed
               </h1>
               <p className="text-gray-500">
@@ -924,13 +1062,13 @@ export default function BookingPage() {
               <button
                 type="button"
                 onClick={resetBookingFlow}
-                className="px-6 py-3 text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
+                className="px-6 py-3 text-sm font-normal uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
               >
                 Make another booking
               </button>
               <Link
                 href="/"
-                className="px-6 py-3  text-sm font-light uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
+                className="px-6 py-3  text-sm font-normal uppercase tracking-widest border border-black text-black hover:bg-black hover:text-white transition-colors"
               >
                 Back to home
               </Link>
@@ -956,11 +1094,11 @@ export default function BookingPage() {
         {/* 01. Date Selection */}
         <section ref={dateSectionRef} className="space-y-6">
           <div className="border-b border-black pb-4">
-            <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+            <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
               <span className="bg-black text-white text-sm font-bold px-2 py-1">01</span>
               Select Date
             </h1>
-            <p className="font-light text-lg text-left text-gray-500">Choose your preferred appointment date.</p>
+            <p className="font-normal text-lg text-left text-gray-500">Choose your preferred appointment date.</p>
           </div>
           <div className="max-w-md">
             <input
@@ -980,11 +1118,11 @@ export default function BookingPage() {
             className="transition-all duration-500 space-y-6"
           >
             <div className="border-b border-black pb-4">
-              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+              <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
                 <span className="bg-black text-white text-sm font-bold px-2 py-1">02</span>
                 Select Location
               </h1>
-              <p className="font-light text-lg text-left text-gray-500">Choose your preferred salon location.</p>
+              <p className="font-normal text-lg text-left text-gray-500">Choose your preferred salon location.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {loadingShops && shops.length === 0 && (
@@ -1026,7 +1164,7 @@ export default function BookingPage() {
                         </div> */}
                         <div className="flex-1">
                           <h3
-                            className={`text-xl font-light mb-1 uppercase ${
+                            className={`text-xl font-normal mb-1 uppercase ${
                               isSelected ? 'text-white' : 'text-black'
                             }`}
                           >
@@ -1051,7 +1189,7 @@ export default function BookingPage() {
             className="transition-all duration-500 space-y-6"
           >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 pb-4 border-b border-black">
-              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+              <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
                 <span className="bg-black text-white text-sm font-bold px-2 py-1">03</span>
                 Select Designer
               </h1>
@@ -1108,24 +1246,67 @@ export default function BookingPage() {
             className="transition-all duration-500"
           >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 pb-4 border-b border-black">
-              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+              <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
                 <span className="bg-black text-white text-sm font-bold px-2 py-1">04</span>
                 Select Service
               </h1>
             </div>
-            {services.length === 0 ? (
+            {displayServices.length === 0 ? (
               <p className="text-gray-500 text-sm">
-                No services found for this shop. Please configure services in the admin panel.
+                No services found. Please configure booking items in the admin panel.
               </p>
+            ) : bookingItemServices.length > 0 ? (
+              /* Booking items: flat list (no categories) */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {bookingItemServices.map((service) => {
+                  const isSelected = service.selected;
+                  return (
+                    <button
+                      key={service.id}
+                      type="button"
+                      onClick={() => handleServiceSelect(service)}
+                      className={`text-left border border-black p-4 flex flex-col justify-between gap-3 transition-all ${
+                        isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
+                      }`}
+                    >
+                      <div>
+                        <h4
+                          className={`text-base font-bold mb-1 ${
+                            isSelected ? 'text-white' : 'text-black'
+                          }`}
+                        >
+                          {service.name}
+                        </h4>
+                        <p className={`text-xs ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
+                          Duration:{' '}
+                          <span className="font-medium">{service.duration}</span>
+                        </p>
+                      </div>
+                      {service.price > 0 && (
+                        <div className="flex items-center justify-between mt-2">
+                          <span
+                            className={`text-sm font-semibold ${
+                              isSelected ? 'text-white' : 'text-gray-900'
+                            }`}
+                          >
+                            From ${service.price.toFixed(0)}
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             ) : (
+              /* Fallback: original categorized services */
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {categoryOrder.map((category) => {
                   const categoryServices = servicesByCategory[category];
                   if (!categoryServices || categoryServices.length === 0) return null;
-                  
+
                   const isSelected =
                     selectedService && getServiceCategory(selectedService.name) === category;
-                  
+
                   return (
                     <button
                       key={category}
@@ -1151,12 +1332,12 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* Service Selection Modal */}
+            {/* Service Selection Modal (fallback for categorized services) */}
             {isServiceModalOpen && selectedCategory && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
                 <div className="bg-[#F4F4F4]  max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-black" onClick={(e) => e.stopPropagation()}>
                   <div className="sticky top-0 bg-[#F4F4F4] border-b border-black px-6 py-4 flex items-center justify-between">
-                    <h1 className="text-3xl font-light text-black uppercase">{selectedCategory}</h1>
+                    <h1 className="text-3xl font-normal text-black uppercase">{selectedCategory}</h1>
                     <button
                       type="button"
                       onClick={() => setIsServiceModalOpen(false)}
@@ -1217,93 +1398,91 @@ export default function BookingPage() {
         {selectedDate && selectedShop && selectedDesigner && selectedService && (
           <section ref={timeSectionRef} className="space-y-6">
             <div className="flex items-center justify-between gap-6 mb-2 border-b border-black pb-4">
-              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+              <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
                 <span className="bg-black text-white text-sm font-bold px-2 py-1">05</span>
                 Select Time
               </h1>
             </div>
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Morning</span>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                      {['10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM'].map((time) => {
-                        const isDisabled = time === '10:00 AM' || time === '11:30 AM';
-                        const isSelected = time === selectedTime;
-                        return (
-                          <button
-                            key={time}
-                            onClick={() => {
-                              if (isDisabled) return;
-                              setSelectedTime(time);
-                            }}
-                            className={`py-2 px-2  border text-xs md:text-sm transition-all ${
-                              isDisabled
-                                ? 'border-black text-gray-400 cursor-not-allowed bg-[#F4F4F4]'
-                                : isSelected
-                                ? 'bg-black text-white font-light uppercase border border-black'
-                                : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
-                            }`}
-                            disabled={isDisabled}
-                          >
-                            {time}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {!hasTimeSlots ? (
+                    <p className="text-gray-500 text-sm">
+                      No available time slots for this date. Please select a different date.
+                    </p>
+                  ) : (
+                    <>
+                      {dynamicTimeSlots.morning.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Morning</span>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                            {dynamicTimeSlots.morning.map((time) => {
+                              const isSelected = time === selectedTime;
+                              return (
+                                <button
+                                  key={time}
+                                  onClick={() => setSelectedTime(time)}
+                                  className={`py-2 px-2 border text-xs md:text-sm transition-all ${
+                                    isSelected
+                                      ? 'bg-black text-white font-normal uppercase border border-black'
+                                      : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
+                                  }`}
+                                >
+                                  {time}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
-                  <div className="space-y-2 pt-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Afternoon</span>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                      {['12:00 PM', '1:00 PM', '2:00 PM', '3:30 PM', '4:00 PM'].map((time) => {
-                        const isDisabled = time === '4:00 PM';
-                        const isSelected = time === selectedTime;
-                        return (
-                          <button
-                            key={time}
-                            onClick={() => {
-                              if (isDisabled) return;
-                              setSelectedTime(time);
-                            }}
-                            className={`py-2 px-2  border text-xs md:text-sm transition-all ${
-                              isDisabled
-                                ? 'border-black text-gray-400 cursor-not-allowed bg-[#F4F4F4]'
-                                : isSelected
-                                ? 'bg-black text-white font-light uppercase border border-black'
-                                : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
-                            }`}
-                            disabled={isDisabled}
-                          >
-                            {time}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                      {dynamicTimeSlots.afternoon.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Afternoon</span>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                            {dynamicTimeSlots.afternoon.map((time) => {
+                              const isSelected = time === selectedTime;
+                              return (
+                                <button
+                                  key={time}
+                                  onClick={() => setSelectedTime(time)}
+                                  className={`py-2 px-2 border text-xs md:text-sm transition-all ${
+                                    isSelected
+                                      ? 'bg-black text-white font-normal uppercase border border-black'
+                                      : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
+                                  }`}
+                                >
+                                  {time}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
-                  <div className="space-y-2 pt-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Evening</span>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                      {['5:00 PM', '6:00 PM'].map((time) => {
-                        const isSelected = time === selectedTime;
-                        return (
-                          <button
-                            key={time}
-                            onClick={() => {
-                              setSelectedTime(time);
-                            }}
-                            className={`py-2 px-2  border text-xs md:text-sm transition-all ${
-                              isSelected
-                                ? 'bg-black text-white font-light uppercase border border-black'
-                                : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
-                            }`}
-                          >
-                            {time}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                      {dynamicTimeSlots.evening.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Evening</span>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                            {dynamicTimeSlots.evening.map((time) => {
+                              const isSelected = time === selectedTime;
+                              return (
+                                <button
+                                  key={time}
+                                  onClick={() => setSelectedTime(time)}
+                                  className={`py-2 px-2 border text-xs md:text-sm transition-all ${
+                                    isSelected
+                                      ? 'bg-black text-white font-normal uppercase border border-black'
+                                      : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
+                                  }`}
+                                >
+                                  {time}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </section>
             )}
@@ -1312,7 +1491,7 @@ export default function BookingPage() {
         {selectedDate && selectedShop && selectedDesigner && selectedService && selectedTime && (
           <section ref={contactSectionRef} className="space-y-6">
             <div className="flex items-center justify-between gap-6 mb-2 border-b border-black pb-4">
-              <h1 className="text-3xl md:text-4xl font-light text-black mb-2 tracking-tight uppercase flex items-center gap-2">
+              <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
                 <span className="bg-black text-white text-sm font-bold px-2 py-1">06</span>
                 Your Details
               </h1>
@@ -1349,7 +1528,7 @@ export default function BookingPage() {
               <button
                 type="button"
                 onClick={resolveCustomerAndGoToDeposit}
-                className="bg-black hover:bg-gray-800 text-white font-light uppercase tracking-widest px-8 py-3 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="bg-black hover:bg-gray-800 text-white font-normal uppercase tracking-widest px-8 py-3 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={
                   !selectedDate ||
                   !selectedTime ||

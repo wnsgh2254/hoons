@@ -20,7 +20,7 @@ export default function AppointmentCalendar({
   const selectedDayNumber = Number(selectedDate.split('-')[2] || '0');
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 shrink-0">
+    <div className="bg-white border border-gray-200 rounded-xl p-5.5 shrink-0">
       <div className="flex items-center justify-between mb-4">
         <button
           type="button"

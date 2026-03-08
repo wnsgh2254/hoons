@@ -4,14 +4,14 @@ import { supabase } from '@/lib/supabase';
 // Comment: Helper to safely convert to number
 const toNum = (v: any) => Number(v || 0);
 
-// Comment: Get sales data by item (service/product/membership/ticket)
+// Comment: Get sales data by item (service/product/membership)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
     const designerId = searchParams.get('designer_id');
-    const itemType = searchParams.get('item_type') || 'service'; // Comment: service, product, membership, ticket
+    const itemType = searchParams.get('item_type') || 'service'; // Comment: service, product, membership
     const aggregationMode = searchParams.get('aggregation_mode') || 'category'; // Comment: category or service
 
     if (!startDate || !endDate) {
@@ -66,9 +66,10 @@ export async function GET(request: NextRequest) {
         string,
         {
           category: string;
+          serviceName?: string;
           sales: { quantity: number; amount: number };
           membershipDeduction: { quantity: number; amount: number };
-          ticketDeduction: { quantity: number; amount: number };
+
           total: number;
           avgPrice: number;
           pointDeduction: number;
@@ -86,10 +87,11 @@ export async function GET(request: NextRequest) {
 
         if (!itemSalesMap.has(key)) {
           itemSalesMap.set(key, {
-            category: key,
+            category: aggregationMode === 'service' ? (service.category || '기타') : key,
+            ...(aggregationMode === 'service' ? { serviceName: service.name } : {}),
             sales: { quantity: 0, amount: 0 },
             membershipDeduction: { quantity: 0, amount: 0 },
-            ticketDeduction: { quantity: 0, amount: 0 },
+
             total: 0,
             avgPrice: 0,
             pointDeduction: 0,
@@ -113,8 +115,7 @@ export async function GET(request: NextRequest) {
       itemSalesMap.forEach((itemData) => {
         itemData.total =
           itemData.sales.amount +
-          itemData.membershipDeduction.amount +
-          itemData.ticketDeduction.amount;
+          itemData.membershipDeduction.amount;
         itemData.avgPrice =
           itemData.sales.quantity > 0
             ? Math.round(itemData.sales.amount / itemData.sales.quantity)
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
           category: string;
           sales: { quantity: number; amount: number };
           membershipDeduction: { quantity: number; amount: number };
-          ticketDeduction: { quantity: number; amount: number };
+
           total: number;
           avgPrice: number;
           pointDeduction: number;
@@ -201,7 +202,7 @@ export async function GET(request: NextRequest) {
             category: key,
             sales: { quantity: 0, amount: 0 },
             membershipDeduction: { quantity: 0, amount: 0 },
-            ticketDeduction: { quantity: 0, amount: 0 },
+
             total: 0,
             avgPrice: 0,
             pointDeduction: 0,
@@ -257,7 +258,7 @@ export async function GET(request: NextRequest) {
         { status: 200 }
       );
     } else {
-      // Comment: Membership and ticket sales (not yet fully implemented)
+      // Comment: Membership sales (not yet fully implemented)
       return NextResponse.json(
         {
           itemSales: [],

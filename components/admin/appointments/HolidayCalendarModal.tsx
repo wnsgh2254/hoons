@@ -5,19 +5,16 @@ import HolidayCalendarHeader from './HolidayCalendarHeader';
 import HolidayCalendarControls from './HolidayCalendarControls';
 import HolidayCalendarGrid from './HolidayCalendarGrid';
 import HolidayCalendarLegend from './HolidayCalendarLegend';
+import Modal from '@/components/ui/Modal';
+import { Z } from '@/lib/constants';
+import type { HolidayType, DayEntry } from '@/lib/types';
 
 interface HolidayCalendarModalProps {
   isOpen: boolean;
   onClose: () => void;
   allDesigners: Array<{ id: number; name: string }>;
   onOpenHolidayModal?: (designerId: number | null, designerName: string) => void;
-}
-
-type HolidayType = 'regular' | 'arbitrary' | 'special';
-
-interface DayEntry {
-  name: string;
-  type: HolidayType;
+  refreshKey?: number;
 }
 
 export default function HolidayCalendarModal({
@@ -25,23 +22,28 @@ export default function HolidayCalendarModal({
   onClose,
   allDesigners,
   onOpenHolidayModal,
+  refreshKey,
 }: HolidayCalendarModalProps) {
   const [selectedDesignerFilter, setSelectedDesignerFilter] = useState('전체');
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [calendarData, setCalendarData] = useState<Record<string, DayEntry[]>>({});
   const [loading, setLoading] = useState(false);
 
-  // Filter calendar data based on selected designer filter
   const filteredCalendarData = useMemo(() => {
     if (selectedDesignerFilter === '전체') {
-      // Show all designers
       return calendarData;
     } else if (selectedDesignerFilter === '전체(휴무 제외)') {
-      // TODO: Implement logic to exclude designers on holiday
-      // For now, show all designers
-      return calendarData;
+      const filtered: Record<string, DayEntry[]> = {};
+      Object.keys(calendarData).forEach((dateStr) => {
+        const nonRegularEntries = calendarData[dateStr].filter(
+          (entry) => entry.type !== 'regular'
+        );
+        if (nonRegularEntries.length > 0) {
+          filtered[dateStr] = nonRegularEntries;
+        }
+      });
+      return filtered;
     } else {
-      // Show only selected designer
       const filtered: Record<string, DayEntry[]> = {};
       Object.keys(calendarData).forEach((dateStr) => {
         const filteredEntries = calendarData[dateStr].filter(
@@ -55,7 +57,6 @@ export default function HolidayCalendarModal({
     }
   }, [calendarData, selectedDesignerFilter]);
 
-  // Comment: Fetch calendar data from API when month changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -63,18 +64,19 @@ export default function HolidayCalendarModal({
       setLoading(true);
       try {
         const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth(); // 0-based
+        const month = currentMonth.getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-        const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(
-          daysInMonth,
-        ).padStart(2, '0')}`;
+        const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-        // Comment: Load designer_time_off records for the month
-        const timeOffRes = await fetch(
-          `/api/designer-time-off?start_date=${monthStart}&end_date=${monthEnd}`,
-        );
+        const [timeOffRes, schedulesRes] = await Promise.all([
+          fetch(`/api/designer-time-off?start_date=${monthStart}&end_date=${monthEnd}`),
+          fetch(`/api/designer-schedules?all=true`),
+        ]);
+
         const timeOffJson = await timeOffRes.json();
+        const schedulesJson = await schedulesRes.json();
+
         if (!timeOffRes.ok) {
           console.error('Error fetching designer time off for calendar:', timeOffJson);
           setCalendarData({});
@@ -82,16 +84,25 @@ export default function HolidayCalendarModal({
         }
 
         const timeOffs: any[] = timeOffJson.timeOffs || [];
+        const allSchedules: any[] = schedulesRes.ok ? (schedulesJson.schedules || []) : [];
 
-        // Comment: Map designer_id -> name for quick lookup
         const designerNameMap = new Map<number, string>();
         allDesigners.forEach((d) => {
           if (d.id && d.name) designerNameMap.set(d.id, d.name);
         });
 
+        // Build schedule lookup: Map<designerId, Set<weekday>>
+        const scheduleMap = new Map<number, Set<number>>();
+        allSchedules.forEach((s: any) => {
+          if (!scheduleMap.has(s.designer_id)) {
+            scheduleMap.set(s.designer_id, new Set());
+          }
+          scheduleMap.get(s.designer_id)!.add(s.weekday);
+        });
+
         const data: Record<string, DayEntry[]> = {};
 
-        // Comment: Expand each time off range into per-day entries
+        // Process time-off records (임의 휴일, 특별 근무일, 정기 휴무)
         timeOffs.forEach((to) => {
           const designerId = to.designer_id as number | undefined;
           if (!designerId) return;
@@ -103,11 +114,7 @@ export default function HolidayCalendarModal({
           const end = new Date(to.end_date);
           const current = new Date(start);
           while (current <= end) {
-            // Only include days in current month
-            if (
-              current.getFullYear() === year &&
-              current.getMonth() === month
-            ) {
+            if (current.getFullYear() === year && current.getMonth() === month) {
               const dateStr = `${current.getFullYear()}-${String(
                 current.getMonth() + 1,
               ).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
@@ -117,8 +124,6 @@ export default function HolidayCalendarModal({
                 type = 'regular';
               } else if (to.reason === '특별 근무일') {
                 type = 'special';
-              } else {
-                type = 'arbitrary';
               }
 
               if (!data[dateStr]) data[dateStr] = [];
@@ -127,6 +132,41 @@ export default function HolidayCalendarModal({
             current.setDate(current.getDate() + 1);
           }
         });
+
+        // Compute regular holidays from designer_schedules
+        for (let day = 1; day <= daysInMonth; day++) {
+          const date = new Date(year, month, day);
+          const weekday = date.getDay();
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+          allDesigners.forEach((designer) => {
+            const designerScheduledDays = scheduleMap.get(designer.id);
+            // Skip designers with no schedule entries at all
+            if (!designerScheduledDays || designerScheduledDays.size === 0) return;
+
+            const hasScheduleForDay = designerScheduledDays.has(weekday);
+            if (hasScheduleForDay) return;
+
+            const name = designerNameMap.get(designer.id);
+            if (!name) return;
+
+            const existingEntries = data[dateStr] || [];
+            // Skip if special work day already exists for this designer
+            const hasSpecialOverride = existingEntries.some(
+              (e) => e.name === name && e.type === 'special'
+            );
+            if (hasSpecialOverride) return;
+
+            // Skip if already has a regular entry from time-off records
+            const alreadyHasRegular = existingEntries.some(
+              (e) => e.name === name && e.type === 'regular'
+            );
+            if (alreadyHasRegular) return;
+
+            if (!data[dateStr]) data[dateStr] = [];
+            data[dateStr].push({ name, type: 'regular' });
+          });
+        }
 
         setCalendarData(data);
       } catch (error) {
@@ -138,9 +178,7 @@ export default function HolidayCalendarModal({
     };
 
     fetchCalendarData();
-  // Note: allDesigners는 parent에서 거의 변하지 않으므로 deps에서 제외하여
-  // useEffect dependency array 크기 경고를 피한다.
-  }, [isOpen, currentMonth]);
+  }, [isOpen, currentMonth, refreshKey]);
 
   const handleMonthChange = (direction: 'prev' | 'next') => {
     setCurrentMonth((prev) => {
@@ -162,18 +200,19 @@ export default function HolidayCalendarModal({
     onOpenHolidayModal(selectedDesigner?.id ?? null, selectedDesigner?.name ?? '전체');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <HolidayCalendarHeader onClose={onClose} />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      hideHeader
+      zIndex={Z.MODAL_BASE}
+      maxWidth="max-w-7xl"
+      className="max-h-[90vh] flex flex-col overflow-hidden"
+      bodyClassName="p-0 flex-1 min-h-0 flex flex-col"
+    >
+      <HolidayCalendarHeader onClose={onClose} />
 
-        {/* Controls */}
+      <div className="flex-1 min-h-0 overflow-auto">
         <HolidayCalendarControls
           selectedDesignerFilter={selectedDesignerFilter}
           allDesigners={allDesigners}
@@ -184,11 +223,10 @@ export default function HolidayCalendarModal({
           onRegisterModify={handleRegisterModify}
         />
 
-        {/* Calendar Grid */}
         {loading ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center h-60">
             <div className="flex flex-col items-center gap-3">
-              <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+              <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
               <p className="text-sm text-gray-600">로딩 중...</p>
             </div>
           </div>
@@ -206,9 +244,8 @@ export default function HolidayCalendarModal({
           />
         )}
 
-        {/* Footer with Legend */}
         <HolidayCalendarLegend onClose={onClose} />
       </div>
-    </div>
+    </Modal>
   );
 }

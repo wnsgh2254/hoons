@@ -4,7 +4,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Booking } from '@/lib/types';
+import type { BookingWithRelations } from '@/lib/types';
 import {
   GRID_START_HOUR,
   GRID_END_HOUR,
@@ -13,11 +13,7 @@ import {
   getBookingStatusColor,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
-
-type BookingWithRelations = Booking & {
-  designer?: { id: number; name: string } | null;
-  service?: { id: number; name: string; duration_minutes?: number | null } | null;
-};
+import BookingCard from './BookingCard';
 
 interface EmptySlotIdentifier {
   date: string;
@@ -65,28 +61,12 @@ interface WeekViewGridProps {
   } | null) => void;
   menuCloseTimeoutRef: React.RefObject<NodeJS.Timeout | null>;
   menuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
-  setNewBookingDate: (date: string) => void;
-  setNewBookingTimeSlots: React.Dispatch<
-    React.SetStateAction<
-      Array<{
-        designerId: number | null;
-        time: string;
-        duration: number;
-        serviceTab: 'service' | 'appointment';
-        serviceId: number | null;
-      }>
-    >
-  >;
-  setIsNewBookingOpen: (open: boolean) => void;
-  setNewBookingDirectVisit: (value: boolean) => void;
+  onOpenNewBooking: (data: { date: string; designerId: number; time: string; directVisit?: boolean }) => void;
   setBookingRestrictions: React.Dispatch<React.SetStateAction<any[]>>;
   setRestrictionDesignerId: (id: number | null) => void;
   setRestrictionDesignerName: (name: string) => void;
   setRestrictionDate: (date: string) => void;
   setRestrictionType: (type: 'date' | 'time') => void;
-  setRestrictionStartTime: (time: string) => void;
-  setRestrictionEndTime: (time: string) => void;
-  setExistingRestriction: (restriction: any | null) => void;
   setIsRestrictionModalOpen: (open: boolean) => void;
   setHoveredEmptySlot: (slot: EmptySlotIdentifier | null) => void;
   setEmptySlotMenuOpen: (slot: EmptySlotIdentifier | null) => void;
@@ -121,18 +101,12 @@ export default function WeekViewGrid({
   setBookingMenuPosition,
   menuCloseTimeoutRef,
   menuOriginalPositionRef,
-  setNewBookingDate,
-  setNewBookingTimeSlots,
-  setIsNewBookingOpen,
-  setNewBookingDirectVisit,
+  onOpenNewBooking,
   setBookingRestrictions,
   setRestrictionDesignerId,
   setRestrictionDesignerName,
   setRestrictionDate,
   setRestrictionType,
-  setRestrictionStartTime,
-  setRestrictionEndTime,
-  setExistingRestriction,
   setIsRestrictionModalOpen,
   setHoveredEmptySlot,
   setEmptySlotMenuOpen,
@@ -306,11 +280,16 @@ export default function WeekViewGrid({
         );
 
         const color = DESIGNER_COLORS[0]; // Use first color for week view (kept for future color usage)
+        const isDayOff = weekViewAvailableDates.size > 0 && !weekViewAvailableDates.has(dateStr);
 
         return (
-          <div key={dayIndex} className="relative h-full overflow-hidden">
-            {/* Comment: Render restriction blocks (greyout) */}
-            {dayRestrictions.map((restriction: any) => {
+          <div
+            key={dayIndex}
+            className={`relative h-full overflow-hidden ${isDayOff ? 'bg-gray-100/50' : ''}`}
+            style={isDayOff ? { pointerEvents: 'none' as const } : undefined}
+          >
+            {/* Comment: Render restriction blocks (greyout) - skip on holidays */}
+            {!isDayOff && dayRestrictions.map((restriction: any) => {
               if (restriction.restriction_type === 'date') {
                 // Comment: Full day restriction - 진한 그레이 컬러
                 return (
@@ -424,7 +403,7 @@ export default function WeekViewGrid({
               });
               const isRestricted = !!slotRestriction;
 
-              if (hasBooking || !weekViewDesignerId) return null;
+              if (hasBooking || !weekViewDesignerId || isDayOff) return null;
 
               const slotKey = `week-${dateStr}-${weekViewDesignerId}-${slotTime}`;
               const isHovered =
@@ -772,19 +751,6 @@ export default function WeekViewGrid({
                                         setRestrictionType(
                                           slotRestriction.restriction_type || 'time',
                                         );
-                                        if (slotRestriction.restriction_type === 'time') {
-                                          setRestrictionStartTime(
-                                            slotRestriction.start_time?.substring(0, 5) ||
-                                              slotTime,
-                                          );
-                                          setRestrictionEndTime(
-                                            slotRestriction.end_time?.substring(0, 5) || '',
-                                          );
-                                        } else {
-                                          setRestrictionStartTime('');
-                                          setRestrictionEndTime('');
-                                        }
-                                        setExistingRestriction(slotRestriction);
                                         setIsRestrictionModalOpen(true);
                                         setEmptySlotMenuOpen(null);
                                         setEmptySlotMenuPosition(null);
@@ -801,22 +767,12 @@ export default function WeekViewGrid({
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setNewBookingDate(dateStr);
                                         const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
                                           slotMin,
                                         ).padStart(2, '0')} ${
                                           slotHour >= 12 ? 'PM' : 'AM'
                                         }`;
-                                        setNewBookingTimeSlots([
-                                          {
-                                            designerId: weekViewDesignerId,
-                                            time: timeStr,
-                                            duration: 30,
-                                            serviceTab: 'service',
-                                            serviceId: null,
-                                          },
-                                        ]);
-                                        setIsNewBookingOpen(true);
+                                        onOpenNewBooking({ date: dateStr, designerId: weekViewDesignerId || 0, time: timeStr });
                                         setEmptySlotMenuOpen(null);
                                         setEmptySlotMenuPosition(null);
                                         setHoveredEmptySlot(null);
@@ -830,23 +786,12 @@ export default function WeekViewGrid({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         // 바로 방문: 예약 등록 모달에 "바로 방문" 체크박스 체크된 상태로 열기
-                                        setNewBookingDate(dateStr);
                                         const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
                                           slotMin,
                                         ).padStart(2, '0')} ${
                                           slotHour >= 12 ? 'PM' : 'AM'
                                         }`;
-                                        setNewBookingTimeSlots([
-                                          {
-                                            designerId: weekViewDesignerId,
-                                            time: timeStr,
-                                            duration: 30,
-                                            serviceTab: 'service',
-                                            serviceId: null,
-                                          },
-                                        ]);
-                                        setNewBookingDirectVisit(true); // 바로 방문 체크박스 체크
-                                        setIsNewBookingOpen(true);
+                                        onOpenNewBooking({ date: dateStr, designerId: weekViewDesignerId || 0, time: timeStr, directVisit: true });
                                         setEmptySlotMenuOpen(null);
                                         setEmptySlotMenuPosition(null);
                                         setHoveredEmptySlot(null);
@@ -944,6 +889,33 @@ export default function WeekViewGrid({
                 b.service?.duration_minutes && b.service.duration_minutes > 0
                   ? b.service.duration_minutes
                   : 60;
+              const endMinutes = startMinutes + durationMinutes;
+
+              // Check overlap with other bookings for this day
+              let hasOverlap = false;
+              let placeOnRight = false;
+              dayBookings.forEach((other: any) => {
+                if (other === b || !other.booking_time) return;
+                const [ohStr, omStr] = other.booking_time.split(':');
+                const oh = Number(ohStr);
+                const om = Number(omStr);
+                if (Number.isNaN(oh) || Number.isNaN(om)) return;
+                const otherStart = (oh - GRID_START_HOUR) * 60 + om;
+                const otherDuration =
+                  other.service?.duration_minutes && other.service.duration_minutes > 0
+                    ? other.service.duration_minutes
+                    : 60;
+                const otherEnd = otherStart + otherDuration;
+                const overlap =
+                  Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);
+                if (overlap) {
+                  hasOverlap = true;
+                  if ((other as any).id < (b as any).id) {
+                    placeOnRight = true;
+                  }
+                }
+              });
+
               const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
               const height = Math.max((durationMinutes / 30) * GRID_30MIN_HEIGHT, 40);
 
@@ -964,44 +936,52 @@ export default function WeekViewGrid({
               const bookingMemo = (b as any).memo || (b as any).note || '';
 
               return (
-                <div
+                <BookingCard
                   key={b.id}
-                  data-booking-card={b.id}
-                  className="absolute left-1 right-1"
-                  style={{ top, height, zIndex: 1 }}
-                  onMouseEnter={() => {
-                    if (b.id) {
-                      // 호버 카드 위치 계산 및 저장
-                      const cardElement = document.querySelector(`[data-booking-card="${b.id}"]`) as HTMLElement;
-                      if (cardElement) {
-                        const cardRect = cardElement.getBoundingClientRect();
-                        setHoverCardPosition({
-                          top: cardRect.top,
-                          left: cardRect.right + 4,
-                        });
-                      }
-                      setHoveredBooking(b.id);
+                  booking={b}
+                  className="absolute"
+                  style={{ top, height, zIndex: 1, left: `${leftPercent}%`, width: `${widthPercent}%`, paddingLeft: 4, paddingRight: 4 }}
+                  hoveredBooking={hoveredBooking}
+                  bookingMenuOpen={bookingMenuOpen}
+                  hoverCardPosition={hoverCardPosition}
+                  bookingMenuPosition={bookingMenuPosition}
+                  isNewBookingOpen={isNewBookingOpen}
+                  setHoveredBooking={setHoveredBooking}
+                  setHoverCardPosition={setHoverCardPosition}
+                  hoverCardOriginalPositionRef={hoverCardOriginalPositionRef}
+                  setBookingMenuOpen={setBookingMenuOpen}
+                  setBookingMenuPosition={setBookingMenuPosition}
+                  bookingMenuOriginalPositionRef={bookingMenuOriginalPositionRef}
+                  menuCloseTimeoutRef={menuCloseTimeoutRef}
+                  onNewBooking={(booking) => {
+                    const bookingDate = booking.booking_date || '';
+                    let bookingTime = '10:00 AM';
+                    if (booking.booking_time) {
+                      const [h, m] = booking.booking_time.split(':');
+                      const hNum = Number(h);
+                      const dh = hNum > 12 ? hNum - 12 : hNum === 0 ? 12 : hNum;
+                      bookingTime = `${dh}:${m} ${hNum >= 12 ? 'PM' : 'AM'}`;
                     }
+                    onOpenNewBooking({ date: bookingDate, designerId: booking.designer?.id || weekViewDesignerId || 0, time: bookingTime });
+                    closeMenu();
                   }}
-                  onMouseLeave={(e) => {
-                    const relatedTarget = e.relatedTarget;
-                    // relatedTarget이 Element인지 확인
-                    if (relatedTarget && relatedTarget instanceof Element) {
-                      // 드롭다운 메뉴나 호버 카드로 이동하는 경우는 무시
-                      if (
-                        relatedTarget.closest('[data-booking-menu]') ||
-                        relatedTarget.closest('[data-booking-card]')
-                      ) {
-                        return;
-                      }
+                  onEditBooking={(booking) => {
+                    setEditingBooking(booking);
+                    closeMenu();
+                  }}
+                  onViewDetail={(booking) => {
+                    setViewingBookingDetail(booking);
+                    closeMenu();
+                  }}
+                  onViewCustomer={(booking) => {
+                    setViewingBookingDetail(booking);
+                    closeMenu();
+                  }}
+                  onStatusChange={async (booking, newStatus) => {
+                    if (onBookingStatusChange) {
+                      await onBookingStatusChange(booking, newStatus);
                     }
-                    setHoveredBooking(null);
-                    setHoverCardPosition(null);
-                    hoverCardOriginalPositionRef.current = null;
-                    // 드롭다운 메뉴가 열려있지 않을 때만 닫기
-                    if (bookingMenuOpen !== b.id) {
-                    setBookingMenuOpen(null);
-                    }
+                    closeMenu();
                   }}
                 >
                   <div

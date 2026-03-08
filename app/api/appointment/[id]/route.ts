@@ -103,6 +103,9 @@ export async function PATCH(
     if (typeof body.memo === 'string' || body.memo === null) {
       updates.memo = body.memo === null ? null : body.memo;
     }
+    if (typeof body.color_label === 'string' || body.color_label === null) {
+      updates.color_label = body.color_label;
+    }
     // Comment: cancellation_reason 필드는 선택적 (컬럼이 없을 수도 있음)
     let cancellationReason: string | null | undefined = undefined;
     if (body.cancellation_reason !== undefined) {

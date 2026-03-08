@@ -3,7 +3,21 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import type { InventoryItem } from '@/lib/types';
-import AdminTopNav from '@/components/AdminTopNav';
+import {
+  AdminPageLayout,
+  PageHeader,
+  SearchBar,
+  DataTable,
+  StatCard,
+  Modal,
+  Input,
+  Select,
+  Badge,
+  FormAlert,
+  Button,
+  IconButton,
+  Tabs,
+} from '@/components/ui';
 
 const ICON_OPTIONS = [
   'inventory_2',
@@ -252,16 +266,16 @@ function InventoryContent() {
     };
   }, []);
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeVariant = (status: string): 'success' | 'warning' | 'error' | 'default' => {
     switch (status) {
       case 'In Stock':
-        return 'text-emerald-700 bg-emerald-50 border-emerald-100';
+        return 'success';
       case 'Low Stock':
-        return 'text-orange-700 bg-orange-50 border-orange-100';
+        return 'warning';
       case 'Out of Stock':
-        return 'text-red-700 bg-red-50 border-red-100';
+        return 'error';
       default:
-        return 'text-gray-700 bg-gray-50 border-gray-100';
+        return 'default';
     }
   };
 
@@ -361,321 +375,229 @@ function InventoryContent() {
     }
   };
 
-
-  return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
-      <AdminTopNav />
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
-          <div className="max-w-7xl mx-auto flex flex-col gap-8">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">
-                  {activeView.title}
-                </h2>
-              </div>
-              {isOverview && (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleSaveInventory}
-                    disabled={!hasChanges || saving}
-                    className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm disabled:opacity-60 disabled:hover:bg-white"
-                  >
-                    <span className="material-symbols-outlined text-lg">save</span>
-                    {saving ? '저장 중...' : '재고 저장'}
-                  </button>
-                  <button
-                    onClick={() => setShowAddProductModal(true)}
-                    className="flex items-center gap-2 bg-linear-to-br from-[#111111] to-[#333333] hover:from-black hover:to-[#222222] text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg"
-                  >
-                    <span className="material-symbols-outlined text-lg">add</span>
-                    상품 추가
-                  </button>
-                </div>
-              )}
-            </div>
-            {isOverview ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="bg-gray-50 p-2 rounded-lg text-gray-500 group-hover:text-black transition-colors">
-                        <span className="material-symbols-outlined">inventory</span>
-                      </div>
-                    </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">총 상품 수</p>
-                    <h3 className="text-2xl font-bold text-black">
-                      {loading ? '...' : totalProducts}
-                    </h3>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="bg-orange-50 p-2 rounded-lg text-orange-600 group-hover:text-orange-700 transition-colors">
-                        <span className="material-symbols-outlined">warning</span>
-                      </div>
-                      <span className="bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
-                        조치 필요
-                      </span>
-                    </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">재고 부족 상품</p>
-                    <h3 className="text-2xl font-bold text-black">
-                      {loading ? '...' : lowStockItems}
-                    </h3>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="bg-gray-50 p-2 rounded-lg text-gray-500 group-hover:text-black transition-colors">
-                        <span className="material-symbols-outlined">attach_money</span>
-                      </div>
-                    </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">재고 금액</p>
-                    <h3 className="text-2xl font-bold text-black">
-                      {loading ? (
-                        '...'
-                      ) : (
-                        <>
-                          ${inventoryValue.toLocaleString()}{' '}
-                          <span className="text-xs text-gray-400 font-normal">AUD</span>
-                        </>
-                      )}
-                    </h3>
-                  </div>
-                  <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow group">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="bg-gray-50 p-2 rounded-lg text-gray-500 group-hover:text-black transition-colors">
-                        <span className="material-symbols-outlined">water_drop</span>
-                      </div>
-                      <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded flex items-center gap-1">이번 달</span>
-                    </div>
-                    <p className="text-gray-500 text-sm font-medium mb-1">내부 소모</p>
-                    <h3 className="text-2xl font-bold text-black">
-                      142 <span className="text-sm font-normal text-gray-500">units</span>
-                    </h3>
-                  </div>
-                </div>
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-                    {error}
-                  </div>
-                )}
-                {successMessage && (
-                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg">
-                    {successMessage}
-                  </div>
-                )}
-                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 justify-start md:justify-between items-start md:items-center">
-                  <div className="relative w-full md:w-96">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                      search
-                    </span>
-                    <input
-                      className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black transition-all"
-                      placeholder="상품명, SKU 검색..."
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3 w-full md:w-auto">
-                    <div className="relative">
-                      <select
-                        value={brand}
-                        onChange={(e) => setBrand(e.target.value)}
-                        className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:border-black cursor-pointer min-w-[120px]"
-                      >
-                        {brandOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
-                        <span className="material-symbols-outlined text-lg">expand_more</span>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:border-black cursor-pointer"
-                      >
-                        <option value="전체 카테고리">전체 카테고리</option>
-                        <option value="Hair Care">헤어 케어</option>
-                        <option value="Coloring">염색</option>
-                        <option value="Styling">스타일링</option>
-                        <option value="Treatment">트리트먼트</option>
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
-                        <span className="material-symbols-outlined text-lg">expand_more</span>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value)}
-                        className="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:border-black cursor-pointer"
-                      >
-                        <option value="전체 상태">전체 상태</option>
-                        <option value="In Stock">재고 있음</option>
-                        <option value="Low Stock">재고 부족</option>
-                        <option value="Out of Stock">재고 없음</option>
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
-                        <span className="material-symbols-outlined text-lg">expand_more</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                          <th className="px-6 py-4">상품명</th>
-                          <th className="px-6 py-4">브랜드</th>
-                          <th className="px-6 py-4">SKU</th>
-                          <th className="px-6 py-4">카테고리</th>
-                          <th className="px-6 py-4">가격 (AUD)</th>
-                          <th className="px-6 py-4">재고 수량</th>
-                          <th className="px-6 py-4">상태</th>
-                          <th className="px-6 py-4 text-right">작업</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
-                        {loading ? (
-                          <tr>
-                            <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                              재고를 불러오는 중입니다...
-                            </td>
-                          </tr>
-                        ) : products.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                              등록된 재고가 없습니다.
-                            </td>
-                          </tr>
-                        ) : filteredProducts.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                              선택한 브랜드에 해당하는 재고가 없습니다.
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredProducts.map((product) => (
-                            <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="size-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                                    <span className="material-symbols-outlined">{product.icon}</span>
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium text-black">{product.name}</span>
-                                    <span className="text-xs text-gray-400">{product.size}</span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-gray-600">{product.brand ?? '—'}</td>
-                              <td className="px-6 py-4 text-gray-500">{product.sku}</td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                  {product.category}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 font-medium">
-                                ${Number(product.price || 0).toFixed(2)}
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-2 group">
-                                  <span
-                                    className={`font-bold ${getStockColor(
-                                      stockDrafts[product.id] ?? product.stock,
-                                      product.status
-                                    )}`}
-                                  >
-                                    {stockDrafts[product.id] ?? product.stock}
-                                  </span>
-                                  <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      type="button"
-                                      onClick={() => adjustStock(product.id, 1)}
-                                      className="leading-none text-xs text-gray-500 hover:text-black"
-                                    >
-                                      ▲
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => adjustStock(product.id, -1)}
-                                      disabled={(stockDrafts[product.id] ?? product.stock) <= 0}
-                                      className="leading-none text-xs text-gray-500 hover:text-black disabled:opacity-40"
-                                    >
-                                      ▼
-                                    </button>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div
-                                  className={`flex items-center gap-2 w-fit px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-                                    product.status
-                                  )}`}
-                                >
-                                  <span className="size-1.5 rounded-full bg-current"></span>
-                                  {product.status}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingProduct(product)}
-                                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                                    title="Edit"
-                                  >
-                                    <span className="material-symbols-outlined text-[1.1rem]">
-                                      edit
-                                    </span>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="p-4 border-t border-gray-200 flex items-center justify-between bg-gray-50/50">
-                    <span className="text-xs text-gray-500">
-                      {loading
-                        ? 'Loading...'
-                        : `Showing ${products.length} item${products.length === 1 ? '' : 's'}`}
-                    </span>
-                    <div className="flex gap-1">
-                      <button className="p-1 rounded-md text-gray-400 hover:text-black disabled:opacity-50">
-                        <span className="material-symbols-outlined text-lg">chevron_left</span>
-                      </button>
-                      <button className="p-1 rounded-md text-gray-400 hover:text-black">
-                        <span className="material-symbols-outlined text-lg">chevron_right</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : viewKey === 'usage' ? (
-              <InternalUsageView />
-            ) : viewKey === 'adjustments' ? (
-              <AdjustmentHistoryView />
-            ) : viewKey === 'history' ? (
-              <InventoryMovementHistoryView />
-            ) : viewKey === 'purchases' ? (
-              <PurchasesView />
-            ) : viewKey === 'vendors' ? (
-              <SuppliersView />
-            ) : (
-              <InventorySubView view={activeView} />
-            )}
+  const inventoryColumns = [
+    {
+      key: 'name',
+      header: '상품명',
+      render: (product: InventoryItem) => (
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+            <span className="material-symbols-outlined">{product.icon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="font-medium text-black">{product.name}</span>
+            <span className="text-xs text-gray-400">{product.size}</span>
           </div>
         </div>
-      </main>
+      ),
+    },
+    {
+      key: 'brand',
+      header: '브랜드',
+      render: (product: InventoryItem) => (
+        <span className="text-gray-600">{product.brand ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'sku',
+      header: 'SKU',
+      render: (product: InventoryItem) => (
+        <span className="text-gray-500">{product.sku}</span>
+      ),
+    },
+    {
+      key: 'category',
+      header: '카테고리',
+      render: (product: InventoryItem) => (
+        <Badge>{product.category}</Badge>
+      ),
+    },
+    {
+      key: 'price',
+      header: '가격 (AUD)',
+      render: (product: InventoryItem) => (
+        <span className="font-medium">${Number(product.price || 0).toFixed(2)}</span>
+      ),
+    },
+    {
+      key: 'stock',
+      header: '재고 수량',
+      render: (product: InventoryItem) => (
+        <div className="flex items-center gap-2 group">
+          <span
+            className={`font-bold ${getStockColor(
+              stockDrafts[product.id] ?? product.stock,
+              product.status
+            )}`}
+          >
+            {stockDrafts[product.id] ?? product.stock}
+          </span>
+          <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={() => adjustStock(product.id, 1)}
+              className="leading-none text-xs text-gray-500 hover:text-black"
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              onClick={() => adjustStock(product.id, -1)}
+              disabled={(stockDrafts[product.id] ?? product.stock) <= 0}
+              className="leading-none text-xs text-gray-500 hover:text-black disabled:opacity-40"
+            >
+              ▼
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: '상태',
+      render: (product: InventoryItem) => (
+        <Badge variant={getStatusBadgeVariant(product.status)}>
+          <span className="size-1.5 rounded-full bg-current mr-1.5" />
+          {product.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '작업',
+      align: 'right' as const,
+      render: (product: InventoryItem) => (
+        <div className="flex items-center justify-end gap-2">
+          <IconButton
+            icon="edit"
+            size="sm"
+            onClick={() => setEditingProduct(product)}
+            title="Edit"
+          />
+        </div>
+      ),
+    },
+  ];
+
+
+  return (
+    <AdminPageLayout>
+      <PageHeader
+        title={activeView.title}
+        actions={
+          isOverview ? (
+            <>
+              <Button
+                variant="ghost"
+                icon="save"
+                onClick={handleSaveInventory}
+                disabled={!hasChanges}
+                loading={saving}
+              >
+                {saving ? '저장 중...' : '재고 저장'}
+              </Button>
+              <Button
+                variant="primary"
+                icon="add"
+                onClick={() => setShowAddProductModal(true)}
+              >
+                상품 추가
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+      {isOverview ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="총 상품 수"
+              value={loading ? '...' : totalProducts}
+              icon="inventory"
+            />
+            <StatCard
+              label="재고 부족 상품"
+              value={loading ? '...' : lowStockItems}
+              icon="warning"
+            />
+            <StatCard
+              label="재고 금액"
+              value={
+                loading
+                  ? '...'
+                  : `$${inventoryValue.toLocaleString()} AUD`
+              }
+              icon="attach_money"
+            />
+            <StatCard
+              label="내부 소모"
+              value={loading ? '...' : '142 units'}
+              icon="water_drop"
+            />
+          </div>
+          {error && <FormAlert message={error} variant="error" />}
+          {successMessage && <FormAlert message={successMessage} variant="success" />}
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="상품명, SKU 검색..."
+            rightContent={
+              <div className="flex items-center gap-3">
+                <Select
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  options={brandOptions.map((opt) => ({ value: opt, label: opt }))}
+                  className="min-w-[120px]"
+                />
+                <Select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  options={[
+                    { value: '전체 카테고리', label: '전체 카테고리' },
+                    { value: 'Hair Care', label: '헤어 케어' },
+                    { value: 'Coloring', label: '염색' },
+                    { value: 'Styling', label: '스타일링' },
+                    { value: 'Treatment', label: '트리트먼트' },
+                  ]}
+                />
+                <Select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  options={[
+                    { value: '전체 상태', label: '전체 상태' },
+                    { value: 'In Stock', label: '재고 있음' },
+                    { value: 'Low Stock', label: '재고 부족' },
+                    { value: 'Out of Stock', label: '재고 없음' },
+                  ]}
+                />
+              </div>
+            }
+          />
+          <DataTable
+            columns={inventoryColumns}
+            data={filteredProducts}
+            keyExtractor={(p) => p.id}
+            loading={loading}
+            emptyMessage={
+              products.length === 0
+                ? '등록된 재고가 없습니다.'
+                : '선택한 브랜드에 해당하는 재고가 없습니다.'
+            }
+          />
+        </>
+      ) : viewKey === 'usage' ? (
+        <InternalUsageView />
+      ) : viewKey === 'adjustments' ? (
+        <AdjustmentHistoryView />
+      ) : viewKey === 'history' ? (
+        <InventoryMovementHistoryView />
+      ) : viewKey === 'purchases' ? (
+        <PurchasesView />
+      ) : viewKey === 'vendors' ? (
+        <SuppliersView />
+      ) : (
+        <InventorySubView view={activeView} />
+      )}
 
       {isOverview && showAddProductModal && (
         <AddProductModal
@@ -698,7 +620,7 @@ function InventoryContent() {
           }}
         />
       )}
-    </div>
+    </AdminPageLayout>
   );
 }
 
@@ -708,7 +630,7 @@ type InventorySubViewProps = {
 
 function InventorySubView({ view }: InventorySubViewProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 md:p-8">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5.5 md:p-7.5">
       <div className="flex items-start gap-4">
         <div className="size-12 rounded-2xl bg-gray-100 text-gray-600 flex items-center justify-center">
           <span className="material-symbols-outlined text-2xl">{view.icon}</span>
@@ -718,11 +640,11 @@ function InventorySubView({ view }: InventorySubViewProps) {
           <p className="text-sm text-gray-500 mt-1">{view.subtitle}</p>
         </div>
       </div>
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="mt-5.5 grid grid-cols-1 md:grid-cols-3 gap-4">
         {view.highlights.map((highlight) => (
           <div
             key={highlight.title}
-            className="border border-gray-200 rounded-2xl p-5 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+            className="border border-gray-200 rounded-2xl p-4.5 bg-gray-50/50 hover:bg-gray-50 transition-colors"
           >
             <div className="flex items-center gap-3">
               <div className="size-10 rounded-xl bg-white border border-gray-200 text-gray-600 flex items-center justify-center">
@@ -738,7 +660,7 @@ function InventorySubView({ view }: InventorySubViewProps) {
           </div>
         ))}
       </div>
-      <div className="mt-6 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+      <div className="mt-5.5 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
         상세 화면은 요구사항을 확인한 뒤 이 영역에 구성됩니다.
       </div>
     </div>
@@ -803,139 +725,101 @@ function InternalUsageView() {
     fetchUsage();
   }, [startDate, endDate, type, productSearch, staff]);
 
+  const usageColumns = [
+    { key: 'used_at', header: '날짜', render: (row: typeof rows[number]) => formatDateTime(row.used_at) },
+    { key: 'staff_name', header: '담당자', render: (row: typeof rows[number]) => row.staff_name ?? '' },
+    { key: 'product_code', header: '제품코드', render: (row: typeof rows[number]) => row.product_code ?? '' },
+    { key: 'product_name', header: '제품명', render: (row: typeof rows[number]) => row.product_name ?? '' },
+    { key: 'unit_price', header: '단가', align: 'right' as const, render: (row: typeof rows[number]) => row.unit_price != null ? row.unit_price.toLocaleString() : '' },
+    { key: 'quantity', header: '수량', align: 'right' as const, render: (row: typeof rows[number]) => row.quantity },
+    { key: 'amount', header: '금액', align: 'right' as const, render: (row: typeof rows[number]) => row.amount != null ? row.amount.toLocaleString() : '' },
+    { key: 'memo', header: '메모', render: (row: typeof rows[number]) => row.memo ?? '' },
+    {
+      key: 'edit',
+      header: '수정',
+      align: 'right' as const,
+      render: (row: typeof rows[number]) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setEditingRow({
+              id: row.id,
+              product_name: row.product_name,
+              quantity: row.quantity,
+            })
+          }
+        >
+          수정
+        </Button>
+      ),
+    },
+  ];
+
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 md:p-6 flex flex-col gap-4">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4.5 md:p-5.5 flex flex-col gap-4">
       <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">기간</span>
-          <input
+          <Input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-auto"
           />
           <span className="text-gray-400">~</span>
-          <input
+          <Input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-auto"
           />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">분류</span>
-          <select
+          <Select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
-          >
-            <option>전체</option>
-          </select>
+            options={[{ value: '전체', label: '전체' }]}
+            className="min-w-[100px]"
+          />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">제품</span>
-          <input
+          <Input
             type="text"
             placeholder="제품코드 또는 제품명"
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[200px] focus:ring-2 focus:ring-black focus:border-transparent"
+            className="min-w-[200px]"
           />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">담당자</span>
-          <select
+          <Select
             value={staff}
             onChange={(e) => setStaff(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
-          >
-            <option>전체</option>
-          </select>
+            options={[{ value: '전체', label: '전체' }]}
+            className="min-w-[100px]"
+          />
         </div>
         <div className="ml-auto flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowRegisterModal(true)}
-            className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900"
-          >
+          <Button variant="primary" onClick={() => setShowRegisterModal(true)}>
             내부 소모 등록
-          </button>
+          </Button>
         </div>
       </div>
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <FormAlert message={error} variant="error" />}
       <div className="text-sm text-gray-500">
         총 <span className="font-semibold">{rows.length}</span>건
       </div>
-      <div className="border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                <th className="px-6 py-4">날짜</th>
-                <th className="px-6 py-4">담당자</th>
-                <th className="px-6 py-4">제품코드</th>
-                <th className="px-6 py-4">제품명</th>
-                <th className="px-6 py-4 text-right">단가</th>
-                <th className="px-6 py-4 text-right">수량</th>
-                <th className="px-6 py-4 text-right">금액</th>
-                <th className="px-6 py-4">메모</th>
-                <th className="px-6 py-4 text-right">수정</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700 divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                    불러오는 중입니다...
-                  </td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                    내역이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4">{formatDateTime(row.used_at)}</td>
-                    <td className="px-6 py-4">{row.staff_name ?? ''}</td>
-                    <td className="px-6 py-4">{row.product_code ?? ''}</td>
-                    <td className="px-6 py-4">{row.product_name ?? ''}</td>
-                    <td className="px-6 py-4 text-right">
-                      {row.unit_price != null ? row.unit_price.toLocaleString() : ''}
-                    </td>
-                    <td className="px-6 py-4 text-right">{row.quantity}</td>
-                    <td className="px-6 py-4 text-right">
-                      {row.amount != null ? row.amount.toLocaleString() : ''}
-                    </td>
-                    <td className="px-6 py-4">{row.memo ?? ''}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEditingRow({
-                            id: row.id,
-                            product_name: row.product_name,
-                            quantity: row.quantity,
-                          })
-                        }
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        수정
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        columns={usageColumns}
+        data={rows}
+        keyExtractor={(row) => row.id}
+        loading={loading}
+        emptyMessage="내역이 없습니다."
+      />
       {showRegisterModal && (
         <InternalUsageRegisterModal onClose={() => setShowRegisterModal(false)} />
       )}
@@ -1001,134 +885,90 @@ function PurchasesView() {
   const totalCount = rows.length;
   const totalAmount = rows.reduce((sum, r) => sum + Number(r.total_amount ?? 0), 0);
 
+  const purchaseColumns = [
+    { key: 'type', header: '구분', render: (row: typeof rows[number]) => row.type === 'purchase' ? '매입' : '반품' },
+    { key: 'purchase_date', header: '날짜', render: (row: typeof rows[number]) => formatDateTime(row.purchase_date) },
+    { key: 'supplier_name', header: '공급처', render: (row: typeof rows[number]) => row.supplier_name ?? '' },
+    { key: 'total_amount', header: '금액', align: 'right' as const, render: (row: typeof rows[number]) => Number(row.total_amount ?? 0).toLocaleString() },
+    { key: 'memo', header: '메모', render: (row: typeof rows[number]) => row.memo ?? '' },
+    {
+      key: 'detail',
+      header: '상세보기',
+      align: 'center' as const,
+      render: (row: typeof rows[number]) => (
+        <Button variant="outline" size="sm" onClick={() => setDetailId(row.id)}>
+          보기
+        </Button>
+      ),
+    },
+  ];
+
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-5.5 flex flex-col gap-4">
       <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">기간</span>
-          <input
+          <Input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-auto"
           />
           <span className="text-gray-400">~</span>
-          <input
+          <Input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-auto"
           />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">공급처</span>
-          <input
+          <Input
             type="text"
             value={supplier}
             onChange={(e) => setSupplier(e.target.value)}
             placeholder="전체"
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[160px] focus:ring-2 focus:ring-black focus:border-transparent"
+            className="min-w-[160px]"
           />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">구분</span>
-          <select
+          <Select
             value={type}
             onChange={(e) => setType(e.target.value as typeof type)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
-          >
-            <option value="all">전체</option>
-            <option value="purchase">매입</option>
-            <option value="return">반품</option>
-          </select>
+            options={[
+              { value: 'all', label: '전체' },
+              { value: 'purchase', label: '매입' },
+              { value: 'return', label: '반품' },
+            ]}
+            className="min-w-[100px]"
+          />
         </div>
         <div className="ml-auto flex gap-2">
-          <button
-            type="button"
-            onClick={() => setEditMode('purchase')}
-            className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
+          <Button variant="outline" onClick={() => setEditMode('purchase')}>
             매입 등록
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditMode('return')}
-            className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
+          </Button>
+          <Button variant="outline" onClick={() => setEditMode('return')}>
             반품 등록
-          </button>
-          <button className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900">
-            검색
-          </button>
+          </Button>
+          <Button variant="primary">검색</Button>
         </div>
       </div>
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <FormAlert message={error} variant="error" />}
       <div className="text-xs text-gray-500">
         총 <span className="font-semibold">{totalCount}</span> 건, 총 금액{' '}
         <span className="font-semibold">
           {totalAmount.toLocaleString()}
         </span>
       </div>
-      <div className="border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                <th className="px-6 py-4 text-left">구분</th>
-                <th className="px-6 py-4 text-left">날짜</th>
-                <th className="px-6 py-4 text-left">공급처</th>
-                <th className="px-6 py-4 text-right">금액</th>
-                <th className="px-6 py-4 text-left">메모</th>
-                <th className="px-6 py-4 text-center">상세보기</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    불러오는 중입니다...
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
-                  >
-                    <td className="px-6 py-4">{row.type === 'purchase' ? '매입' : '반품'}</td>
-                    <td className="px-6 py-4">{formatDateTime(row.purchase_date)}</td>
-                    <td className="px-6 py-4">{row.supplier_name ?? ''}</td>
-                    <td className="px-6 py-4 text-right">
-                      {Number(row.total_amount ?? 0).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">{row.memo ?? ''}</td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setDetailId(row.id)}
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        보기
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              {!loading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    내역이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        columns={purchaseColumns}
+        data={rows}
+        keyExtractor={(row) => row.id}
+        loading={loading}
+        emptyMessage="내역이 없습니다."
+      />
       {detailId && (
         <PurchaseDetailModal id={detailId} onClose={() => setDetailId(null)} />
       )}
@@ -1239,8 +1079,39 @@ function SuppliersView() {
     setReloadKey((prev) => prev + 1);
   };
 
+  const supplierColumns = [
+    {
+      key: 'name',
+      header: '매입처',
+      render: (row: typeof rows[number]) => (
+        <>
+          {row.name}{' '}
+          {!row.is_active && (
+            <Badge variant="default" size="sm">미사용</Badge>
+          )}
+        </>
+      ),
+    },
+    { key: 'contact_name', header: '담당자', render: (row: typeof rows[number]) => row.contact_name ?? '' },
+    { key: 'phone', header: '전화 번호', render: (row: typeof rows[number]) => row.phone ?? '' },
+    { key: 'mobile_phone', header: '휴대폰 번호', render: (row: typeof rows[number]) => row.mobile_phone ?? '' },
+    { key: 'fax', header: '팩스', render: (row: typeof rows[number]) => row.fax ?? '' },
+    { key: 'email', header: '이메일', render: (row: typeof rows[number]) => row.email ?? '' },
+    { key: 'memo', header: '메모', render: (row: typeof rows[number]) => row.memo ?? '' },
+    {
+      key: 'edit',
+      header: '수정',
+      align: 'center' as const,
+      render: (row: typeof rows[number]) => (
+        <Button variant="outline" size="sm" onClick={() => openEdit(row)}>
+          수정
+        </Button>
+      ),
+    },
+  ];
+
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-5.5 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input
@@ -1251,84 +1122,18 @@ function SuppliersView() {
           />
           미사용 보기
         </label>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-        >
+        <Button variant="outline" onClick={openCreate}>
           매입처 등록
-        </button>
+        </Button>
       </div>
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
-      <div className="border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                <th className="px-6 py-4 text-left">매입처</th>
-                <th className="px-6 py-4 text-left">담당자</th>
-                <th className="px-6 py-4 text-left">전화 번호</th>
-                <th className="px-6 py-4 text-left">휴대폰 번호</th>
-                <th className="px-6 py-4 text-left">팩스</th>
-                <th className="px-6 py-4 text-left">이메일</th>
-                <th className="px-6 py-4 text-left">메모</th>
-                <th className="px-6 py-4 text-center">수정</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                    불러오는 중입니다...
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
-                  >
-                    <td className="px-6 py-4">
-                      {row.name}{' '}
-                      {!row.is_active && (
-                        <span className="ml-1 inline-flex rounded-full border border-gray-200 px-2 text-[10px] text-gray-500">
-                          미사용
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">{row.contact_name ?? ''}</td>
-                    <td className="px-6 py-4">{row.phone ?? ''}</td>
-                    <td className="px-6 py-4">{row.mobile_phone ?? ''}</td>
-                    <td className="px-6 py-4">{row.fax ?? ''}</td>
-                    <td className="px-6 py-4">{row.email ?? ''}</td>
-                    <td className="px-6 py-4">{row.memo ?? ''}</td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(row)}
-                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        수정
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              {!loading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                    내역이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {error && <FormAlert message={error} variant="error" />}
+      <DataTable
+        columns={supplierColumns}
+        data={rows}
+        keyExtractor={(row) => row.id}
+        loading={loading}
+        emptyMessage="내역이 없습니다."
+      />
       {editSupplier && (
         <SupplierEditModal
           supplier={editSupplier}
@@ -1433,132 +1238,107 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h3 className="text-base font-semibold text-gray-900">
-            {isEdit ? '매입처 수정' : '매입처 등록'}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        {error && (
-          <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div className="space-y-3 px-5 py-4 text-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">
-              공급 업체 명 <span className="text-red-500">*</span>
-            </div>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => handleChange('name', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">담당자</div>
-            <input
-              type="text"
-              value={form.contact_name}
-              onChange={(e) => handleChange('contact_name', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">휴대폰 번호</div>
-            <input
-              type="text"
-              value={form.mobile_phone}
-              onChange={(e) => handleChange('mobile_phone', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">전화 번호</div>
-            <input
-              type="text"
-              value={form.phone}
-              onChange={(e) => handleChange('phone', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">팩스</div>
-            <input
-              type="text"
-              value={form.fax}
-              onChange={(e) => handleChange('fax', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">이메일</div>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => handleChange('email', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-20 text-gray-700">메모</div>
-            <textarea
-              value={form.memo}
-              onChange={(e) => handleChange('memo', e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[80px] focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3 pt-1">
-            <div className="w-20 text-gray-700">상태</div>
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={form.is_active}
-                onChange={(e) => handleChange('is_active', e.target.checked)}
-                className="rounded-lg border border-gray-200"
-              />
-              사용
-            </label>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-3">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={isEdit ? '매입처 수정' : '매입처 등록'}
+      footer={
+        <>
           {isEdit && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={loading}
-              className="rounded-lg border border-red-500 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
-            >
+            <Button variant="danger" onClick={handleDelete} disabled={loading}>
               삭제
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          <div className="flex-1" />
+          <Button variant="outline" onClick={onClose}>
             취소
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={loading}
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
-          >
+          </Button>
+          <Button variant="primary" onClick={handleSave} loading={loading}>
             {loading ? '저장 중...' : '저장'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      {error && <FormAlert message={error} variant="error" className="mb-4" />}
+      <div className="space-y-3 text-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">
+            공급 업체 명 <span className="text-red-500">*</span>
+          </div>
+          <Input
+            type="text"
+            value={form.name}
+            onChange={(e) => handleChange('name', e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">담당자</div>
+          <Input
+            type="text"
+            value={form.contact_name}
+            onChange={(e) => handleChange('contact_name', e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">휴대폰 번호</div>
+          <Input
+            type="text"
+            value={form.mobile_phone}
+            onChange={(e) => handleChange('mobile_phone', e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">전화 번호</div>
+          <Input
+            type="text"
+            value={form.phone}
+            onChange={(e) => handleChange('phone', e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">팩스</div>
+          <Input
+            type="text"
+            value={form.fax}
+            onChange={(e) => handleChange('fax', e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">이메일</div>
+          <Input
+            type="email"
+            value={form.email}
+            onChange={(e) => handleChange('email', e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="w-20 text-gray-700">메모</div>
+          <textarea
+            value={form.memo}
+            onChange={(e) => handleChange('memo', e.target.value)}
+            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[80px] focus:ring-2 focus:ring-black focus:border-transparent"
+          />
+        </div>
+        <div className="flex items-center gap-3 pt-1">
+          <div className="w-20 text-gray-700">상태</div>
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={form.is_active}
+              onChange={(e) => handleChange('is_active', e.target.checked)}
+              className="rounded-lg border border-gray-200"
+            />
+            사용
+          </label>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1607,110 +1387,63 @@ function AdjustmentHistoryView() {
     fetchAdjustments();
   }, [startDate, endDate, productSearch]);
 
+  const adjustmentColumns = [
+    { key: 'adjusted_at', header: '날짜', render: (row: typeof rows[number]) => formatDateTime(row.adjusted_at) },
+    { key: 'product_code', header: '제품코드', render: (row: typeof rows[number]) => row.product_code ?? '' },
+    { key: 'product_name', header: '제품명', render: (row: typeof rows[number]) => row.product_name ?? '' },
+    { key: 'before_stock', header: '변경 전', align: 'right' as const, render: (row: typeof rows[number]) => <span className="text-red-600">{row.before_stock.toLocaleString()}</span> },
+    { key: 'after_stock', header: '변경 후', align: 'right' as const, render: (row: typeof rows[number]) => row.after_stock.toLocaleString() },
+    { key: 'diff', header: '변동 수량', align: 'right' as const, render: (row: typeof rows[number]) => row.diff.toLocaleString() },
+    { key: 'memo', header: '메모', render: (row: typeof rows[number]) => row.memo ?? '' },
+  ];
+
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-5.5 flex flex-col gap-4">
       <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">기간</span>
-          <input
+          <Input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-auto"
           />
           <span className="text-gray-400">~</span>
-          <input
+          <Input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-auto"
           />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-700">제품</span>
-          <input
+          <Input
             type="text"
             placeholder="제품코드 또는 제품명"
             value={productSearch}
             onChange={(e) => setProductSearch(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[200px] focus:ring-2 focus:ring-black focus:border-transparent"
+            className="min-w-[200px]"
           />
         </div>
         <div className="ml-auto flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowAdjustModal(true)}
-            className="px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
+          <Button variant="outline" onClick={() => setShowAdjustModal(true)}>
             재고 임의 조정
-          </button>
-          <button className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900">
-            검색
-          </button>
+          </Button>
+          <Button variant="primary">검색</Button>
         </div>
       </div>
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <FormAlert message={error} variant="error" />}
       <div className="text-xs text-gray-500">
         총 <span className="font-semibold">{rows.length}</span> 건
       </div>
-      <div className="border border-gray-200 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                <th className="px-6 py-4 text-left">날짜</th>
-                <th className="px-6 py-4 text-left">제품코드</th>
-                <th className="px-6 py-4 text-left">제품명</th>
-                <th className="px-6 py-4 text-right">변경 전</th>
-                <th className="px-6 py-4 text-right">변경 후</th>
-                <th className="px-6 py-4 text-right">변동 수량</th>
-                <th className="px-6 py-4 text-left">메모</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    불러오는 중입니다...
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
-                  >
-                    <td className="px-6 py-4">{formatDateTime(row.adjusted_at)}</td>
-                    <td className="px-6 py-4">{row.product_code ?? ''}</td>
-                    <td className="px-6 py-4">{row.product_name ?? ''}</td>
-                    <td className="px-4 py-2 text-right text-red-600">
-                      {row.before_stock.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {row.after_stock.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">{row.diff.toLocaleString()}</td>
-                    <td className="px-6 py-4">{row.memo ?? ''}</td>
-                  </tr>
-                ))}
-              {!loading && rows.length === 0 && (
-                <tr
-                  className="text-gray-700"
-                >
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    내역이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        columns={adjustmentColumns}
+        data={rows}
+        keyExtractor={(row) => row.id}
+        loading={loading}
+        emptyMessage="내역이 없습니다."
+      />
       {showAdjustModal && (
         <StockAdjustmentModal onClose={() => setShowAdjustModal(false)} />
       )}
@@ -1775,117 +1508,79 @@ function InventoryMovementHistoryView() {
     fetchMovements();
   }, [startDate, endDate, productCode, category]);
 
+  const movementColumns = [
+    { key: 'createdAt', header: '생성일', render: (row: MovementRow) => row.createdAt },
+    { key: 'userId', header: '사용자 ID', render: (row: MovementRow) => row.userId },
+    { key: 'productCode', header: '제품코드', render: (row: MovementRow) => row.productCode },
+    { key: 'productName', header: '제품명', render: (row: MovementRow) => row.productName },
+    { key: 'type', header: '구분', render: (row: MovementRow) => row.type },
+    { key: 'diff', header: '변동 수량', align: 'right' as const, render: (row: MovementRow) => row.diff > 0 ? `+${row.diff}` : row.diff },
+    { key: 'currentStock', header: '현 재고', align: 'right' as const, render: (row: MovementRow) => row.currentStock.toLocaleString() },
+    {
+      key: 'detail',
+      header: '상세',
+      align: 'center' as const,
+      render: (row: MovementRow) => (
+        <Button variant="outline" size="sm" onClick={() => setSelected(row)}>
+          보기
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-6 flex flex-col gap-4">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 md:p-5.5 flex flex-col gap-4">
         <div className="flex flex-wrap gap-3 items-start md:items-center justify-start">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">기간</span>
-            <input
+            <Input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+              className="w-auto"
             />
             <span className="text-gray-400">~</span>
-            <input
+            <Input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+              className="w-auto"
             />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">제품</span>
-            <input
+            <Input
               type="text"
               placeholder="제품코드"
               value={productCode}
               onChange={(e) => setProductCode(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[140px] focus:ring-2 focus:ring-black focus:border-transparent"
+              className="min-w-[140px]"
             />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700">구분</span>
-            <select
+            <Select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[100px] focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option>전체</option>
-            </select>
+              options={[{ value: '전체', label: '전체' }]}
+              className="min-w-[100px]"
+            />
           </div>
           <div className="ml-auto flex gap-2">
-            <button className="px-4 py-2 rounded-lg bg-black text-sm font-medium text-white hover:bg-gray-900">
-              검색
-            </button>
+            <Button variant="primary">검색</Button>
           </div>
         </div>
         <div className="text-xs text-gray-500">
           총 <span className="font-semibold">{rows.length}</span> 건
         </div>
-        <div className="border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                  <th className="px-6 py-4 text-left">생성일</th>
-                  <th className="px-6 py-4 text-left">사용자 ID</th>
-                  <th className="px-6 py-4 text-left">제품코드</th>
-                  <th className="px-6 py-4 text-left">제품명</th>
-                  <th className="px-6 py-4 text-left">구분</th>
-                  <th className="px-6 py-4 text-right">변동 수량</th>
-                  <th className="px-6 py-4 text-right">현 재고</th>
-                  <th className="px-6 py-4 text-center">상세</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                      불러오는 중입니다...
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  rows.map((row, idx) => (
-                  <tr
-                    key={idx}
-                    className="hover:bg-gray-50/50 transition-colors text-gray-700"
-                  >
-                    <td className="px-6 py-4">{row.createdAt}</td>
-                    <td className="px-6 py-4">{row.userId}</td>
-                    <td className="px-6 py-4">{row.productCode}</td>
-                    <td className="px-6 py-4">{row.productName}</td>
-                    <td className="px-6 py-4">{row.type}</td>
-                    <td className="px-6 py-4 text-right">
-                      {row.diff > 0 ? `+${row.diff}` : row.diff}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {row.currentStock.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setSelected(row)}
-                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
-                      >
-                        보기
-                      </button>
-                    </td>
-                  </tr>
-                  ))}
-                {!loading && rows.length === 0 && (
-                  <tr className="border-t border-gray-100">
-                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                      내역이 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          columns={movementColumns}
+          data={rows}
+          keyExtractor={(row) => `${row.productCode}-${row.createdAt}-${row.userId}`}
+          loading={loading}
+          emptyMessage="내역이 없습니다."
+        />
         <div className="text-xs text-gray-500 border-t border-gray-200 pt-3">
           · 생성일은 사용자가 시스템에 등록한 일시를 의미합니다.
           <br />
@@ -1909,95 +1604,86 @@ type InventoryMovementDetailModalProps = {
 // Comment: Detail modal for inventory movement row (판매 상세와 유사한 구조)
 function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
-          <h3 className="text-xl font-bold text-black">판매 상세</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-black material-symbols-outlined text-xl transition-colors"
-          >
-            close
-          </button>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="판매 상세"
+      maxWidth="max-w-4xl"
+      scrollable
+      footer={
+        <div className="flex justify-end w-full">
+          <Button variant="primary" onClick={onClose}>
+            닫기
+          </Button>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-5 space-y-4">
-            <div className="text-sm text-gray-800">
-              <div className="font-medium">{row.productName}</div>
-              <div className="text-gray-500 text-xs mt-1">
-                {row.createdAt} · {row.userId}
-              </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="text-sm text-gray-800">
+          <div className="font-medium">{row.productName}</div>
+          <div className="text-gray-500 text-xs mt-1">
+            {row.createdAt} · {row.userId}
+          </div>
+        </div>
+        {/* Complex table with specific layout - kept as custom table */}
+        <div className="border border-gray-200 rounded-2xl overflow-hidden">
+          <table className="w-full text-sm border-collapse">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-5.5 py-4 text-left">판매 항목</th>
+                <th className="px-5.5 py-4 text-right">단가</th>
+                <th className="px-5.5 py-4 text-right">수량</th>
+                <th className="px-5.5 py-4 text-right">할인</th>
+                <th className="px-5.5 py-4 text-right">금액</th>
+                <th className="px-5.5 py-4 text-left">담당자</th>
+                <th className="px-5.5 py-4 text-left">영업 구분</th>
+                <th className="px-5.5 py-4 text-right">포인트 차감</th>
+                <th className="px-5.5 py-4 text-right">정액권 차감</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-gray-100">
+                <td className="px-5.5 py-4">{row.productName}</td>
+                <td className="px-5.5 py-4 text-right">6,500</td>
+                <td className="px-5.5 py-4 text-right">1</td>
+                <td className="px-5.5 py-4 text-right">0</td>
+                <td className="px-5.5 py-4 text-right">6,500</td>
+                <td className="px-5.5 py-4">winter 선생님</td>
+                <td className="px-5.5 py-4">매출</td>
+                <td className="px-5.5 py-4 text-right">0</td>
+                <td className="px-5.5 py-4 text-right">0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-[1.2fr,2fr] gap-4">
+          <div className="border border-gray-200 rounded-xl p-4 text-sm space-y-1">
+            <div className="font-semibold text-gray-800 mb-1">결제</div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">판매 금액</span>
+              <span className="font-medium text-gray-800">56,000</span>
             </div>
-            <div className="border border-gray-200 rounded-2xl overflow-hidden">
-              <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left">판매 항목</th>
-                    <th className="px-6 py-4 text-right">단가</th>
-                    <th className="px-6 py-4 text-right">수량</th>
-                    <th className="px-6 py-4 text-right">할인</th>
-                    <th className="px-6 py-4 text-right">금액</th>
-                    <th className="px-6 py-4 text-left">담당자</th>
-                    <th className="px-6 py-4 text-left">영업 구분</th>
-                    <th className="px-6 py-4 text-right">포인트 차감</th>
-                    <th className="px-6 py-4 text-right">정액권 차감</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t border-gray-100">
-                    <td className="px-6 py-4">{row.productName}</td>
-                    <td className="px-6 py-4 text-right">6,500</td>
-                    <td className="px-6 py-4 text-right">1</td>
-                    <td className="px-6 py-4 text-right">0</td>
-                    <td className="px-6 py-4 text-right">6,500</td>
-                    <td className="px-6 py-4">winter 선생님</td>
-                    <td className="px-6 py-4">매출</td>
-                    <td className="px-6 py-4 text-right">0</td>
-                    <td className="px-6 py-4 text-right">0</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div className="flex justify-between">
+              <span className="text-gray-600">할인 금액</span>
+              <span className="font-medium text-gray-800">0</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-[1.2fr,2fr] gap-4">
-              <div className="border border-gray-200 rounded-xl p-4 text-sm space-y-1">
-                <div className="font-semibold text-gray-800 mb-1">결제</div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">판매 금액</span>
-                  <span className="font-medium text-gray-800">56,000</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">할인 금액</span>
-                  <span className="font-medium text-gray-800">0</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-200 pt-2 mt-1">
-                  <span className="font-semibold text-gray-800">합계</span>
-                  <span className="font-semibold text-sky-600">56,000</span>
-                </div>
-              </div>
-              <div className="border border-gray-200 rounded-xl p-4 text-sm space-y-2">
-                <div className="font-semibold text-gray-800 mb-1">메모</div>
-                <div className="min-h-[60px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700 text-sm">
-                  7Cb + mint
-                </div>
-                <div className="text-xs text-gray-500">
-                  등록자 {row.userId} {row.createdAt}
-                </div>
-              </div>
+            <div className="flex justify-between border-t border-gray-200 pt-2 mt-1">
+              <span className="font-semibold text-gray-800">합계</span>
+              <span className="font-semibold text-sky-600">56,000</span>
+            </div>
+          </div>
+          <div className="border border-gray-200 rounded-xl p-4 text-sm space-y-2">
+            <div className="font-semibold text-gray-800 mb-1">메모</div>
+            <div className="min-h-[60px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700 text-sm">
+              7Cb + mint
+            </div>
+            <div className="text-xs text-gray-500">
+              등록자 {row.userId} {row.createdAt}
             </div>
           </div>
         </div>
-        <div className="px-5 py-3 border-t border-gray-200 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-900"
-          >
-            닫기
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -2030,103 +1716,66 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
     fetchInventory();
   }, []);
 
+  const registerColumns = [
+    { key: 'sku', header: '제품코드', render: (item: InventoryItem) => item.sku ?? item.id },
+    { key: 'name', header: '제품명', render: (item: InventoryItem) => item.name },
+    { key: 'stock', header: '현 재고', align: 'right' as const, render: (item: InventoryItem) => Number(item.stock ?? 0).toLocaleString() },
+    {
+      key: 'add',
+      header: '추가',
+      align: 'center' as const,
+      render: (item: InventoryItem) => (
+        <Button variant="outline" size="sm" onClick={() => setSelectedItem(item)}>
+          추가
+        </Button>
+      ),
+    },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h3 className="text-base font-semibold text-gray-900">내부 소모 등록</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        {error && (
-          <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="mb-3 flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-700">분류</span>
-              <select className="min-w-[100px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent">
-                <option>전체</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-700">제품</span>
-              <input
-                type="text"
-                placeholder="제품코드 또는 제품명"
-                className="min-w-[200px] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-            <label className="ml-4 inline-flex cursor-pointer items-center gap-2 text-xs text-gray-600">
-              <input type="checkbox" className="rounded-lg border border-gray-200" />
-              판매용 제품 포함
-            </label>
-          </div>
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-left">제품코드</th>
-                  <th className="px-6 py-4 text-left">제품명</th>
-                  <th className="px-6 py-4 text-right">현 재고</th>
-                  <th className="px-6 py-4 text-center">추가</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                      불러오는 중입니다...
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  items.map((item) => (
-                    <tr key={item.id} className="border-t border-gray-100">
-                      <td className="px-6 py-4">{item.sku ?? item.id}</td>
-                      <td className="px-6 py-4">{item.name}</td>
-                      <td className="px-6 py-4 text-right">
-                        {Number(item.stock ?? 0).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedItem(item)}
-                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          추가
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                {!loading && items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                      등록된 재고가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="내부 소모 등록"
+      maxWidth="max-w-5xl"
+      scrollable
+      footer={
+        <div className="flex justify-end w-full">
+          <Button variant="outline" onClick={onClose}>
             닫기
-          </button>
+          </Button>
         </div>
+      }
+    >
+      {error && <FormAlert message={error} variant="error" className="mb-4" />}
+      <div className="mb-3 flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-700">분류</span>
+          <Select
+            options={[{ value: '전체', label: '전체' }]}
+            className="min-w-[100px]"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-700">제품</span>
+          <Input
+            type="text"
+            placeholder="제품코드 또는 제품명"
+            className="min-w-[200px]"
+          />
+        </div>
+        <label className="ml-4 inline-flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+          <input type="checkbox" className="rounded-lg border border-gray-200" />
+          판매용 제품 포함
+        </label>
       </div>
+      <DataTable
+        columns={registerColumns}
+        data={items}
+        keyExtractor={(item) => item.id}
+        loading={loading}
+        emptyMessage="등록된 재고가 없습니다."
+      />
       {selectedItem && (
         <InternalUsageEntryModal
           mode="create"
@@ -2137,7 +1786,7 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
           onClose={() => setSelectedItem(null)}
         />
       )}
-    </div>
+    </Modal>
   );
 }
 
@@ -2203,103 +1852,80 @@ function InternalUsageEntryModal({
   };
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h3 className="text-base font-semibold text-gray-900">
-            {mode === 'create' ? '내부 소모 등록' : '내부 소모 편집'}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        {error && (
-          <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div className="space-y-3 px-5 py-4 text-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">제품명</div>
-            <input
-              type="text"
-              value={productName}
-              readOnly
-              className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">
-              수량 <span className="text-red-500">*</span>
-            </div>
-            <input
-              type="number"
-              min={1}
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">직원</div>
-            <select
-              value={staff}
-              onChange={(e) => setStaff(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="">선택</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">메모</div>
-            <input
-              type="text"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-20 text-gray-700">날짜</div>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-3">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={mode === 'create' ? '내부 소모 등록' : '내부 소모 편집'}
+      zIndex="z-[60]"
+      footer={
+        <>
           {mode === 'edit' && (
-            <button
-              type="button"
-              className="rounded-lg border border-red-500 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-            >
-              삭제
-            </button>
+            <Button variant="danger">삭제</Button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          <div className="flex-1" />
+          <Button variant="outline" onClick={onClose}>
             취소
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
-          >
+          </Button>
+          <Button variant="primary" onClick={handleSave} loading={saving}>
             {saving ? '저장 중...' : '저장'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      {error && <FormAlert message={error} variant="error" className="mb-4" />}
+      <div className="space-y-3 text-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">제품명</div>
+          <Input
+            type="text"
+            value={productName}
+            readOnly
+            wrapperClassName="flex-1"
+            className="bg-gray-50"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">
+            수량 <span className="text-red-500">*</span>
+          </div>
+          <Input
+            type="number"
+            min={1}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">직원</div>
+          <Select
+            value={staff}
+            onChange={(e) => setStaff(e.target.value)}
+            options={[]}
+            placeholder="선택"
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">메모</div>
+          <Input
+            type="text"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            wrapperClassName="flex-1"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-20 text-gray-700">날짜</div>
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            wrapperClassName="flex-1"
+          />
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -2380,96 +2006,79 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
     }
   };
 
+  // This table has inline editable inputs per row, keeping as custom table
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h3 className="text-base font-semibold text-gray-900">재고 임의 조정</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        {error && (
-          <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="w-full border-collapse text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-left">제품코드</th>
-                  <th className="px-6 py-4 text-left">제품명</th>
-                  <th className="px-6 py-4 text-right">현 재고 (조정 전)</th>
-                  <th className="px-6 py-4 text-right">현 재고 (조정 후)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                      불러오는 중입니다...
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  items.map((item) => {
-                    const before = Number(item.stock ?? 0);
-                    const after = draftAfter[item.id] ?? before;
-                    return (
-                      <tr key={item.id} className="border-t border-gray-100">
-                        <td className="px-6 py-4">{item.sku ?? item.id}</td>
-                        <td className="px-6 py-4">{item.name}</td>
-                        <td className="px-6 py-4 text-right">
-                          {before.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                            value={after}
-                            onChange={(e) => handleChangeAfter(item.id, e.target.value)}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                {!loading && items.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                      등록된 재고가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="재고 임의 조정"
+      maxWidth="max-w-5xl"
+      scrollable
+      footer={
+        <>
+          <div className="flex-1" />
+          <Button variant="outline" onClick={onClose}>
             취소
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
-          >
+          </Button>
+          <Button variant="primary" onClick={handleSave} loading={saving}>
             {saving ? '저장 중...' : '저장'}
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      {error && <FormAlert message={error} variant="error" className="mb-4" />}
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="px-5.5 py-4 text-left">제품코드</th>
+              <th className="px-5.5 py-4 text-left">제품명</th>
+              <th className="px-5.5 py-4 text-right">현 재고 (조정 전)</th>
+              <th className="px-5.5 py-4 text-right">현 재고 (조정 후)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={4} className="px-5.5 py-7.5 text-center text-gray-500">
+                  불러오는 중입니다...
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              items.map((item) => {
+                const before = Number(item.stock ?? 0);
+                const after = draftAfter[item.id] ?? before;
+                return (
+                  <tr key={item.id} className="border-t border-gray-100">
+                    <td className="px-5.5 py-4">{item.sku ?? item.id}</td>
+                    <td className="px-5.5 py-4">{item.name}</td>
+                    <td className="px-5.5 py-4 text-right">
+                      {before.toLocaleString()}
+                    </td>
+                    <td className="px-5.5 py-4 text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                        value={after}
+                        onChange={(e) => handleChangeAfter(item.id, e.target.value)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            {!loading && items.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-5.5 py-7.5 text-center text-gray-500">
+                  등록된 재고가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -2524,101 +2133,57 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
 
   const titlePrefix = header?.type === 'return' ? '반품' : '매입';
 
+  const detailColumns = [
+    { key: 'product_code', header: '제품 코드', render: (item: typeof items[number]) => item.product_code ?? '' },
+    { key: 'product_name', header: '상품명', render: (item: typeof items[number]) => item.product_name ?? '' },
+    { key: 'unit_price', header: '단가', align: 'right' as const, render: (item: typeof items[number]) => Number(item.unit_price ?? 0).toLocaleString() },
+    { key: 'quantity', header: '수량', align: 'right' as const, render: (item: typeof items[number]) => item.quantity },
+    { key: 'line_amount', header: '금액', align: 'right' as const, render: (item: typeof items[number]) => Number(item.line_amount ?? 0).toLocaleString() },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-          <h3 className="text-base font-semibold text-gray-900">
-            {titlePrefix} 상세
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={`${titlePrefix} 상세`}
+      maxWidth="max-w-4xl"
+      scrollable
+      footer={
+        <div className="flex justify-end w-full">
+          <Button variant="outline" onClick={onClose}>
+            닫기
+          </Button>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-5 space-y-4">
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {error}
-              </div>
-            )}
-            <div className="flex flex-col gap-1 text-sm text-gray-800">
-              <div className="flex justify-between">
-                <div>
-                  <span className="font-semibold mr-2">{titlePrefix}</span>
-                  <span className="text-gray-600">
-                    공급처: {header?.supplier_name ?? '-'}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500">
-                  생성일: {formatDateTime(header?.created_at) || ''}
-                </div>
-              </div>
-              <div className="text-gray-600 text-xs">
-                날짜: {formatDateTime(header?.purchase_date) || ''}{' '}
-                {header?.memo && <span className="ml-2">메모: {header.memo}</span>}
-              </div>
+      }
+    >
+      <div className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        <div className="flex flex-col gap-1 text-sm text-gray-800">
+          <div className="flex justify-between">
+            <div>
+              <span className="font-semibold mr-2">{titlePrefix}</span>
+              <span className="text-gray-600">
+                공급처: {header?.supplier_name ?? '-'}
+              </span>
             </div>
-            <div className="border border-gray-200 rounded-2xl overflow-hidden">
-              <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left">제품 코드</th>
-                    <th className="px-6 py-4 text-left">상품명</th>
-                    <th className="px-6 py-4 text-right">단가</th>
-                    <th className="px-6 py-4 text-right">수량</th>
-                    <th className="px-6 py-4 text-right">금액</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                        불러오는 중입니다...
-                      </td>
-                    </tr>
-                  )}
-                  {!loading &&
-                    items.map((item) => (
-                      <tr key={item.id} className="border-t border-gray-100">
-                        <td className="px-6 py-4">{item.product_code ?? ''}</td>
-                        <td className="px-6 py-4">{item.product_name ?? ''}</td>
-                        <td className="px-6 py-4 text-right">
-                          {Number(item.unit_price ?? 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-right">{item.quantity}</td>
-                        <td className="px-6 py-4 text-right">
-                          {Number(item.line_amount ?? 0).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  {!loading && !items.length && (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                        품목이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="text-xs text-gray-500">
+              생성일: {formatDateTime(header?.created_at) || ''}
             </div>
           </div>
+          <div className="text-gray-600 text-xs">
+            날짜: {formatDateTime(header?.purchase_date) || ''}{' '}
+            {header?.memo && <span className="ml-2">메모: {header.memo}</span>}
+          </div>
         </div>
-        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            닫기
-          </button>
-        </div>
+        <DataTable
+          columns={detailColumns}
+          data={items}
+          keyExtractor={(item) => item.id}
+          loading={loading}
+          emptyMessage="품목이 없습니다."
+        />
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -2708,168 +2273,144 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
     }
   };
 
+  // This table has inline editable inputs per row, keeping as custom table
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        {error && (
-          <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-sm">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="w-14 text-gray-700">공급처</span>
-              <select
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm min-w-[200px] bg-white focus:ring-2 focus:ring-black focus:border-transparent"
-              >
-                <option value="">선택</option>
-                {supplierOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-12 text-gray-700">날짜</span>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          </div>
-          <div>
-            <span className="mb-1 block text-sm font-medium text-gray-700">메모</span>
-            <textarea
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[80px] focus:ring-2 focus:ring-black focus:border-transparent"
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={title}
+      maxWidth="max-w-5xl"
+      scrollable
+      footer={
+        <>
+          <div className="flex-1" />
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button variant="primary" onClick={handleSave} loading={loading}>
+            {loading ? '저장 중...' : '저장'}
+          </Button>
+        </>
+      }
+    >
+      {error && <FormAlert message={error} variant="error" className="mb-4" />}
+      <div className="space-y-4 text-sm">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-14 text-gray-700">공급처</span>
+            <Select
+              value={supplier}
+              onChange={(e) => setSupplier(e.target.value)}
+              options={supplierOptions.map((name) => ({ value: name, label: name }))}
+              placeholder="선택"
+              className="min-w-[200px]"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setShowItemPicker(true)}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              제품 추가
-            </button>
-            <div className="text-xs text-gray-500">
-              총 금액{' '}
-              <span className="font-semibold text-gray-900">
-                {totalAmount.toLocaleString()}
-              </span>
-            </div>
-          </div>
-          <div className="border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                    <th className="px-6 py-4 text-left">제품 코드</th>
-                    <th className="px-6 py-4 text-left">상품명</th>
-                    <th className="px-6 py-4 text-right">단가</th>
-                    <th className="px-6 py-4 text-right">수량</th>
-                    <th className="px-6 py-4 text-right">금액</th>
-                    <th className="px-6 py-4 text-center">삭제</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, idx) => {
-                    const lineAmount =
-                      Number(item.unitPrice ?? 0) * Number(item.quantity ?? 0);
-                    return (
-                      <tr key={`${item.inventoryItemId}-${idx}`} className="border-t border-gray-100">
-                        <td className="px-6 py-4">{item.code}</td>
-                        <td className="px-6 py-4">{item.name}</td>
-                        <td className="px-6 py-4 text-right">
-                          <input
-                            type="number"
-                            className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                            value={item.unitPrice}
-                            onChange={(e) =>
-                              setItems((prev) =>
-                                prev.map((p, i) =>
-                                  i === idx ? { ...p, unitPrice: Number(e.target.value) } : p
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <input
-                            type="number"
-                            className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                            value={item.quantity}
-                            onChange={(e) =>
-                              setItems((prev) =>
-                                prev.map((p, i) =>
-                                  i === idx ? { ...p, quantity: Number(e.target.value) } : p
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          {lineAmount.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setItems((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                          >
-                            삭제
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!items.length && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                        내역이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="w-12 text-gray-700">날짜</span>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-auto"
+            />
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={loading}
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-60"
-          >
-            {loading ? '저장 중...' : '저장'}
-          </button>
+        <div>
+          <span className="mb-1 block text-sm font-medium text-gray-700">메모</span>
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[80px] focus:ring-2 focus:ring-black focus:border-transparent"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <Button variant="outline" onClick={() => setShowItemPicker(true)}>
+            제품 추가
+          </Button>
+          <div className="text-xs text-gray-500">
+            총 금액{' '}
+            <span className="font-semibold text-gray-900">
+              {totalAmount.toLocaleString()}
+            </span>
+          </div>
+        </div>
+        <div className="border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                  <th className="px-5.5 py-4 text-left">제품 코드</th>
+                  <th className="px-5.5 py-4 text-left">상품명</th>
+                  <th className="px-5.5 py-4 text-right">단가</th>
+                  <th className="px-5.5 py-4 text-right">수량</th>
+                  <th className="px-5.5 py-4 text-right">금액</th>
+                  <th className="px-5.5 py-4 text-center">삭제</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => {
+                  const lineAmount =
+                    Number(item.unitPrice ?? 0) * Number(item.quantity ?? 0);
+                  return (
+                    <tr key={`${item.inventoryItemId}-${idx}`} className="border-t border-gray-100">
+                      <td className="px-5.5 py-4">{item.code}</td>
+                      <td className="px-5.5 py-4">{item.name}</td>
+                      <td className="px-5.5 py-4 text-right">
+                        <input
+                          type="number"
+                          className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          value={item.unitPrice}
+                          onChange={(e) =>
+                            setItems((prev) =>
+                              prev.map((p, i) =>
+                                i === idx ? { ...p, unitPrice: Number(e.target.value) } : p
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-5.5 py-4 text-right">
+                        <input
+                          type="number"
+                          className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            setItems((prev) =>
+                              prev.map((p, i) =>
+                                i === idx ? { ...p, quantity: Number(e.target.value) } : p
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-5.5 py-4 text-right">
+                        {lineAmount.toLocaleString()}
+                      </td>
+                      <td className="px-5.5 py-4 text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setItems((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                        >
+                          삭제
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!items.length && (
+                  <tr>
+                    <td colSpan={6} className="px-5.5 py-7.5 text-center text-gray-500">
+                      내역이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {showItemPicker && (
@@ -2881,7 +2422,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
           }}
         />
       )}
-    </div>
+    </Modal>
   );
 }
 
@@ -2958,140 +2499,127 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
     onConfirm(selected);
   };
 
+  // This table has inline editable inputs per row, keeping as custom table
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h3 className="text-base font-semibold text-gray-900">제품 추가</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-        </div>
-        {error && (
-          <div className="border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="제품 코드 / 이름 / 바코드"
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm min-w-[240px] focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          </div>
-          <div className="border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left">제품 코드</th>
-                    <th className="px-6 py-4 text-left">상품명</th>
-                    <th className="px-6 py-4 text-right">단가</th>
-                    <th className="px-6 py-4 text-right">수량</th>
-                    <th className="px-6 py-4 text-right">금액</th>
-                    <th className="px-6 py-4 text-right">현 재고</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                        불러오는 중입니다...
-                      </td>
-                    </tr>
-                  )}
-                  {!loading &&
-                    items.map((item) => {
-                      const row = draft[item.id] ?? {
-                        unitPrice: Number(item.price ?? 0),
-                        quantity: 0,
-                      };
-                      const amount =
-                        Number(row.unitPrice ?? 0) * Number(row.quantity ?? 0);
-                      return (
-                        <tr key={item.id} className="border-t border-gray-100">
-                          <td className="px-6 py-4">{item.sku ?? String(item.id)}</td>
-                          <td className="px-6 py-4">{item.name}</td>
-                          <td className="px-6 py-4 text-right">
-                            <input
-                              type="number"
-                              className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                              value={row.unitPrice}
-                              onChange={(e) =>
-                                setDraft((prev) => ({
-                                  ...prev,
-                                  [item.id]: {
-                                    ...prev[item.id],
-                                    unitPrice: Number(e.target.value),
-                                  },
-                                }))
-                              }
-                            />
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <input
-                              type="number"
-                              className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                              value={row.quantity}
-                              onChange={(e) =>
-                                setDraft((prev) => ({
-                                  ...prev,
-                                  [item.id]: {
-                                    ...prev[item.id],
-                                    quantity: Number(e.target.value),
-                                  },
-                                }))
-                              }
-                            />
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {amount.toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {Number(item.stock ?? 0).toLocaleString()}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  {!loading && items.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                        등록된 재고가 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="제품 추가"
+      maxWidth="max-w-5xl"
+      zIndex="z-[60]"
+      scrollable
+      footer={
+        <>
+          <div className="flex-1" />
+          <Button variant="outline" onClick={onClose}>
             취소
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
-          >
+          </Button>
+          <Button variant="primary" onClick={handleConfirm}>
             확인
-          </button>
+          </Button>
+        </>
+      }
+    >
+      {error && <FormAlert message={error} variant="error" className="mb-4" />}
+      <div className="space-y-3 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="제품 코드 / 이름 / 바코드"
+              className="min-w-[240px]"
+            />
+          </div>
+        </div>
+        <div className="border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-5.5 py-4 text-left">제품 코드</th>
+                  <th className="px-5.5 py-4 text-left">상품명</th>
+                  <th className="px-5.5 py-4 text-right">단가</th>
+                  <th className="px-5.5 py-4 text-right">수량</th>
+                  <th className="px-5.5 py-4 text-right">금액</th>
+                  <th className="px-5.5 py-4 text-right">현 재고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td colSpan={6} className="px-5.5 py-7.5 text-center text-gray-500">
+                      불러오는 중입니다...
+                    </td>
+                  </tr>
+                )}
+                {!loading &&
+                  items.map((item) => {
+                    const row = draft[item.id] ?? {
+                      unitPrice: Number(item.price ?? 0),
+                      quantity: 0,
+                    };
+                    const amount =
+                      Number(row.unitPrice ?? 0) * Number(row.quantity ?? 0);
+                    return (
+                      <tr key={item.id} className="border-t border-gray-100">
+                        <td className="px-5.5 py-4">{item.sku ?? String(item.id)}</td>
+                        <td className="px-5.5 py-4">{item.name}</td>
+                        <td className="px-5.5 py-4 text-right">
+                          <input
+                            type="number"
+                            className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                            value={row.unitPrice}
+                            onChange={(e) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  ...prev[item.id],
+                                  unitPrice: Number(e.target.value),
+                                },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-5.5 py-4 text-right">
+                          <input
+                            type="number"
+                            className="w-20 rounded-lg border border-gray-200 px-3 py-2 text-right text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                            value={row.quantity}
+                            onChange={(e) =>
+                              setDraft((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  ...prev[item.id],
+                                  quantity: Number(e.target.value),
+                                },
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-5.5 py-4 text-right">
+                          {amount.toLocaleString()}
+                        </td>
+                        <td className="px-5.5 py-4 text-right">
+                          {Number(item.stock ?? 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {!loading && items.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-5.5 py-7.5 text-center text-gray-500">
+                      등록된 재고가 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -3146,135 +2674,105 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">상품 추가</h2>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="상품 추가"
+      maxWidth="max-w-lg"
+      scrollable
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        <Input
+          label="상품명"
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Input
+          label="용량 / 옵션"
+          type="text"
+          value={size}
+          onChange={(e) => setSize(e.target.value)}
+        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="SKU"
+            type="text"
+            value={sku}
+            onChange={(e) => setSku(e.target.value)}
+          />
+          <Select
+            label="카테고리"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            options={[
+              { value: 'Hair Care', label: '헤어 케어' },
+              { value: 'Coloring', label: '염색' },
+              { value: 'Styling', label: '스타일링' },
+              { value: 'Treatment', label: '트리트먼트' },
+              { value: 'Tools', label: '도구' },
+            ]}
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="가격 (AUD)"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+          <Input
+            label="초기 재고"
+            type="number"
+            min="0"
+            step="1"
+            required
+            value={stock}
+            onChange={(e) => setStock(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+          <div className="grid grid-cols-5 gap-2">
+            {ICON_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setIcon(option)}
+                className={`min-w-0 w-full flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs overflow-hidden ${
+                  icon === option
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base shrink-0">
+                  {option}
+                </span>
+                <span className="truncate w-full min-w-0 text-center">{option}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
           <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-black transition-colors"
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2.5 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 transition-colors"
           >
-            <span className="material-symbols-outlined">close</span>
+            {loading && <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />}
+            {loading ? '추가 중...' : '상품 추가'}
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">상품명</label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">용량 / 옵션</label>
-            <input
-              type="text"
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-              <input
-                type="text"
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              >
-                <option value="Hair Care">헤어 케어</option>
-                <option value="Coloring">염색</option>
-                <option value="Styling">스타일링</option>
-                <option value="Treatment">트리트먼트</option>
-                <option value="Tools">도구</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">가격 (AUD)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">초기 재고</label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                required
-                value={stock}
-                onChange={(e) => setStock(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
-            <div className="grid grid-cols-5 gap-2">
-              {ICON_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setIcon(option)}
-                  className={`min-w-0 w-full flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs overflow-hidden ${
-                    icon === option
-                      ? 'border-black bg-black text-white'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base shrink-0">
-                    {option}
-                  </span>
-                  <span className="truncate w-full min-w-0 text-center">{option}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-60"
-            >
-              {loading ? '추가 중...' : '상품 추가'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -3333,145 +2831,114 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">상품 수정</h2>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="상품 수정"
+      maxWidth="max-w-lg"
+      scrollable
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        <Input
+          label="상품명"
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Input
+          label="용량 / 옵션"
+          type="text"
+          value={size}
+          onChange={(e) => setSize(e.target.value)}
+        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="SKU"
+            type="text"
+            value={sku}
+            onChange={(e) => setSku(e.target.value)}
+          />
+          <Select
+            label="카테고리"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            options={[
+              { value: 'Hair Care', label: '헤어 케어' },
+              { value: 'Coloring', label: '염색' },
+              { value: 'Styling', label: '스타일링' },
+              { value: 'Treatment', label: '트리트먼트' },
+              { value: 'Tools', label: '도구' },
+            ]}
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="가격 (AUD)"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
+          <Input
+            label="현재 재고"
+            type="number"
+            min="0"
+            value={editStock}
+            onChange={(e) => setEditStock(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+          <div className="grid grid-cols-5 gap-2">
+            {ICON_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setIcon(option)}
+                className={`min-w-0 w-full flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs overflow-hidden ${
+                  icon === option
+                    ? 'border-black bg-black text-white'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base shrink-0">
+                  {option}
+                </span>
+                <span className="truncate w-full min-w-0 text-center">{option}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
           <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-black transition-colors"
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2.5 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 transition-colors"
           >
-            <span className="material-symbols-outlined">close</span>
+            {loading && <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />}
+            {loading ? '저장 중...' : '변경 저장'}
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">상품명</label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">용량 / 옵션</label>
-            <input
-              type="text"
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
-              <input
-                type="text"
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              >
-                <option value="Hair Care">헤어 케어</option>
-                <option value="Coloring">염색</option>
-                <option value="Styling">스타일링</option>
-                <option value="Treatment">트리트먼트</option>
-                <option value="Tools">도구</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">가격 (AUD)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">현재 재고</label>
-              <input
-                type="number"
-                min="0"
-                value={editStock}
-                onChange={(e) => setEditStock(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
-            <div className="grid grid-cols-5 gap-2">
-              {ICON_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setIcon(option)}
-                  className={`min-w-0 w-full flex flex-col items-center justify-center gap-1 px-2 py-2 border rounded-lg text-xs overflow-hidden ${
-                    icon === option
-                      ? 'border-black bg-black text-white'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-black/60'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base shrink-0">
-                    {option}
-                  </span>
-                  <span className="truncate w-full min-w-0 text-center">{option}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-60"
-            >
-              {loading ? '저장 중...' : '변경 저장'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 
 export default function InventoryManagementPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50">
-        <AdminTopNav />
+      <AdminPageLayout>
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
           <div className="text-gray-500">Loading...</div>
         </div>
-      </div>
+      </AdminPageLayout>
     }>
       <InventoryContent />
     </Suspense>

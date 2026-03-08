@@ -5,9 +5,10 @@ import DiscountModal from './DiscountModal';
 import PaymentInputModal from './PaymentInputModal';
 import SalesClassificationModal from './SalesClassificationModal';
 import ManagerPickerModal from './ManagerPickerModal';
-import ConfirmationAlertModal from './ConfirmationAlertModal';
-import ErrorAlertModal from './ErrorAlertModal';
 import PrepaidDeductionModal from './PrepaidDeductionModal';
+import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
+import { Z } from '@/lib/constants';
+import type { SalesDetailData, TempSalesData } from '@/lib/types';
 
 type DiscountType = 'percentage' | 'amount' | 'category';
 
@@ -36,8 +37,16 @@ interface SalesRegistrationModalProps {
     prepaid_balance?: number;
   } | null;
   onClose: () => void;
-  onOpenItemPicker: (tab: 'service' | 'product' | 'prepaid') => void;
+  onOpenItemPicker?: (tab: 'service' | 'product' | 'prepaid') => void;
   onComplete?: () => void; // 판매 등록 완료 시 호출
+  initialData?: SalesDetailData | null;
+  editSaleId?: number | null;
+  shopId?: number | null;
+  // 임시저장 관련
+  bookingId?: number | null;
+  tempSaveData?: TempSalesData | null;
+  onTemporarySave?: () => void;
+  onDeleteTempSave?: () => void;
 }
 
 export default function SalesRegistrationModal({
@@ -46,6 +55,13 @@ export default function SalesRegistrationModal({
   onClose,
   onOpenItemPicker,
   onComplete,
+  initialData,
+  editSaleId,
+  shopId,
+  bookingId,
+  tempSaveData,
+  onTemporarySave,
+  onDeleteTempSave,
 }: SalesRegistrationModalProps) {
   const [activeTab, setActiveTab] = useState<'service' | 'product' | 'prepaid'>('service');
   const [salesItems, setSalesItems] = useState<SalesItem[]>([]);
@@ -92,6 +108,8 @@ export default function SalesRegistrationModal({
     bank_transfer: 0,
   });
   const [prepaidDeductionAmount, setPrepaidDeductionAmount] = useState(0);
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
 
   // 정액권 잔액 확인 헬퍼 함수
   const validatePrepaidBalance = (newDeductionAmount: number): boolean => {
@@ -214,26 +232,25 @@ export default function SalesRegistrationModal({
       salesClassification: '',
       prepaidDeduction: 0,
     };
-    const updatedItems = [...salesItems, newSalesItem];
-    setSalesItems(updatedItems);
-    recalculateAmounts(updatedItems);
+    setSalesItems(prev => {
+      const updatedItems = [...prev, newSalesItem];
+      recalculateAmounts(updatedItems);
+      return updatedItems;
+    });
   };
 
-  // 모달이 열릴 때마다 모든 상태 초기화
+  // 모달이 열릴 때마다 모든 상태 초기화 (또는 수정 모드일 때 데이터 채우기)
+  useEffect(() => {
+    fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setSelectedShopId(shopId || null);
+  }, [shopId]);
+
   useEffect(() => {
     if (isOpen) {
-      // 모든 상태 초기화
-      setSalesItems([]);
-      setSalesAmount(0);
-      setDiscountAmount(0);
-      setTotal(0);
-      setAmountToReceive(0);
-      setPointAccumulation(0);
-      setSelectedDeduction(null);
-      setPaymentMethod(null);
-      setMemo('');
-      setSalesDate(new Date().toISOString().split('T')[0]);
-      setSalesTime(new Date().toTimeString().slice(0, 5));
+      // 서브 모달 상태 초기화 (공통)
       setIsDiscountModalOpen(false);
       setSelectedItemForDiscount(null);
       setEditingQuantityItemId(null);
@@ -242,12 +259,103 @@ export default function SalesRegistrationModal({
       setSelectedItemForClassification(null);
       setIsManagerPickerModalOpen(false);
       setSelectedItemForManager(null);
-      setPaymentAmounts({
-        cash: 0,
-        card: 0,
-        bank_transfer: 0,
-      });
-      setActiveTab('service');
+
+      if (initialData && editSaleId) {
+        // 수정 모드: 기존 데이터로 폼 채우기
+        const mappedItems: SalesItem[] = initialData.items.map((item, idx) => ({
+          id: `${item.item_type}-edit-${idx}-${Date.now()}`,
+          type: item.item_type,
+          name: item.item_name,
+          unitPrice: item.unit_price,
+          quantity: item.quantity,
+          discount: item.discount,
+          discountType: (item.discount_type as DiscountType) || undefined,
+          discountValue: item.discount_value ?? undefined,
+          amount: item.amount,
+          manager: item.manager || '',
+          salesClassification: item.sales_classification || '',
+          prepaidDeduction: item.prepaid_deduction || 0,
+        }));
+        setSalesItems(mappedItems);
+        setMemo(initialData.memo || '');
+        setSalesDate(initialData.sales_date);
+        setSalesTime(initialData.sales_time);
+        setPointAccumulation(initialData.point_accumulation || 0);
+        setPaymentAmounts({
+          cash: initialData.cash_amount || 0,
+          card: initialData.card_amount || 0,
+          bank_transfer: initialData.bank_transfer_amount || 0,
+        });
+        setPrepaidDeductionAmount(0);
+        setSelectedDeduction(null);
+        setPaymentMethod(null);
+        setActiveTab('service');
+        // 금액 계산
+        const newSalesAmount = mappedItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+        const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
+        const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
+        setSalesAmount(newSalesAmount);
+        setDiscountAmount(newDiscountAmount);
+        setTotal(newSalesAmount - newDiscountAmount);
+        const totalPaid = (initialData.cash_amount || 0) + (initialData.card_amount || 0) + (initialData.bank_transfer_amount || 0);
+        setAmountToReceive((newSalesAmount - newDiscountAmount) - totalPaid - newPrepaidDeduction);
+      } else if (tempSaveData) {
+        // 임시저장 복원 모드
+        const mappedItems: SalesItem[] = tempSaveData.salesItems.map((item) => ({
+          id: item.id,
+          type: item.type,
+          name: item.name,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          discount: item.discount,
+          discountType: item.discountType,
+          discountValue: item.discountValue,
+          amount: item.amount,
+          manager: item.manager,
+          salesClassification: item.salesClassification,
+          prepaidDeduction: item.prepaidDeduction,
+        }));
+        setSalesItems(mappedItems);
+        setMemo(tempSaveData.memo);
+        setSalesDate(tempSaveData.salesDate);
+        setSalesTime(tempSaveData.salesTime);
+        setPointAccumulation(tempSaveData.pointAccumulation);
+        setPaymentAmounts(tempSaveData.paymentAmounts);
+        if (tempSaveData.selectedShopId != null) setSelectedShopId(tempSaveData.selectedShopId);
+        const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
+        setPrepaidDeductionAmount(newPrepaidDeduction);
+        setSelectedDeduction(null);
+        setPaymentMethod(null);
+        setActiveTab('service');
+        // 금액 계산
+        const newSalesAmount = mappedItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+        const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
+        setSalesAmount(newSalesAmount);
+        setDiscountAmount(newDiscountAmount);
+        setTotal(newSalesAmount - newDiscountAmount);
+        const totalPaid = (tempSaveData.paymentAmounts.cash || 0) + (tempSaveData.paymentAmounts.card || 0) + (tempSaveData.paymentAmounts.bank_transfer || 0);
+        setAmountToReceive((newSalesAmount - newDiscountAmount) - totalPaid - newPrepaidDeduction);
+      } else {
+        // 등록 모드: 모든 상태 초기화
+        setSalesItems([]);
+        setSalesAmount(0);
+        setDiscountAmount(0);
+        setTotal(0);
+        setAmountToReceive(0);
+        setPointAccumulation(0);
+        setSelectedDeduction(null);
+        setPaymentMethod(null);
+        setMemo('');
+        setSalesDate(new Date().toISOString().split('T')[0]);
+        setSalesTime(new Date().toTimeString().slice(0, 5));
+        setPaymentAmounts({
+          cash: 0,
+          card: 0,
+          bank_transfer: 0,
+        });
+        setPrepaidDeductionAmount(0);
+        setActiveTab('service');
+      }
     }
   }, [isOpen]);
 
@@ -268,7 +376,7 @@ export default function SalesRegistrationModal({
   if (!isOpen || !customer) return null;
 
   const handleAddItem = () => {
-    onOpenItemPicker(activeTab);
+    onOpenItemPicker?.(activeTab);
   };
 
   const handleComplete = async () => {
@@ -305,15 +413,20 @@ export default function SalesRegistrationModal({
       return;
     }
 
+    const isEditMode = !!editSaleId;
+
     try {
-      // 판매 등록 API 호출
-      const response = await fetch('/api/sales', {
-        method: 'POST',
+      const url = isEditMode ? `/api/sales/${editSaleId}` : '/api/sales';
+      const method = isEditMode ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           customer_id: customer.id,
+          shop_id: selectedShopId || null,
           items: salesItems.map(item => ({
             type: item.type,
             name: item.name,
@@ -341,17 +454,26 @@ export default function SalesRegistrationModal({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || '판매 등록에 실패했습니다.');
+        throw new Error(errorData.error || (isEditMode ? '판매 수정에 실패했습니다.' : '판매 등록에 실패했습니다.'));
       }
 
-      // 판매 등록 완료 - 고객 정보 새로고침
+      // 임시저장이 있으면 삭제
+      if (bookingId) {
+        try {
+          await fetch(`/api/temp-sales?booking_id=${bookingId}`, { method: 'DELETE' });
+          onDeleteTempSave?.();
+        } catch {
+          // 임시저장 삭제 실패해도 판매는 완료된 것으로 처리
+        }
+      }
+
       if (onComplete) {
         onComplete();
       }
       onClose();
     } catch (error: any) {
-      console.error('판매 등록 오류:', error);
-      alert(error.message || '판매 등록 중 오류가 발생했습니다.');
+      console.error(isEditMode ? '판매 수정 오류:' : '판매 등록 오류:', error);
+      alert(error.message || '판매 처리 중 오류가 발생했습니다.');
     }
   };
 
@@ -370,12 +492,15 @@ export default function SalesRegistrationModal({
       const positivePaymentAmount = Math.max(0, newAmounts.cash) + Math.max(0, newAmounts.card) + Math.max(0, newAmounts.bank_transfer);
       const negativePaymentAmount = Math.abs(Math.min(0, newAmounts.cash)) + Math.abs(Math.min(0, newAmounts.card)) + Math.abs(Math.min(0, newAmounts.bank_transfer));
       const newTotal = salesAmount - discountAmount;
-      const newAmountToReceive = newTotal - positivePaymentAmount - negativePaymentAmount;
+      const newAmountToReceive = newTotal - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
       
       // 받을 금액이 0이면 판매 등록 완료
+      // NOTE: handleComplete()는 paymentAmounts state를 다시 읽기 때문에,
+      // setPaymentAmounts가 아직 반영되지 않은 상태에서 호출하면 stale state를 읽게 됨.
+      // 따라서 이미 계산된 newAmountToReceive로 판단 후 performSaleRegistration()을 직접 호출.
       if (newAmountToReceive <= 0) {
         // 판매 등록 완료
-        await handleComplete();
+        await performSaleRegistration();
         setIsPaymentInputModalOpen(false);
       } else {
         // 받을 금액이 남아있으면 확인 알림 표시
@@ -384,7 +509,7 @@ export default function SalesRegistrationModal({
           message: `미수금이 ${newAmountToReceive.toLocaleString()}원 발생됩니다. 계산완료 하시겠습니까?`,
           highlightText: `${newAmountToReceive.toLocaleString()}원`,
           onConfirm: async () => {
-            await handleComplete();
+            await performSaleRegistration();
             setIsPaymentInputModalOpen(false);
             setIsConfirmationAlertOpen(false);
             setConfirmationAlertData(null);
@@ -416,59 +541,120 @@ export default function SalesRegistrationModal({
     onClose();
   };
 
-  const handleTemporarySave = () => {
-    // TODO: 임시 저장 API 호출
-    console.log('임시 저장:', {
-      customer,
-      salesItems,
-      salesAmount,
-      discountAmount,
-      total,
-      amountToReceive,
-      pointAccumulation,
-      paymentMethod,
-      memo,
-      salesDate,
-      salesTime,
-    });
-    alert('임시 저장 기능은 추후 구현 예정입니다.');
+  const handleTemporarySave = async () => {
+    if (!customer || !bookingId) {
+      setErrorAlertData({
+        title: '알림',
+        message: '예약 정보가 없어 임시 저장할 수 없습니다.',
+      });
+      setIsErrorAlertOpen(true);
+      return;
+    }
+
+    try {
+      const tempData = {
+        bookingId,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone ?? undefined,
+        salesItems: salesItems.map((item) => ({
+          id: item.id,
+          type: item.type,
+          name: item.name,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          discount: item.discount,
+          discountType: item.discountType,
+          discountValue: item.discountValue,
+          amount: item.amount,
+          manager: item.manager,
+          salesClassification: item.salesClassification,
+          prepaidDeduction: item.prepaidDeduction,
+        })),
+        paymentAmounts,
+        pointAccumulation,
+        memo,
+        salesDate,
+        salesTime,
+        selectedShopId,
+      };
+
+      const response = await fetch('/api/temp-sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: bookingId,
+          customer_id: customer.id,
+          data: tempData,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('임시 저장에 실패했습니다.');
+      }
+
+      onTemporarySave?.();
+      onClose();
+    } catch (error: any) {
+      console.error('임시 저장 오류:', error);
+      setErrorAlertData({
+        title: '오류',
+        message: error.message || '임시 저장 중 오류가 발생했습니다.',
+      });
+      setIsErrorAlertOpen(true);
+    }
+  };
+
+  const handleDeleteTempSave = async () => {
+    if (!bookingId) return;
+
+    try {
+      const response = await fetch(`/api/temp-sales?booking_id=${bookingId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('임시저장 삭제에 실패했습니다.');
+      }
+
+      onDeleteTempSave?.();
+      onClose();
+    } catch (error: any) {
+      console.error('임시저장 삭제 오류:', error);
+      setErrorAlertData({
+        title: '오류',
+        message: error.message || '임시저장 삭제 중 오류가 발생했습니다.',
+      });
+      setIsErrorAlertOpen(true);
+    }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[100004] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={(e) => {
-        // PaymentInputModal이나 ManagerPickerModal이 열려있을 때는 판매 등록 모달을 닫지 않음
-        if (!isPaymentInputModalOpen && !isManagerPickerModalOpen && !isSalesClassificationModalOpen && !isDiscountModalOpen && e.target === e.currentTarget) {
+    <Modal
+      isOpen={isOpen}
+      onClose={() => {
+        if (!isPaymentInputModalOpen && !isManagerPickerModalOpen && !isSalesClassificationModalOpen && !isDiscountModalOpen) {
           onClose();
         }
       }}
+      title={editSaleId ? "판매 수정" : "판매 등록"}
+      zIndex={Z.MODAL_SALES}
+      maxWidth="max-w-6xl"
+      className="max-h-[90vh] flex flex-col overflow-hidden"
+      bodyClassName="flex-1 overflow-y-auto min-h-0"
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">판매 등록</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-black transition-colors"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
+      {/* Customer Info Header */}
+      <div className="bg-gray-100 -mx-5.5 -mt-5.5 px-5.5 py-3 mb-5.5 border-b border-gray-200">
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-semibold text-gray-900">{customer.name}</p>
+          <span className="text-xs text-gray-400">({customer.id})</span>
+          {customer.phone && (
+            <p className="text-xs text-gray-500">{customer.phone}</p>
+          )}
         </div>
-
-        {/* Customer Info */}
-        <div className="p-6 border-b border-gray-200">
-          <p className="text-sm font-medium text-gray-900">{customer.name}</p>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+      </div>
           {/* Sales Item Selection Buttons */}
-          <div className="mb-6">
+          <div className="mb-5.5">
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium text-gray-700">판매 항목 선택</span>
               <div className="flex gap-2">
@@ -478,7 +664,7 @@ export default function SalesRegistrationModal({
                     type="button"
                     onClick={() => {
                       setActiveTab(tab);
-                      onOpenItemPicker(tab);
+                      onOpenItemPicker?.(tab);
                     }}
                     className={`px-4 py-2 text-sm font-medium border rounded-lg transition-colors ${
                       activeTab === tab
@@ -496,7 +682,7 @@ export default function SalesRegistrationModal({
           </div>
 
           {/* Sales Item Table */}
-          <div className="mb-6" onClick={() => setEditingQuantityItemId(null)}>
+          <div className="mb-5.5" onClick={() => setEditingQuantityItemId(null)}>
             <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -515,7 +701,7 @@ export default function SalesRegistrationModal({
                 <tbody>
                   {salesItems.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-sm text-gray-500">
+                      <td colSpan={9} className="py-7.5 text-center text-sm text-gray-500">
                         내역이 없습니다
                       </td>
                     </tr>
@@ -868,20 +1054,30 @@ export default function SalesRegistrationModal({
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-2">판매일</label>
                 <div className="flex gap-2">
-                  <input
+                  <Input
                     type="date"
                     value={salesDate}
                     onChange={(e) => setSalesDate(e.target.value)}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    wrapperClassName="flex-1 min-w-0"
                   />
-                  <input
+                  <Input
                     type="time"
                     value={salesTime}
                     onChange={(e) => setSalesTime(e.target.value)}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    wrapperClassName="flex-1 min-w-0"
                   />
                 </div>
               </div>
+
+              {/* Shop */}
+              {shops.length > 0 && (
+                <Select
+                  label="지점"
+                  options={shops.map((s: any) => ({ value: s.id, label: s.name }))}
+                  value={selectedShopId ?? ''}
+                  onChange={(e) => setSelectedShopId(Number(e.target.value))}
+                />
+              )}
             </div>
 
             {/* Right: Memo and Action Buttons */}
@@ -899,32 +1095,25 @@ export default function SalesRegistrationModal({
               </div>
 
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handleComplete}
-                  className="w-full px-5 py-2 rounded-lg text-sm font-semibold text-white bg-black hover:bg-gray-800"
-                >
-                  계산 완료
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="w-full px-5 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
-                >
+                <Button className="w-full" onClick={handleComplete}>
+                  {editSaleId ? '수정 완료' : '계산 완료'}
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={handleCancel}>
                   취소
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTemporarySave}
-                  className="w-full px-5 py-2 rounded-lg text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200"
-                >
-                  임시 저장
-                </button>
+                </Button>
+                {bookingId && (
+                  <Button variant="secondary" className="w-full" onClick={handleTemporarySave}>
+                    임시 저장
+                  </Button>
+                )}
+                {tempSaveData && bookingId && (
+                  <Button variant="danger" className="w-full" onClick={handleDeleteTempSave}>
+                    임시저장 삭제
+                  </Button>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
       {/* Discount Modal */}
       <DiscountModal
@@ -1140,32 +1329,34 @@ export default function SalesRegistrationModal({
 
 
       {/* Confirmation Alert Modal */}
-      <ConfirmationAlertModal
+      <AlertModal
         isOpen={isConfirmationAlertOpen}
         title={confirmationAlertData?.title || ''}
         message={confirmationAlertData?.message || ''}
         highlightText={confirmationAlertData?.highlightText}
+        variant="confirm"
         onConfirm={() => {
           if (confirmationAlertData?.onConfirm) {
             confirmationAlertData.onConfirm();
           }
         }}
-        onCancel={() => {
+        onClose={() => {
           setIsConfirmationAlertOpen(false);
           setConfirmationAlertData(null);
         }}
       />
 
       {/* Error Alert Modal */}
-      <ErrorAlertModal
+      <AlertModal
         isOpen={isErrorAlertOpen}
         title={errorAlertData?.title || ''}
         message={errorAlertData?.message || ''}
+        variant="error"
         onClose={() => {
           setIsErrorAlertOpen(false);
           setErrorAlertData(null);
         }}
       />
-    </div>
+    </Modal>
   );
 }
