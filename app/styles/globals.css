@@ -12,23 +12,57 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  
+
   /* Custom colors for Haeyoom */
   --color-primary: #0a0a0a;
   --color-secondary: #888888;
   --color-surface: #fafafa;
-  
+
   /* Spline Sans font */
   --font-family-sans: "Spline Sans", sans-serif;
-  
+
   /* Archivo font for display */
   --font-family-display: "Archivo", sans-serif;
+
+  /* ======== Semantic Text Colors ======== */
+  --color-text-primary: #0a0a0a;
+  --color-text-secondary: #6b7280;
+  --color-text-tertiary: #9ca3af;
+  --color-text-muted: #4b5563;
+  --color-text-heading: #374151;
+
+  /* ======== Semantic Surface Colors ======== */
+  --color-surface-page: #f9fafb;
+  --color-surface-card: #ffffff;
+  --color-surface-input: #f9fafb;
+
+  /* ======== Semantic Border Colors ======== */
+  --color-border-default: #e5e7eb;
+  --color-border-light: #f3f4f6;
+
+  /* ======== Feedback Colors ======== */
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-error-text: #b91c1c;
+  --color-error-solid: #dc2626;
+
+  --color-success-bg: #dcfce7;
+  --color-success-text: #15803d;
+  --color-success-solid: #22c55e;
+
+  --color-info-bg: #eff6ff;
+  --color-info-border: #dbeafe;
+  --color-info-text: #1d4ed8;
+
+  --color-warning-bg: #fefce8;
+  --color-warning-border: #fef08a;
+  --color-warning-text: #eab308;
 }
 
 /* Font Display class for Design 2 */
 .font-display {
   font-family: 'Archivo', sans-serif;
-  font-weight: 300;
+  font-weight: 400;
 }
 
 /* Custom gradient class */

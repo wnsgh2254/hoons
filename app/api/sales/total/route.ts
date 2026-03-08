@@ -72,7 +72,6 @@ export async function GET(request: NextRequest) {
       service: { quantity: 0, amount: 0 },
       product: { quantity: 0, amount: 0 },
       membership: { quantity: 0, amount: 0 },
-      ticket: { quantity: 0, amount: 0 },
       total: 0,
     };
 
@@ -80,7 +79,6 @@ export async function GET(request: NextRequest) {
       service: { quantity: 0, amount: 0 },
       product: { quantity: 0, amount: 0 },
       membership: { quantity: 0, amount: 0 },
-      ticket: { quantity: 0, amount: 0 },
       total: 0,
     };
 
@@ -127,14 +125,12 @@ export async function GET(request: NextRequest) {
     salesSummary.total =
       salesSummary.service.amount +
       salesSummary.product.amount +
-      salesSummary.membership.amount +
-      salesSummary.ticket.amount;
+      salesSummary.membership.amount;
 
     refundSummary.total =
       refundSummary.service.amount +
       refundSummary.product.amount +
-      refundSummary.membership.amount +
-      refundSummary.ticket.amount;
+      refundSummary.membership.amount;
 
     // Comment: Payment method breakdown
     const paymentDetails = {
@@ -142,14 +138,12 @@ export async function GET(request: NextRequest) {
         service: 0,
         product: 0,
         membership: 0,
-        ticket: 0,
         total: 0,
       },
       card: {
         service: 0,
         product: 0,
         membership: 0,
-        ticket: 0,
         total: 0,
       },
     };
@@ -242,11 +236,6 @@ export async function GET(request: NextRequest) {
         total: salesSummary.service.amount + salesSummary.product.amount,
       },
       membershipDeduction: membershipDeductions,
-      ticketDeduction: {
-        service: { quantity: 0, amount: 0 },
-        product: { quantity: 0, amount: 0 },
-        total: 0,
-      },
       total: {
         service: { amount: salesSummary.service.amount + membershipDeductions.service.amount },
         product: { amount: salesSummary.product.amount + membershipDeductions.product.amount },

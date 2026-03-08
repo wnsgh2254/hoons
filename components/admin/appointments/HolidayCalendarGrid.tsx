@@ -1,13 +1,7 @@
 'use client';
 
 import React from 'react';
-
-type HolidayType = 'regular' | 'arbitrary' | 'special';
-
-interface DayEntry {
-  name: string;
-  type: HolidayType;
-}
+import type { HolidayType, DayEntry } from '@/lib/types';
 
 interface HolidayCalendarGridProps {
   currentMonth: Date;
@@ -50,7 +44,7 @@ export default function HolidayCalendarGrid({
       case 'regular':
         return <span className="text-red-500 text-sm">●</span>;
       case 'arbitrary':
-        return <span className="text-gray-500 text-sm">○</span>;
+        return <span className="text-red-500 text-sm">○</span>;
       case 'special':
         return <span className="text-blue-500 text-sm">●</span>;
       default:
@@ -59,10 +53,10 @@ export default function HolidayCalendarGrid({
   };
 
   return (
-    <div className="flex-1 overflow-auto px-6 pb-6">
+    <div className="px-5.5 pb-5.5">
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 {DAYS_OF_WEEK.map((day) => (

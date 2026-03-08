@@ -2,7 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import AdminTopNav from '@/components/AdminTopNav';
+import {
+  AdminPageLayout,
+  PageHeader,
+  Badge,
+  Button,
+  Modal,
+} from '@/components/ui';
 
 // Comment: Per-employee salary settings row. Product is always 10%. Service/hourly depend on wage_type.
 type EmployeeSalaryRow = {
@@ -14,6 +20,7 @@ type EmployeeSalaryRow = {
   hourlyRate: number | null;
   productSalePct: number;
   productDeductionPct: number;
+  weeklyDeduction: number;
 };
 
 const PRODUCT_RATE = 10;
@@ -32,6 +39,8 @@ function toEmployeeRow(s: {
   productSalePct?: number | null;
   product_deduction_pct?: number | null;
   productDeductionPct?: number | null;
+  weekly_deduction?: number | null;
+  weeklyDeduction?: number | null;
 }): EmployeeSalaryRow {
   const rawWageType = s.wage_type ?? s.wageType;
   const wageType = rawWageType === 'hourly' ? 'hourly' : 'percent';
@@ -39,6 +48,7 @@ function toEmployeeRow(s: {
   const productDeduction = s.product_deduction_pct ?? s.productDeductionPct ?? PRODUCT_RATE;
   const productSalePct = Number(productSale) || PRODUCT_RATE;
   const productDeductionPct = Number(productDeduction) || PRODUCT_RATE;
+  const weeklyDeduction = Number(s.weekly_deduction ?? s.weeklyDeduction ?? 0);
 
   if (wageType === 'hourly') {
     const hourlyRaw = s.hourly_rate ?? s.hourlyRate;
@@ -52,6 +62,7 @@ function toEmployeeRow(s: {
       hourlyRate: hourly,
       productSalePct,
       productDeductionPct,
+      weeklyDeduction,
     };
   }
   const rateRaw = s.percent_rate ?? s.percentRate;
@@ -65,6 +76,7 @@ function toEmployeeRow(s: {
     hourlyRate: null,
     productSalePct,
     productDeductionPct,
+    weeklyDeduction,
   };
 }
 
@@ -75,10 +87,12 @@ export default function SalarySettingsPage() {
       name: string;
       role?: string | null;
       shop_id?: number | null;
+      wage_type?: string | null;
       percent_rate?: number | null;
       hourly_rate?: number | null;
       product_sale_pct?: number | null;
       product_deduction_pct?: number | null;
+      weekly_deduction?: number | null;
     }[]
   >([]);
   const [employees, setEmployees] = useState<EmployeeSalaryRow[]>([]);
@@ -103,6 +117,7 @@ export default function SalarySettingsPage() {
           hourly_rate: s.hourly_rate,
           product_sale_pct: s.product_sale_pct,
           product_deduction_pct: s.product_deduction_pct,
+          weekly_deduction: s.weekly_deduction,
         }));
         setDesigners(list);
         setEmployees(list.map(toEmployeeRow));
@@ -117,12 +132,6 @@ export default function SalarySettingsPage() {
   useEffect(() => {
     fetchStaff();
   }, [fetchStaff]);
-
-  const updateEmployee = (id: number, updates: Partial<EmployeeSalaryRow>) => {
-    setEmployees((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
-    );
-  };
 
   const openEditModal = (emp: EmployeeSalaryRow) => {
     setEditingEmployee({ ...emp });
@@ -158,6 +167,7 @@ export default function SalarySettingsPage() {
           hourly_rate,
           product_sale_pct,
           product_deduction_pct,
+          weekly_deduction: editDraft.weeklyDeduction ?? 0,
         }),
       });
       if (!res.ok) {
@@ -179,251 +189,269 @@ export default function SalarySettingsPage() {
     if (editDraft) setEditDraft({ ...editDraft, ...updates });
   };
 
+  const thGroup =
+    'px-3 py-2 text-center text-xs font-bold text-gray-800 whitespace-nowrap border-r border-gray-200 bg-gray-100';
+  const thSub =
+    'px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-nowrap border-r border-gray-200 bg-gray-50';
+  const tdBase =
+    'px-3 py-2.5 text-center text-sm text-gray-900 border-r border-gray-100 tabular-nums';
+
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
-      <AdminTopNav />
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
-          <div className="max-w-7xl mx-auto flex flex-col gap-8">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">급여 설정</h2>
-              </div>
-              <div className="flex gap-2">
-                <Link
-                  href="/admin/wages"
-                  className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors inline-block"
+    <AdminPageLayout>
+      <PageHeader
+        title="급여 설정"
+        actions={
+          <Link
+            href="/admin/wages"
+            className="px-4 py-2.5 bg-transparent text-gray-700 text-sm font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center"
+          >
+            급여 관리
+          </Link>
+        }
+      />
+
+      {loading ? (
+        <div className="py-11.5 text-center text-gray-500">로딩 중...</div>
+      ) : (
+        <>
+          {/* Incentive calculation settings */}
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm font-bold text-black mb-3">인센티브 계산 방식</p>
+            <p className="text-sm font-medium text-gray-700 mb-4">매출액 기준</p>
+            <div className="flex items-center justify-between py-2 border-t border-gray-200">
+              <span className="text-sm text-gray-700">직원 매출에 매출 이동 포함</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">
+                  {includeSalesTransfer ? '적용함' : '적용 안함'}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={includeSalesTransfer}
+                  onClick={() => setIncludeSalesTransfer((v) => !v)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${
+                    includeSalesTransfer ? 'bg-black' : 'bg-gray-200'
+                  }`}
                 >
-                  급여 명세서
-                </Link>
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition ${
+                      includeSalesTransfer ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
-
-            {loading ? (
-              <div className="py-12 text-center text-gray-500">로딩 중...</div>
-            ) : (
-              <>
-                {/* Incentive calculation method & Application settings */}
-                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                  <p className="text-sm font-semibold text-gray-900 mb-3">인센티브 계산 방식</p>
-                  <p className="text-sm font-medium text-gray-700 mb-4">매출액 기준</p>
-                  <div className="flex items-center justify-between py-2 border-t border-gray-200">
-                    <span className="text-sm text-gray-700">직원 매출에 매출 이동 포함</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">{includeSalesTransfer ? '적용함' : '적용 안함'}</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={includeSalesTransfer}
-                        onClick={() => setIncludeSalesTransfer((v) => !v)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 ${
-                          includeSalesTransfer ? 'bg-black' : 'bg-gray-200'
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition ${
-                            includeSalesTransfer ? 'translate-x-5' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Per-employee salary settings - all employees listed */}
-                <div className="space-y-6">
-                  {employees.map((emp) => (
-                    <div
-                      key={emp.id}
-                      className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden"
-                    >
-                      <div className="p-4 border-b border-gray-200 bg-gray-50">
-                        <p className="text-base font-bold text-black">{emp.name}</p>
-                      </div>
-                      <div className="overflow-x-auto p-4">
-                        <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden bg-white">
-                          <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200" colSpan={2}>
-                                서비스
-                              </th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200">
-                                시급
-                              </th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200" colSpan={2}>
-                                제품
-                              </th>
-                              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">
-                                수정
-                              </th>
-                            </tr>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">판매</th>
-                              <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">차감</th>
-                              <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200" />
-                              <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">판매</th>
-                              <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">차감</th>
-                              <th className="px-3 py-1 text-center text-xs text-gray-600" />
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-900">
-                                {emp.wageType === 'percent' && emp.serviceSalePct != null && emp.serviceSalePct > 0
-                                  ? `${emp.serviceSalePct}%`
-                                  : '-'}
-                              </td>
-                              <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-900">
-                                {emp.wageType === 'percent' && emp.serviceDeductionPct != null && emp.serviceDeductionPct > 0
-                                  ? `${emp.serviceDeductionPct}%`
-                                  : '-'}
-                              </td>
-                              <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-900">
-                                {emp.wageType === 'hourly' && emp.hourlyRate != null ? `${emp.hourlyRate}` : '-'}
-                              </td>
-                              <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-900">
-                                {PRODUCT_RATE}%
-                              </td>
-                              <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-900">
-                                {PRODUCT_RATE}%
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => openEditModal(emp)}
-                                  className="text-gray-700 text-xs font-medium hover:text-black hover:underline"
-                                >
-                                  수정
-                                </button>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
           </div>
-        </div>
-      </main>
 
-      {/* Incentive rate edit modal */}
-      {editingEmployee && editDraft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden border border-gray-200">
-            <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-b border-gray-200">
-              <h3 className="text-lg font-bold text-black">인센티브 지급률 수정</h3>
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="text-gray-400 hover:text-gray-700 p-1"
-                aria-label="Close"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
+          {/* Per-employee salary settings — single unified table */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-sm font-bold text-black">직원별 급여 설정</h3>
             </div>
-            <div className="p-6">
-              <p className="text-sm font-semibold text-gray-900 mb-3">인센티브 지급률</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  {/* Row 1: Group headers */}
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th
+                      rowSpan={2}
+                      className="px-3 py-2 text-left text-xs font-semibold text-gray-700 whitespace-nowrap border-r border-gray-200 bg-gray-100"
+                    >
+                      이름
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className={thGroup}
+                    >
+                      유형
+                    </th>
+                    <th colSpan={2} className={thGroup}>
+                      서비스
+                    </th>
+                    <th rowSpan={2} className={thGroup}>
+                      시급
+                    </th>
+                    <th colSpan={2} className={thGroup}>
+                      제품
+                    </th>
+                    <th rowSpan={2} className={thGroup}>
+                      주간 공제
+                    </th>
+                    <th
+                      rowSpan={2}
+                      className="px-3 py-2 text-center text-xs font-bold text-gray-800 whitespace-nowrap bg-gray-100"
+                    >
+                      수정
+                    </th>
+                  </tr>
+                  {/* Row 2: Sub-headers */}
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className={thSub}>판매</th>
+                    <th className={thSub}>차감</th>
+                    <th className={thSub}>판매</th>
+                    <th className={thSub}>차감</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {employees.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-gray-50/50">
+                      <td className="px-3 py-2.5 text-sm font-medium text-gray-900 whitespace-nowrap border-r border-gray-100">
+                        {emp.name}
+                      </td>
+                      <td className="px-2 py-2.5 text-center border-r border-gray-100">
+                        <Badge variant={emp.wageType === 'hourly' ? 'info' : 'success'}>
+                          {emp.wageType === 'hourly' ? '시급' : '인센'}
+                        </Badge>
+                      </td>
+                      <td className={tdBase}>
+                        {emp.wageType === 'percent' && emp.serviceSalePct > 0
+                          ? `${emp.serviceSalePct}%`
+                          : '-'}
+                      </td>
+                      <td className={tdBase}>
+                        {emp.wageType === 'percent' && emp.serviceDeductionPct > 0
+                          ? `${emp.serviceDeductionPct}%`
+                          : '-'}
+                      </td>
+                      <td className={tdBase}>
+                        {emp.wageType === 'hourly' && emp.hourlyRate != null
+                          ? `$${emp.hourlyRate}`
+                          : '-'}
+                      </td>
+                      <td className={tdBase}>{PRODUCT_RATE}%</td>
+                      <td className={tdBase}>{PRODUCT_RATE}%</td>
+                      <td className={tdBase}>
+                        {emp.weeklyDeduction > 0 ? `$${emp.weeklyDeduction}` : '-'}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon="edit"
+                          onClick={() => openEditModal(emp)}
+                        >
+                          수정
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Edit modal */}
+      <Modal
+        isOpen={!!editingEmployee && !!editDraft}
+        onClose={closeEditModal}
+        title={editingEmployee ? `${editingEmployee.name} — 급여 설정 수정` : ''}
+        maxWidth="max-w-lg"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={closeEditModal}>
+              취소
+            </Button>
+            <Button loading={saving} onClick={handleSaveIncentive}>
+              저장
+            </Button>
+          </div>
+        }
+      >
+        {editDraft && (
+          <div className="space-y-5">
+            {/* Incentive rates table */}
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-2">인센티브 지급률</p>
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200" colSpan={2}>
-                        서비스
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200">
-                        시급
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200" colSpan={2}>
-                        제품
-                      </th>
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      <th colSpan={2} className={thGroup}>서비스</th>
+                      <th rowSpan={2} className={thGroup}>시급</th>
+                      <th colSpan={2} className="px-3 py-2 text-center text-xs font-bold text-gray-800 whitespace-nowrap bg-gray-100">제품</th>
                     </tr>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">판매</th>
-                      <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">차감</th>
-                      <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200" />
-                      <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">판매</th>
-                      <th className="px-3 py-1 text-center text-xs text-gray-600 border-r border-gray-200">차감</th>
+                      <th className={thSub}>판매</th>
+                      <th className={thSub}>차감</th>
+                      <th className={thSub}>판매</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 whitespace-nowrap bg-gray-50">차감</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="px-3 py-2 border-r border-gray-200">
+                      <td className="px-3 py-2.5 border-r border-gray-100">
                         <input
                           type="number"
                           min={0}
                           max={100}
                           value={editDraft.serviceSalePct ?? ''}
-                          onChange={(e) =>
-                            updateDraft({
-                              serviceSalePct: Number(e.target.value) || 0,
-                            })
-                          }
-                          className="w-14 px-2 py-1 border border-gray-200 rounded text-center text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            updateDraft({ serviceSalePct: val, serviceDeductionPct: val });
+                          }}
+                          className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-center text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                         />
                       </td>
-                      <td className="px-3 py-2 border-r border-gray-200">
+                      <td className="px-3 py-2.5 border-r border-gray-100">
                         <input
                           type="number"
                           min={0}
                           max={100}
                           value={editDraft.serviceDeductionPct ?? ''}
-                          onChange={(e) =>
-                            updateDraft({
-                              serviceDeductionPct: Number(e.target.value) || 0,
-                            })
-                          }
-                          className="w-14 px-2 py-1 border border-gray-200 rounded text-center text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || 0;
+                            updateDraft({ serviceSalePct: val, serviceDeductionPct: val });
+                          }}
+                          className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-center text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                         />
                       </td>
-                      <td className="px-3 py-2 border-r border-gray-200">
+                      <td className="px-3 py-2.5 border-r border-gray-100">
                         <input
                           type="number"
                           min={0}
                           value={editDraft.hourlyRate ?? ''}
                           onChange={(e) => {
                             const v = e.target.value;
-                            updateDraft({
-                              hourlyRate: v === '' ? null : Number(v) || 0,
-                            });
+                            updateDraft({ hourlyRate: v === '' ? null : Number(v) || 0 });
                           }}
-                          className="w-14 px-2 py-1 border border-gray-200 rounded text-center text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                          className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-center text-sm focus:ring-2 focus:ring-black focus:border-transparent"
                         />
                       </td>
-                      <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-600 bg-gray-50">
+                      <td className="px-3 py-2.5 border-r border-gray-100 text-center text-sm text-gray-500 bg-gray-50">
                         {PRODUCT_RATE}%
                       </td>
-                      <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-600 bg-gray-50">
+                      <td className="px-3 py-2.5 text-center text-sm text-gray-500 bg-gray-50">
                         {PRODUCT_RATE}%
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <div className="flex gap-2 justify-end mt-6">
-                <button
-                  type="button"
-                  onClick={closeEditModal}
-                  className="px-4 py-2 border border-gray-200 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveIncentive}
-                  disabled={saving}
-                  className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {saving ? '저장 중…' : '저장'}
-                </button>
+            </div>
+
+            {/* Weekly deduction */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">
+                주간 공제 (캐쉬웨이지 차감액)
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">$</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={editDraft.weeklyDeduction ?? 0}
+                  onChange={(e) =>
+                    updateDraft({ weeklyDeduction: Number(e.target.value) || 0 })
+                  }
+                  className="w-32 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                />
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </Modal>
+    </AdminPageLayout>
   );
 }

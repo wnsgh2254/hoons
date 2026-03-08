@@ -13,6 +13,8 @@ export interface PublicBookingPayload {
   fullDate?: string;
    // Comment: Optional customer ID to link booking to a customer
   customerId?: number | null;
+  memo?: string;
+  colorLabel?: string;
 }
 
 // Comment: Convert display time like "2:00 PM" to 24h "14:00:00" string for DB
@@ -35,33 +37,34 @@ function buildBookingDateFromDay(day: number): string {
   return `2023-10-${dayStr}`;
 }
 
-// Comment: Normalize AU phone numbers for lookup/insert (local + e164)
+// Comment: Normalize AU phone numbers for lookup/insert (local + e164 + digitsOnly)
 export function buildPhoneVariants(phoneRaw: string | undefined | null) {
-  if (!phoneRaw) return { local: null as string | null, e164: null as string | null };
-  const digitsOnly = phoneRaw.replace(/[^0-9+]/g, '');
-  if (digitsOnly.startsWith('+61')) {
-    const withoutCountry = digitsOnly.slice(3);
+  if (!phoneRaw) return { local: null as string | null, e164: null as string | null, digitsOnly: null as string | null };
+  const digitsOnly = phoneRaw.replace(/[^0-9]/g, '');
+  const withPlus = phoneRaw.replace(/[^0-9+]/g, '');
+  if (withPlus.startsWith('+61')) {
+    const withoutCountry = withPlus.slice(3);
     const local =
       withoutCountry.length === 9 && !withoutCountry.startsWith('0')
         ? `0${withoutCountry}`
-        : digitsOnly;
-    return { local, e164: digitsOnly };
+        : withPlus;
+    return { local, e164: withPlus, digitsOnly };
   }
-  if (!digitsOnly.startsWith('+') && digitsOnly.startsWith('61')) {
+  if (!withPlus.startsWith('+') && digitsOnly.startsWith('61')) {
     const e164 = `+${digitsOnly}`;
     const withoutCountry = digitsOnly.slice(2);
     const local =
       withoutCountry.length === 9 && !withoutCountry.startsWith('0')
         ? `0${withoutCountry}`
         : e164;
-    return { local, e164 };
+    return { local, e164, digitsOnly };
   }
   if (digitsOnly.startsWith('0') && digitsOnly.length >= 9) {
     const local = digitsOnly;
     const e164 = `+61${digitsOnly.slice(1)}`;
-    return { local, e164 };
+    return { local, e164, digitsOnly };
   }
-  return { local: digitsOnly, e164: null as string | null };
+  return { local: digitsOnly, e164: null as string | null, digitsOnly };
 }
 
 // Comment: Look up existing customer by phone (local or e164). Returns id or null.
@@ -110,6 +113,8 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
     depositAmount,
     fullDate,
     customerId,
+    memo,
+    colorLabel,
   } =
     payload;
 
@@ -132,6 +137,8 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
       status: 'pending', // Comment: Public booking starts as pending after deposit step
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
+      ...(memo != null && { memo }),
+      ...(colorLabel != null && { color_label: colorLabel }),
     })
     .select()
     .single();
@@ -301,6 +308,7 @@ export async function updateDesigner(
     product_deduction_pct?: number | null;
     instagramLink?: string | null;
     is_active?: boolean;
+    weekly_deduction?: number | null;
   }
 ) {
   if (!id || Number.isNaN(id)) {
@@ -325,12 +333,30 @@ export async function updateDesigner(
     is_active: updates.is_active !== undefined ? updates.is_active : true,
   };
 
-  const { data, error } = await supabase
+  // Include weekly_deduction if provided
+  if (updates.weekly_deduction !== undefined) {
+    updateData.weekly_deduction = Number(updates.weekly_deduction) || 0;
+  }
+
+  let { data, error } = await supabase
     .from('designers')
     .update(updateData)
     .eq('id', id)
     .select()
     .single();
+
+  // If weekly_deduction column doesn't exist yet, retry without it
+  if (error && updateData.weekly_deduction !== undefined) {
+    const { weekly_deduction, ...dataWithoutWeekly } = updateData;
+    const retry = await supabase
+      .from('designers')
+      .update(dataWithoutWeekly)
+      .eq('id', id)
+      .select()
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     throw new Error(error.message);

@@ -8,7 +8,7 @@ export default function PrivacyPolicyPage() {
             
           {/* Title integrated into body */}
           <div>
-            <h1 className="font-display font-light text-4xl md:text-7xl uppercase tracking-tighter leading-[0.9] mb-12">
+            <h1 className="font-display font-normal text-4xl md:text-7xl uppercase tracking-tighter leading-[0.9] mb-12">
               Privacy<br />Policy
             </h1>
             {/* Changed from w-24 to w-full */}
@@ -16,7 +16,7 @@ export default function PrivacyPolicyPage() {
           </div>
 
           {/* Intro */}
-          <section className="space-y-6 text-sm md:text-base font-light leading-relaxed">
+          <section className="space-y-6 text-sm md:text-base font-normal leading-relaxed">
             <p>
               HAEYOOM is committed to providing quality services to our clients and respecting your privacy.
             </p>
@@ -34,7 +34,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 1 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">1. What is Personal Information and why do we collect it?</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>Personal Information is information or an opinion that identifies an individual.</p>
               <p>The types of Personal Information we may collect include, but are not limited to:</p>
               <ul className="list-disc list-inside pl-4 space-y-1 marker:text-gray-400">
@@ -67,7 +67,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 2 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">2. Sensitive Information</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>Sensitive information includes information about an individual’s health or other matters defined under the Privacy Act.</p>
               <p>Any sensitive information collected by HAEYOOM will be used only:</p>
               <ul className="list-disc list-inside pl-4 space-y-1 marker:text-gray-400">
@@ -82,7 +82,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 3 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">3. Third Parties</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>Where reasonable and practicable, we will collect Personal Information directly from you.</p>
               <p>In some cases, we may receive information from third parties (such as booking platforms or payment providers). When this occurs, we will take reasonable steps to ensure you are aware of the information provided to us.</p>
             </div>
@@ -91,7 +91,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 4 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">4. Disclosure of Personal Information</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>Your Personal Information may be disclosed in the following circumstances:</p>
               <ul className="list-disc list-inside pl-4 space-y-1 marker:text-gray-400">
                 <li>To third parties where you have consented</li>
@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 5 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">5. Security of Personal Information</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>We take reasonable steps to protect your Personal Information from misuse, loss, unauthorised access, modification, or disclosure.</p>
               <p>When Personal Information is no longer required for the purpose for which it was collected, we will take reasonable steps to destroy or permanently de-identify it.</p>
               <p>Client records may be retained for a minimum period required by law or for business purposes.</p>
@@ -114,7 +114,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 6 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">6. Access to and correction of your Personal Information</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>You may request access to the Personal Information we hold about you, and request corrections if necessary, subject to certain legal exceptions.</p>
               <p>To request access or correction, please contact us in writing.</p>
               <p>We do not charge a fee for access requests but may charge a reasonable administrative fee for providing copies.</p>
@@ -125,7 +125,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 7 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">7. Maintaining the quality of your Personal Information</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>HAEYOOM takes reasonable steps to ensure that the Personal Information we hold is accurate, complete, and up to date.</p>
               <p>If you believe any information we hold is incorrect or outdated, please contact us so we can update our records.</p>
             </div>
@@ -134,7 +134,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 8 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">8. Policy updates</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>This Privacy Policy may be updated from time to time.</p>
               <p>The latest version will always be available on our website.</p>
             </div>
@@ -143,7 +143,7 @@ export default function PrivacyPolicyPage() {
           {/* Section 9 */}
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">9. Privacy policy enquiries and complaints</h2>
-            <div className="space-y-4 text-sm md:text-base font-light leading-relaxed">
+            <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>If you have any questions, concerns, or complaints regarding this Privacy Policy or how we handle your Personal Information, please contact us at:</p>
               <p className="font-mono mt-4">Email: info@haeyoom.com</p>
             </div>

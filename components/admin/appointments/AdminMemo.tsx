@@ -17,7 +17,7 @@ export default function AdminMemo({
 }: AdminMemoProps) {
   return (
     <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden min-h-0">
-      <div className="p-5 border-b border-gray-100 shrink-0 flex items-center justify-between">
+      <div className="p-4.5 border-b border-gray-100 shrink-0 flex items-center justify-between">
         <h3 className="font-bold text-black">전달사항 (Memo)</h3>
         <button
           type="button"
@@ -35,7 +35,7 @@ export default function AdminMemo({
           )}
         </button>
       </div>
-      <div className="flex-1 p-5 min-h-0 flex flex-col">
+      <div className="flex-1 p-4.5 min-h-0 flex flex-col">
         {memoLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>

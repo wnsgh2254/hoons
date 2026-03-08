@@ -27,7 +27,7 @@ export function MainNav() {
     <>
       {/* Minimal Sticky Header - Design 2 Style. Prevent overflow so mobile Menu is always visible. */}
       <header className="fixed top-0 left-0 right-0 w-full max-w-[100vw] z-50 mix-blend-difference text-white pointer-events-none overflow-x-hidden">
-        <div className="w-full max-w-[100vw] px-4 sm:px-6 md:px-12 py-6 flex items-center justify-between gap-3 text-xs md:text-sm font-light tracking-widest uppercase leading-none pointer-events-auto min-w-0">
+        <div className="w-full max-w-[100vw] px-4 sm:px-6 md:px-12 py-6 flex items-center justify-between gap-3 text-xs md:text-sm font-normal tracking-widest uppercase leading-none pointer-events-auto min-w-0">
           
           {/* Left: Brand Logo - allow shrink on mobile so Menu stays visible */}
           <Link href="/" className="block z-50 group shrink-0 min-w-0 md:shrink-0" onClick={closeMenu} style={{ isolation: 'isolate' }}>
@@ -98,7 +98,7 @@ export function MainNav() {
               key={item.name}
               href={`${item.path}${item.hash}`} 
               onClick={closeMenu}
-              className="text-4xl font-display font-light uppercase tracking-tighter py-6 border-b border-black hover:bg-black hover:text-white transition-colors"
+              className="text-4xl font-display font-normal uppercase tracking-tighter py-6 border-b border-black hover:bg-black hover:text-white transition-colors"
             >
               {item.name}
             </Link>

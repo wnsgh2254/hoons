@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '@/components/ui';
 
 interface HolidayCalendarControlsProps {
   selectedDesignerFilter: string;
@@ -50,7 +51,7 @@ export default function HolidayCalendarControls({
   }, [isDesignerFilterOpen]);
 
   return (
-    <div className="px-6 py-4">
+    <div className="px-5.5 py-4">
       <div className="flex items-center justify-between">
         {/* Left: Filter Dropdown */}
         <div className="relative" data-designer-filter-dropdown>
@@ -153,13 +154,7 @@ export default function HolidayCalendarControls({
         {/* Right: Action Button */}
         <div className="flex items-center gap-2">
           {onRegisterModify && (
-            <button
-              type="button"
-              onClick={onRegisterModify}
-              className="px-4 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-            >
-              등록/수정
-            </button>
+            <Button onClick={onRegisterModify}>등록/수정</Button>
           )}
         </div>
       </div>

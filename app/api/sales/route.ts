@@ -1,11 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const customerId = searchParams.get('customer_id');
+
+    if (!customerId) {
+      return NextResponse.json(
+        { error: 'customer_id is required' },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from('sales')
+      .select(`
+        *,
+        sales_items (*)
+      `)
+      .eq('customer_id', customerId)
+      .order('sales_date', { ascending: false })
+      .order('sales_time', { ascending: false });
+
+    if (error) {
+      // Table may not exist yet - return empty array gracefully
+      if (error.code === 'PGRST205' || error.message?.includes('Could not find')) {
+        return NextResponse.json({ sales: [] }, { status: 200 });
+      }
+      console.error('Error fetching sales:', error);
+      return NextResponse.json(
+        { error: '판매 내역 조회에 실패했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ sales: data || [] }, { status: 200 });
+  } catch (error: any) {
+    console.error('Error in sales GET route:', error);
+    return NextResponse.json(
+      { error: error.message || '판매 내역 조회 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
       customer_id,
+      shop_id,
       items,
       sales_amount,
       discount_amount,
@@ -35,6 +80,7 @@ export async function POST(request: NextRequest) {
       .from('sales')
       .insert({
         customer_id: customer_id,
+        shop_id: shop_id || null,
         sales_date: sales_date || new Date().toISOString().split('T')[0],
         sales_time: sales_time || new Date().toTimeString().slice(0, 5),
         sales_amount: sales_amount || 0,

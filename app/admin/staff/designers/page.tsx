@@ -67,7 +67,7 @@ export default function DesignerManagementPage() {
     <div className="bg-white text-text-primary font-display overflow-hidden h-screen flex selection:bg-black selection:text-white">
       <nav className="w-20 lg:w-64 shrink-0 flex flex-col justify-between border-r border-border-light bg-[#121212] z-20 transition-all duration-300">
         <div className="flex flex-col">
-          <div className="h-20 flex items-center px-6 border-b border-white/10">
+          <div className="h-20 flex items-center px-5.5 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-black font-bold text-lg">H</div>
               <span className="text-lg font-semibold tracking-wide hidden lg:block text-white">Haeyoom</span>
@@ -128,7 +128,7 @@ export default function DesignerManagementPage() {
         </div>
       </nav>
       <aside className="w-80 shrink-0 border-r border-border-light bg-gray-50 flex flex-col z-10">
-        <div className="p-6 flex flex-col gap-4 border-b border-border-light">
+        <div className="p-5.5 flex flex-col gap-4 border-b border-border-light">
           <h2 className="text-xl font-medium text-text-primary">Designers</h2>
           <div className="relative w-full">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -159,7 +159,7 @@ export default function DesignerManagementPage() {
                 <div
                   key={designer.id}
                   onClick={() => setSelectedDesigner(designer.id)}
-                  className={`flex items-center gap-4 px-6 py-4 border-l-4 cursor-pointer transition-colors ${
+                  className={`flex items-center gap-4 px-5.5 py-4 border-l-4 cursor-pointer transition-colors ${
                     isSelected
                       ? 'border-black bg-gray-50'
                       : 'border-transparent hover:bg-gray-50'
@@ -192,7 +192,7 @@ export default function DesignerManagementPage() {
         </div>
       </aside>
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
-        <header className="h-20 flex items-center justify-between px-8 border-b border-border-light bg-white/90 backdrop-blur-md z-10 sticky top-0">
+        <header className="h-20 flex items-center justify-between px-7.5 border-b border-border-light bg-white/90 backdrop-blur-md z-10 sticky top-0">
           <div className="flex flex-col">
             <div className="flex items-center gap-2 text-text-secondary text-sm">
               <span>Staff</span>
@@ -205,16 +205,16 @@ export default function DesignerManagementPage() {
             <button className="px-4 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
               Delete
             </button>
-            <button className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-linear-to-br from-[#121212] to-[#333333] hover:opacity-90 shadow-md transition-all flex items-center gap-2">
+            <button className="px-5.5 py-2 rounded-lg text-sm font-bold text-white bg-linear-to-br from-[#121212] to-[#333333] hover:opacity-90 shadow-md transition-all flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]">save</span>
               Save Changes
             </button>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-8 bg-white">
-          <div className="max-w-5xl mx-auto flex flex-col gap-8 pb-20">
+        <div className="flex-1 overflow-y-auto p-7.5 bg-white">
+          <div className="max-w-5xl mx-auto flex flex-col gap-8 pb-19.5">
             <section className="grid grid-cols-1 md:grid-cols-12 gap-8">
-              <div className="md:col-span-4 flex flex-col items-center justify-center p-6 bg-white rounded-xl border border-border-light shadow-sm">
+              <div className="md:col-span-4 flex flex-col items-center justify-center p-5.5 bg-white rounded-xl border border-border-light shadow-sm">
                 <div className="relative group cursor-pointer">
                   <div
                     className="w-32 h-32 rounded-full bg-cover bg-center ring-4 ring-gray-100 shadow-xl"
@@ -232,7 +232,7 @@ export default function DesignerManagementPage() {
                 </button>
                 <p className="mt-2 text-xs text-text-secondary">Recommended: 400x400px</p>
               </div>
-              <div className="md:col-span-8 p-6 bg-white rounded-xl border border-border-light shadow-sm flex flex-col gap-5">
+              <div className="md:col-span-8 p-5.5 bg-white rounded-xl border border-border-light shadow-sm flex flex-col gap-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="flex flex-col gap-2">
                     <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Full Name</label>
@@ -310,14 +310,14 @@ export default function DesignerManagementPage() {
                   </button>
                 </div>
                 <div className="bg-white rounded-xl border border-border-light shadow-sm overflow-hidden">
-                  <div className="flex items-center px-6 py-3 bg-gray-50 border-b border-border-light text-xs font-semibold text-text-secondary uppercase tracking-wider">
+                  <div className="flex items-center px-5.5 py-3 bg-gray-50 border-b border-border-light text-xs font-semibold text-text-secondary uppercase tracking-wider">
                     <div className="flex-1">Service Name</div>
                     <div className="w-24 text-center">Price ($)</div>
                     <div className="w-16 text-right">Active</div>
                   </div>
                   <div className="flex flex-col divide-y divide-border-light">
                     {services.map((service) => (
-                      <div key={service.id} className="flex items-center px-6 py-4 hover:bg-gray-50 transition-colors">
+                      <div key={service.id} className="flex items-center px-5.5 py-4 hover:bg-gray-50 transition-colors">
                         <div className="flex-1">
                           <p className="text-sm font-medium text-text-primary">{service.name}</p>
                           <p className="text-xs text-text-secondary">{service.description}</p>

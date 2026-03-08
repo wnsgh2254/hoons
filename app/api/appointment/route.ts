@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicBooking } from '@/lib/data';
+import { createPublicBooking, buildPhoneVariants } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
@@ -18,43 +18,13 @@ export async function POST(request: NextRequest) {
       customerName, // Comment: Customer name from booking flow
       customerPhone, // Comment: Customer phone number from booking flow
       existingCustomerId, // Comment: Optional existing customer ID if already looked up
+      memo, // Comment: Optional booking memo
+      colorLabel, // Comment: Optional color label icon
     } = body;
 
     if (!shopId || !day || !timeLabel) {
       return NextResponse.json({ error: '필수 필드가 누락되었습니다.' }, { status: 400 });
     }
-
-    // Comment: Helper to normalize AU phone numbers into local and E.164 variants
-    const buildPhoneVariants = (phoneRaw: string | undefined | null) => {
-      if (!phoneRaw) return { local: null as string | null, e164: null as string | null };
-      const digitsOnly = phoneRaw.replace(/[^0-9+]/g, '');
-      // Already in +61 form
-      if (digitsOnly.startsWith('+61')) {
-        const withoutCountry = digitsOnly.slice(3);
-        const local =
-          withoutCountry.length === 9 && !withoutCountry.startsWith('0')
-            ? `0${withoutCountry}`
-            : digitsOnly;
-        return { local, e164: digitsOnly };
-      }
-      // Starts with 61...
-      if (!digitsOnly.startsWith('+') && digitsOnly.startsWith('61')) {
-        const e164 = `+${digitsOnly}`;
-        const withoutCountry = digitsOnly.slice(2);
-        const local =
-          withoutCountry.length === 9 && !withoutCountry.startsWith('0')
-            ? `0${withoutCountry}`
-            : e164;
-        return { local, e164 };
-      }
-      // Local 04.. style
-      if (digitsOnly.startsWith('0') && digitsOnly.length >= 9) {
-        const local = digitsOnly;
-        const e164 = `+61${digitsOnly.slice(1)}`;
-        return { local, e164 };
-      }
-      return { local: digitsOnly, e164: null as string | null };
-    };
 
     let customerId: number | null = null;
 
@@ -118,6 +88,8 @@ export async function POST(request: NextRequest) {
       depositAmount: typeof depositAmount === 'number' ? depositAmount : null,
       fullDate: typeof fullDate === 'string' ? fullDate : undefined,
       customerId: customerId,
+      memo: typeof memo === 'string' ? memo : undefined,
+      colorLabel: typeof colorLabel === 'string' ? colorLabel : undefined,
     });
     return NextResponse.json(
       {

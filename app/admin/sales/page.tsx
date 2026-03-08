@@ -1,21 +1,36 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import AdminTopNav from '@/components/AdminTopNav';
-
-// Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
-function getSydneyToday(): string {
-  const sydney = new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
-  );
-  const year = sydney.getFullYear();
-  const month = String(sydney.getMonth() + 1).padStart(2, '0');
-  const day = String(sydney.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+import { useStaff } from '@/hooks/useStaff';
+import { useServices } from '@/hooks/useServices';
+import { getSydneyToday } from '@/lib/utils/appointment-utils';
+import { formatPaymentMethod } from '@/lib/utils';
+import {
+  AdminPageLayout,
+  PageHeader,
+  Tabs,
+  Button,
+  Modal,
+  Select,
+  Input,
+  DataTable,
+  EmptyState,
+  AlertModal,
+  Badge,
+} from '@/components/ui';
+import { Z } from '@/lib/constants';
+import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDrawer';
+import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
+import SalesRegistrationModal from '@/components/admin/appointments/SalesRegistrationModal';
 
 type TabType = 'total' | 'byStaff' | 'byItem';
 type DateMode = 'daily' | 'period';
+
+const SALES_TABS = [
+  { key: 'total', label: '전체 매출' },
+  { key: 'byStaff', label: '직원별 매출' },
+  { key: 'byItem', label: '항목별 매출' },
+];
 
 export default function SalesPage() {
   const [activeTab, setActiveTab] = useState<TabType>('total');
@@ -25,119 +40,178 @@ export default function SalesPage() {
   const [endDate, setEndDate] = useState<string>('');
   const [selectedDesignerId, setSelectedDesignerId] = useState<string>('');
   const [selectedItemType, setSelectedItemType] = useState<string>('service');
-  const [designers, setDesigners] = useState<any[]>([]);
-
-  // Comment: Fetch designers list
-  useEffect(() => {
-    const fetchDesigners = async () => {
-      try {
-        const res = await fetch('/api/staff');
-        const data = await res.json();
-        if (data.staff) {
-          setDesigners(data.staff);
-        }
-      } catch (error) {
-        console.error('Error fetching designers:', error);
-      }
-    };
-    fetchDesigners();
-  }, []);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const { staff: designers } = useStaff();
 
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
-      <AdminTopNav />
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
-          <div className="max-w-7xl mx-auto flex flex-col gap-8">
-            {/* Page header: unified admin style */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">매출 관리</h2>
-              </div>
-            </div>
+    <AdminPageLayout>
+      <PageHeader
+        title="매출 관리"
+        actions={
+          <Button variant="outline" icon="history" onClick={() => setShowHistoryModal(true)}>
+            판매내역
+          </Button>
+        }
+      />
 
-            {/* Tabs */}
-            <div className="flex gap-2 border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('total')}
-                className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
-                  activeTab === 'total'
-                    ? 'border-black text-black'
-                    : 'border-transparent text-gray-500 hover:text-black'
-                }`}
-              >
-                전체 매출
-              </button>
-              <button
-                onClick={() => setActiveTab('byStaff')}
-                className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
-                  activeTab === 'byStaff'
-                    ? 'border-black text-black'
-                    : 'border-transparent text-gray-500 hover:text-black'
-                }`}
-              >
-                직원별 매출
-              </button>
-              <button
-                onClick={() => setActiveTab('byItem')}
-                className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${
-                  activeTab === 'byItem'
-                    ? 'border-black text-black'
-                    : 'border-transparent text-gray-500 hover:text-black'
-                }`}
-              >
-                항목별 매출
-              </button>
-            </div>
+      <Tabs
+        tabs={SALES_TABS}
+        activeTab={activeTab}
+        onTabChange={(key) => setActiveTab(key as TabType)}
+      />
 
-            {/* Tab Content */}
-            {activeTab === 'total' && (
-              <TotalSalesTab
-                dateMode={dateMode}
-                setDateMode={setDateMode}
-                selectedDate={selectedDate}
-                setSelectedDate={setSelectedDate}
-                startDate={startDate}
-                setStartDate={setStartDate}
-                endDate={endDate}
-                setEndDate={setEndDate}
-              />
-            )}
-            {activeTab === 'byStaff' && (
-              <ByStaffSalesTab
-                dateMode={dateMode}
-                setDateMode={setDateMode}
-                selectedDate={selectedDate}
-                setSelectedDate={setSelectedDate}
-                startDate={startDate}
-                setStartDate={setStartDate}
-                endDate={endDate}
-                setEndDate={setEndDate}
-                selectedDesignerId={selectedDesignerId}
-                setSelectedDesignerId={setSelectedDesignerId}
-                designers={designers}
-              />
-            )}
-            {activeTab === 'byItem' && (
-              <ByItemSalesTab
-                dateMode={dateMode}
-                setDateMode={setDateMode}
-                selectedDate={selectedDate}
-                setSelectedDate={setSelectedDate}
-                startDate={startDate}
-                setStartDate={setStartDate}
-                endDate={endDate}
-                setEndDate={setEndDate}
-                selectedDesignerId={selectedDesignerId}
-                setSelectedDesignerId={setSelectedDesignerId}
-                selectedItemType={selectedItemType}
-                setSelectedItemType={setSelectedItemType}
-                designers={designers}
-              />
-            )}
-          </div>
+      {/* Tab Content */}
+      {activeTab === 'total' && (
+        <TotalSalesTab
+          dateMode={dateMode}
+          setDateMode={setDateMode}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+        />
+      )}
+      {activeTab === 'byStaff' && (
+        <ByStaffSalesTab
+          dateMode={dateMode}
+          setDateMode={setDateMode}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          selectedDesignerId={selectedDesignerId}
+          setSelectedDesignerId={setSelectedDesignerId}
+          designers={designers}
+        />
+      )}
+      {activeTab === 'byItem' && (
+        <ByItemSalesTab
+          dateMode={dateMode}
+          setDateMode={setDateMode}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          selectedDesignerId={selectedDesignerId}
+          setSelectedDesignerId={setSelectedDesignerId}
+          selectedItemType={selectedItemType}
+          setSelectedItemType={setSelectedItemType}
+          designers={designers}
+        />
+      )}
+
+      {/* Sales History Modal */}
+      {showHistoryModal && (
+        <SalesHistoryModal
+          dateMode={dateMode}
+          selectedDate={selectedDate}
+          startDate={startDate}
+          endDate={endDate}
+          designerId={activeTab === 'byStaff' || activeTab === 'byItem' ? selectedDesignerId : undefined}
+          itemType={activeTab === 'byItem' ? selectedItemType : undefined}
+          onClose={() => setShowHistoryModal(false)}
+        />
+      )}
+    </AdminPageLayout>
+  );
+}
+
+// Comment: Shared date filter bar used across tabs
+function DateFilterBar({
+  dateMode,
+  setDateMode,
+  selectedDate,
+  setSelectedDate,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  handleDateChange,
+  handleSearch,
+  extraFilters,
+}: {
+  dateMode: DateMode;
+  setDateMode: (mode: DateMode) => void;
+  selectedDate: string;
+  setSelectedDate: (date: string) => void;
+  startDate: string;
+  setStartDate: (date: string) => void;
+  endDate: string;
+  setEndDate: (date: string) => void;
+  handleDateChange: (direction: 'prev' | 'next') => void;
+  handleSearch: () => void;
+  extraFilters?: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={dateMode === 'daily'}
+              onChange={() => setDateMode('daily')}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium">일별</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              checked={dateMode === 'period'}
+              onChange={() => setDateMode('period')}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium">기간</span>
+          </label>
         </div>
-      </main>
+
+        {dateMode === 'daily' ? (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
+              &lt;
+            </Button>
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              wrapperClassName="w-auto"
+            />
+            <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
+              &gt;
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              wrapperClassName="w-auto"
+            />
+            <span className="text-gray-400">~</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              min={startDate}
+              wrapperClassName="w-auto"
+            />
+          </div>
+        )}
+
+        {extraFilters}
+
+        <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
+          검색
+        </Button>
+      </div>
     </div>
   );
 }
@@ -165,7 +239,6 @@ function TotalSalesTab({
   const [loading, setLoading] = useState(false);
   const [salesData, setSalesData] = useState<any>(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(true);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -231,142 +304,52 @@ function TotalSalesTab({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Filters */}
-      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'daily'}
-                onChange={() => setDateMode('daily')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">일별</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'period'}
-                onChange={() => setDateMode('period')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">기간</span>
-            </label>
-          </div>
-
-          {dateMode === 'daily' ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDateChange('prev')}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                &lt;
-              </button>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-              <button
-                onClick={() => handleDateChange('next')}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                &gt;
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-              <span className="text-gray-400">~</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={startDate}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          )}
-
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined text-sm">search</span>
-            검색
-          </button>
-        </div>
-      </div>
+      <DateFilterBar
+        dateMode={dateMode}
+        setDateMode={setDateMode}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        handleDateChange={handleDateChange}
+        handleSearch={handleSearch}
+      />
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="text-center py-11.5 text-gray-500">Loading...</div>
       ) : salesData ? (
-        <div className="flex flex-col gap-6">
-          {/* 히스토리 버튼 */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowHistoryModal(true)}
-              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-sm">history</span>
-              판매내역
-            </button>
-          </div>
-
+        <div className="flex flex-col gap-8">
           {/* 판매 합계 (회원권 판매 기준) */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-black">판매 합계 (회원권 판매 기준)</h3>
-                <button
-                  onClick={() => setShowPaymentDetails(!showPaymentDetails)}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-sm">
-                    {showPaymentDetails ? 'visibility_off' : 'visibility'}
-                  </span>
-                  결제 방법별 상세보기
-                </button>
-              </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-black">판매 합계 (회원권 판매 기준)</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={showPaymentDetails ? 'visibility_off' : 'visibility'}
+                onClick={() => setShowPaymentDetails(!showPaymentDetails)}
+              >
+                결제 방법별 상세보기
+              </Button>
             </div>
             <SalesSummaryTable showPaymentDetails={showPaymentDetails} salesData={salesData} />
           </div>
 
-          {/* 입금 합계 (결제일 기준) */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-lg font-bold text-black">입금 합계 (결제일 기준)</h3>
-            </div>
-            <DepositSummaryTable depositData={salesData?.depositSummary} />
+          {/* 매출 합계 (회원권 차감 기준) */}
+          <div>
+            <h3 className="text-sm font-bold text-black mb-2">매출 합계 (회원권 차감 기준)</h3>
+            <RevenueSummaryTable revenueData={salesData?.revenueSummary} />
           </div>
 
-          {/* 매출 합계 (회원권 차감 기준) */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-lg font-bold text-black">매출 합계 (회원권 차감 기준)</h3>
-            </div>
-            <RevenueSummaryTable revenueData={salesData?.revenueSummary} />
+          {/* 입금 합계 (결제일 기준) */}
+          <div>
+            <h3 className="text-sm font-bold text-black mb-2">입금 합계 (결제일 기준)</h3>
+            <DepositSummaryTable depositData={salesData?.depositSummary} />
           </div>
         </div>
       ) : null}
-
-      {/* Sales History Modal */}
-      {showHistoryModal && (
-        <SalesHistoryModal
-          dateMode={dateMode}
-          selectedDate={selectedDate}
-          startDate={startDate}
-          endDate={endDate}
-          onClose={() => setShowHistoryModal(false)}
-        />
-      )}
     </div>
   );
 }
@@ -385,14 +368,12 @@ function SalesSummaryTable({
       service: { quantity: 0, amount: 0 },
       product: { quantity: 0, amount: 0 },
       membership: { quantity: 0, amount: 0 },
-      ticket: { quantity: 0, amount: 0 },
       total: 0,
     },
     refund: {
       service: { quantity: 0, amount: 0 },
       product: { quantity: 0, amount: 0 },
       membership: { quantity: 0, amount: 0 },
-      ticket: { quantity: 0, amount: 0 },
       total: 0,
     },
     paymentDetails: {
@@ -400,14 +381,12 @@ function SalesSummaryTable({
         service: 0,
         product: 0,
         membership: 0,
-        ticket: 0,
         total: 0,
       },
       card: {
         service: 0,
         product: 0,
         membership: 0,
-        ticket: 0,
         total: 0,
       },
     },
@@ -421,117 +400,104 @@ function SalesSummaryTable({
       }
     : data;
 
+  const tableClass = "table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0";
+  const tableWrapperClass = "bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden";
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-4 py-3 text-left font-semibold text-gray-700">유형</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-              서비스
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-              제품
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-              정액권
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-              티켓
-            </th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">합계</th>
-          </tr>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th></th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">판매</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.service.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.product.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.membership.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.ticket.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.sales.ticket.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.sales.total.toLocaleString()}</td>
-          </tr>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">환불</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.service.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.product.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.membership.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.membership.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.ticket.quantity}</td>
-            <td className="px-4 py-3 text-center">{salesData_actual.refund.ticket.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.refund.total.toLocaleString()}</td>
-          </tr>
-          <tr className="bg-green-50 border-b-2 border-green-200">
-            <td className="px-4 py-3 font-bold">판매 합계</td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.sales.service.quantity}</td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.sales.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.sales.product.quantity}</td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.sales.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold"></td>
-            <td className="px-4 py-3 text-center font-semibold">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold"></td>
-            <td className="px-4 py-3 text-center font-semibold"></td>
-            <td className="px-4 py-3 text-center font-bold">{salesData_actual.sales.total.toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div>
+      <div className={tableWrapperClass}>
+        <table className={tableClass}>
+          <thead>
+            <tr className="bg-gray-100 border-b border-gray-200">
+              <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>유형</th>
+              <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
+                서비스
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
+                제품
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
+                정액권
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]" rowSpan={2}>합계</th>
+            </tr>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 !border-l !border-gray-200">수량</th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액</th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">수량</th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액</th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">수량</th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+              <td className="px-4 py-2 font-medium">판매</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.service.quantity}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.product.quantity}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.product.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.membership.quantity}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.total.toLocaleString()}</td>
+            </tr>
+            <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+              <td className="px-4 py-2 font-medium">환불</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.service.quantity}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.service.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.product.quantity}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.product.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.membership.quantity}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.membership.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.refund.total.toLocaleString()}</td>
+            </tr>
+            <tr className="bg-green-50 border-b-2 border-green-200">
+              <td className="px-4 py-2 font-bold">판매 합계</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.quantity}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.product.quantity}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.product.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.membership.quantity}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-bold tabular-nums">{salesData_actual.sales.total.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {showPaymentDetails && (
-        <div className="border-t border-gray-200 p-4 bg-gray-50">
-          <h4 className="text-sm font-semibold text-gray-700 mb-3">결제 방법별 상세 보기</h4>
-          <table className="w-full text-sm">
+        <div className={`${tableWrapperClass} mt-3`}>
+          <table className={tableClass}>
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="px-4 py-2 text-left font-semibold text-gray-700">결제 방법</th>
-                <th className="px-4 py-2 text-center font-semibold text-gray-700">서비스</th>
-                <th className="px-4 py-2 text-center font-semibold text-gray-700">제품</th>
-                <th className="px-4 py-2 text-center font-semibold text-gray-700">정액권</th>
-                <th className="px-4 py-2 text-center font-semibold text-gray-700">티켓</th>
-                <th className="px-4 py-2 text-center font-semibold text-gray-700">합계</th>
+              <tr className="bg-gray-100 border-b border-gray-200">
+                <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]">결제 방법</th>
+                <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">서비스</th>
+                <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">제품</th>
+                <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">정액권</th>
+                <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]">합계</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-gray-100">
+              <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                 <td className="px-4 py-2 font-medium">현금</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.cash.service.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.cash.product.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.cash.membership.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.cash.ticket.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold">{salesData_actual.paymentDetails.cash.total.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.cash.service.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.cash.product.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.cash.membership.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.paymentDetails.cash.total.toLocaleString()}</td>
               </tr>
-              <tr className="border-b border-gray-100">
+              <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                 <td className="px-4 py-2 font-medium">카드</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.card.service.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.card.product.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.card.membership.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center">{salesData_actual.paymentDetails.card.ticket.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold">{salesData_actual.paymentDetails.card.total.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.service.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.product.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.membership.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.paymentDetails.card.total.toLocaleString()}</td>
               </tr>
               <tr className="bg-gray-50 border-t-2 border-gray-300">
                 <td className="px-4 py-2 font-bold">합계</td>
-                <td className="px-4 py-2 text-center font-semibold">{salesData_actual.sales.service.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold">{salesData_actual.sales.product.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold">{salesData_actual.sales.ticket.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-bold">{salesData_actual.sales.total.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.product.amount.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-bold tabular-nums">{salesData_actual.sales.total.toLocaleString()}</td>
               </tr>
             </tbody>
           </table>
@@ -566,62 +532,62 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
   const depositData_actual = depositData || data;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-4 py-3 text-left font-semibold text-gray-700">결제 방법</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">예약금</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">예약금 환불</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">판매시 결제</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">미수 입금</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">환불</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">합계</th>
+          <tr className="bg-gray-100 border-b border-gray-200">
+            <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]">결제 방법</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">예약금</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">예약금 환불</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">판매시 결제</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">미수 입금</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">환불</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]">합계</th>
           </tr>
         </thead>
         <tbody>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">현금</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.cash.deposit.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.cash.depositRefund.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.cash.paymentAtSale.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.cash.uncollectedDeposit.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.cash.refund.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{depositData_actual.cash.total.toLocaleString()}</td>
+          <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+            <td className="px-4 py-2 font-medium">현금</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.deposit.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.depositRefund.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.paymentAtSale.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.uncollectedDeposit.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.refund.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{depositData_actual.cash.total.toLocaleString()}</td>
           </tr>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">카드</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.card.deposit.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.card.depositRefund.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.card.paymentAtSale.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.card.uncollectedDeposit.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{depositData_actual.card.refund.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{depositData_actual.card.total.toLocaleString()}</td>
+          <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+            <td className="px-4 py-2 font-medium">카드</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.deposit.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.depositRefund.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.paymentAtSale.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.uncollectedDeposit.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.refund.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{depositData_actual.card.total.toLocaleString()}</td>
           </tr>
           <tr className="bg-blue-50 border-b-2 border-blue-200">
-            <td className="px-4 py-3 font-bold">입금 합계</td>
-            <td className="px-4 py-3 text-center font-semibold">
+            <td className="px-4 py-2 font-bold">입금 합계</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">
               {(depositData_actual.cash.deposit + depositData_actual.card.deposit).toLocaleString()}
             </td>
-            <td className="px-4 py-3 text-center font-semibold">
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">
               {(depositData_actual.cash.depositRefund + depositData_actual.card.depositRefund).toLocaleString()}
             </td>
-            <td className="px-4 py-3 text-center font-semibold">
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">
               {(depositData_actual.cash.paymentAtSale + depositData_actual.card.paymentAtSale).toLocaleString()}
             </td>
-            <td className="px-4 py-3 text-center font-semibold">
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">
               {(depositData_actual.cash.uncollectedDeposit + depositData_actual.card.uncollectedDeposit).toLocaleString()}
             </td>
-            <td className="px-4 py-3 text-center font-semibold">
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">
               {(depositData_actual.cash.refund + depositData_actual.card.refund).toLocaleString()}
             </td>
-            <td className="px-4 py-3 text-center font-bold">
+            <td className="px-4 py-2 text-center font-bold tabular-nums">
               {(depositData_actual.cash.total + depositData_actual.card.total).toLocaleString()}
             </td>
           </tr>
         </tbody>
       </table>
-      <div className="p-4 bg-gray-50 border-t border-gray-200">
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
         <p className="text-xs text-gray-600">* 미수 발생 합계: 0</p>
       </div>
     </div>
@@ -642,11 +608,6 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
         product: { quantity: 0, amount: 0 },
         total: 0,
       },
-      ticketDeduction: {
-        service: { quantity: 0, amount: 0 },
-        product: { quantity: 0, amount: 0 },
-        total: 0,
-      },
       total: {
         service: { amount: 0 },
         product: { amount: 0 },
@@ -662,68 +623,58 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
   const revenueData_actual = revenueData || data;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-4 py-3 text-left font-semibold text-gray-700">유형</th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+          <tr className="bg-gray-100 border-b border-gray-200">
+            <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>유형</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
               서비스
             </th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
               제품
             </th>
-            <th className="px-4 py-3 text-center font-semibold text-gray-700">합계</th>
+            <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]" rowSpan={2}>합계</th>
           </tr>
           <tr className="bg-gray-50 border-b border-gray-200">
-            <th></th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-            <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 !border-l !border-gray-200">수량</th>
+            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액</th>
+            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">수량</th>
+            <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액</th>
           </tr>
         </thead>
         <tbody>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">판매</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.sales.service.quantity}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.sales.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.sales.product.quantity}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.sales.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.sales.total.toLocaleString()}</td>
+          <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+            <td className="px-4 py-2 font-medium">판매</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.service.quantity}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.product.quantity}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.product.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.sales.total.toLocaleString()}</td>
           </tr>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">정액권 차감</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.membershipDeduction.service.quantity}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.membershipDeduction.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.membershipDeduction.product.quantity}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.membershipDeduction.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.membershipDeduction.total.toLocaleString()}</td>
-          </tr>
-          <tr className="border-b border-gray-100">
-            <td className="px-4 py-3 font-medium">티켓 차감</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.ticketDeduction.service.quantity}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.ticketDeduction.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.ticketDeduction.product.quantity}</td>
-            <td className="px-4 py-3 text-center">{revenueData_actual.ticketDeduction.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.ticketDeduction.total.toLocaleString()}</td>
+          <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+            <td className="px-4 py-2 font-medium">정액권 차감</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.service.quantity}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.product.quantity}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.product.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.membershipDeduction.total.toLocaleString()}</td>
           </tr>
           <tr className="bg-yellow-50 border-b-2 border-yellow-200">
-            <td className="px-4 py-3 font-bold">매출 합계</td>
-            <td className="px-4 py-3 text-center font-semibold"></td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.total.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold"></td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.total.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-bold">{revenueData_actual.total.total.toLocaleString()}</td>
+            <td className="px-4 py-2 font-bold">매출 합계</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.sales.service.quantity + revenueData_actual.membershipDeduction.service.quantity}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.total.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.sales.product.quantity + revenueData_actual.membershipDeduction.product.quantity}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.total.product.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-bold tabular-nums">{revenueData_actual.total.total.toLocaleString()}</td>
           </tr>
           <tr className="bg-gray-50 border-t border-gray-200">
-            <td className="px-4 py-3 font-medium">고객 수 및 객 단가</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.customers.service.quantity}</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.customers.service.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.customers.product.quantity}</td>
-            <td className="px-4 py-3 text-center font-semibold">{revenueData_actual.customers.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-3 text-center font-semibold">
+            <td className="px-4 py-2 font-medium">고객 수 및 객 단가</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.service.quantity}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.product.quantity}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.product.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">
               {revenueData_actual.customers.total.quantity} / {revenueData_actual.customers.total.amount.toLocaleString()}
             </td>
           </tr>
@@ -761,8 +712,6 @@ function ByStaffSalesTab({
 }) {
   const [loading, setLoading] = useState(false);
   const [staffSalesData, setStaffSalesData] = useState<any[]>([]);
-  const [includePointDeduction, setIncludePointDeduction] = useState(true);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -796,10 +745,6 @@ function ByStaffSalesTab({
         if (selectedDesignerId) {
           params.append('designer_id', selectedDesignerId);
         }
-        if (includePointDeduction) {
-          params.append('include_point_deduction', 'true');
-        }
-
         const res = await fetch(`/api/sales/by-staff?${params.toString()}`);
         if (!res.ok) {
           throw new Error('Failed to fetch staff sales data');
@@ -816,7 +761,7 @@ function ByStaffSalesTab({
     };
 
     fetchData();
-  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedDesignerId, includePointDeduction]);
+  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedDesignerId]);
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
@@ -830,204 +775,106 @@ function ByStaffSalesTab({
     }
   };
 
+  const designerOptions = designers.map((d) => ({ value: String(d.id), label: d.name }));
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Filters */}
-      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'daily'}
-                onChange={() => setDateMode('daily')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">일별</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'period'}
-                onChange={() => setDateMode('period')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">기간</span>
-            </label>
-          </div>
-
-          {dateMode === 'daily' ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDateChange('prev')}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                &lt;
-              </button>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-              <button
-                onClick={() => handleDateChange('next')}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                &gt;
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-              <span className="text-gray-400">~</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={startDate}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          )}
-
-          <div className="flex-1">
-            <select
+      <DateFilterBar
+        dateMode={dateMode}
+        setDateMode={setDateMode}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        handleDateChange={handleDateChange}
+        handleSearch={handleSearch}
+        extraFilters={
+          <>
+            <Select
               value={selectedDesignerId}
               onChange={(e) => setSelectedDesignerId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-            >
-              <option value="">전체 직원</option>
-              {designers.map((designer) => (
-                <option key={designer.id} value={designer.id}>
-                  {designer.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includePointDeduction}
-              onChange={(e) => setIncludePointDeduction(e.target.checked)}
-              className="w-4 h-4"
+              options={designerOptions}
+              placeholder="전체 직원"
+              wrapperClassName="flex-1"
             />
-            <span className="text-sm text-gray-600">포인트 차감 포함</span>
-          </label>
-
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined text-sm">search</span>
-            검색
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="text-center py-11.5 text-gray-500">Loading...</div>
       ) : !hasSearched ? null : staffSalesData.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">해당 기간에 데이터가 없습니다.</div>
+        <EmptyState title="해당 기간에 데이터가 없습니다." />
       ) : (
         <div className="flex flex-col gap-6">
-          {/* 히스토리 버튼 */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowHistoryModal(true)}
-              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-sm">history</span>
-              판매내역
-            </button>
-          </div>
-
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">직원</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">판매/차감</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]" rowSpan={2}>직원</th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider" rowSpan={2}>판매/차감</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
                       서비스 매출
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
                       제품 매출
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">소계 (A + B)</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" rowSpan={2}>소계 (A + B)</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
                       정액권 판매
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                      티켓 판매
-                    </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">합계 (A + B + C + D)</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>합계 (A + B + C)</th>
                   </tr>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th colSpan={2}></th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (A)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (B)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (C)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (D)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 !border-l !border-gray-200">수량</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액 (A)</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">수량</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액 (B)</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">수량</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액 (C)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {staffSalesData.map((staff, idx) => (
                     <React.Fragment key={staff.designerId}>
-                      <tr className="border-b border-gray-100">
-                        <td className="px-4 py-3 font-medium" rowSpan={3}>
+                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-4 py-2 font-medium" rowSpan={3}>
                           {staff.name}
                         </td>
-                        <td className="px-4 py-3 font-medium">판매</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.service.quantity}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.service.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.product.quantity}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.product.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.sales.subtotal.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.membership.quantity}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.membership.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.ticket.quantity}</td>
-                        <td className="px-4 py-3 text-center">{staff.sales.ticket.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.sales.total.toLocaleString()}</td>
+                        <td className="px-4 py-2 font-medium">판매</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.quantity}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.quantity}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.sales.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.quantity}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.sales.total.toLocaleString()}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="px-4 py-3 font-medium">회원권 차감</td>
-                        <td className="px-4 py-3 text-center">{staff.membershipDeduction.service.quantity}</td>
-                        <td className="px-4 py-3 text-center">{staff.membershipDeduction.service.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
+                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-4 py-2 font-medium !border-l !border-gray-200">회원권 차감</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.quantity}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
                       </tr>
                       <tr className="bg-yellow-50 border-b-2 border-yellow-200">
-                        <td className="px-4 py-3 font-bold">합계</td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.total.service.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.total.product.amount.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center font-semibold">{staff.total.subtotal.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center"></td>
-                        <td className="px-4 py-3 text-center font-bold">{staff.total.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 font-bold !border-l !border-gray-200">합계</td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.total.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.total.product.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.total.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center font-bold tabular-nums">{staff.total.subtotal.toLocaleString()}</td>
                       </tr>
                     </React.Fragment>
                   ))}
@@ -1038,17 +885,6 @@ function ByStaffSalesTab({
         </div>
       )}
 
-      {/* Sales History Modal */}
-      {showHistoryModal && (
-        <SalesHistoryModal
-          dateMode={dateMode}
-          selectedDate={selectedDate}
-          startDate={startDate}
-          endDate={endDate}
-          designerId={selectedDesignerId}
-          onClose={() => setShowHistoryModal(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1087,7 +923,7 @@ function ByItemSalesTab({
   const [itemSalesData, setItemSalesData] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [aggregationMode, setAggregationMode] = useState<'category' | 'service'>('category');
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [searchedAggregationMode, setSearchedAggregationMode] = useState<'category' | 'service'>('category');
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -1100,6 +936,7 @@ function ByItemSalesTab({
       alert('시작 날짜와 종료 날짜를 선택해주세요.');
       return;
     }
+    setSearchedAggregationMode(aggregationMode);
     setHasSearched(true);
     setShouldFetch(true);
   };
@@ -1158,209 +995,131 @@ function ByItemSalesTab({
     }
   };
 
+  const designerOptions = designers.map((d) => ({ value: String(d.id), label: d.name }));
+
+  const itemTypeOptions = [
+    { value: 'service', label: '서비스' },
+    { value: 'product', label: '제품' },
+    { value: 'membership', label: '정액권' },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Filters */}
-      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'daily'}
-                onChange={() => setDateMode('daily')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">일별</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'period'}
-                onChange={() => setDateMode('period')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">기간</span>
-            </label>
-          </div>
-
-          {dateMode === 'daily' ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDateChange('prev')}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                &lt;
-              </button>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-              <button
-                onClick={() => handleDateChange('next')}
-                className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                &gt;
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-              <span className="text-gray-400">~</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={startDate}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          )}
-
-          <div className="flex-1">
-            <select
+      <DateFilterBar
+        dateMode={dateMode}
+        setDateMode={setDateMode}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        handleDateChange={handleDateChange}
+        handleSearch={handleSearch}
+        extraFilters={
+          <>
+            <Select
               value={selectedDesignerId}
               onChange={(e) => setSelectedDesignerId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-            >
-              <option value="">전체 직원</option>
-              {designers.map((designer) => (
-                <option key={designer.id} value={designer.id}>
-                  {designer.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex-1">
-            <select
+              options={designerOptions}
+              placeholder="전체 직원"
+              wrapperClassName="flex-1"
+            />
+            <Select
               value={selectedItemType}
-              onChange={(e) => setSelectedItemType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-            >
-              <option value="">전체 서비스 항목</option>
-              <option value="service">서비스</option>
-              <option value="product">제품</option>
-              <option value="membership">정액권</option>
-              <option value="ticket">티켓</option>
-            </select>
-          </div>
-
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={aggregationMode === 'category'}
-                onChange={() => setAggregationMode('category')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">분류</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={aggregationMode === 'service'}
-                onChange={() => setAggregationMode('service')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">서비스</span>
-            </label>
-          </div>
-
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined text-sm">search</span>
-            검색
-          </button>
-        </div>
-      </div>
+              onChange={(e) => {
+                setSelectedItemType(e.target.value);
+                if (e.target.value !== 'service') {
+                  setAggregationMode('category');
+                }
+              }}
+              options={itemTypeOptions}
+              wrapperClassName="flex-1"
+            />
+            <div className="flex gap-4">
+              <label className={`flex items-center gap-2 ${selectedItemType !== 'service' ? 'opacity-40 pointer-events-none' : ''}`}>
+                <input
+                  type="radio"
+                  checked={aggregationMode === 'category'}
+                  onChange={() => setAggregationMode('category')}
+                  disabled={selectedItemType !== 'service'}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">분류</span>
+              </label>
+              <label className={`flex items-center gap-2 ${selectedItemType !== 'service' ? 'opacity-40 pointer-events-none' : ''}`}>
+                <input
+                  type="radio"
+                  checked={aggregationMode === 'service'}
+                  onChange={() => setAggregationMode('service')}
+                  disabled={selectedItemType !== 'service'}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">서비스</span>
+              </label>
+            </div>
+          </>
+        }
+      />
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="text-center py-11.5 text-gray-500">Loading...</div>
       ) : !hasSearched ? null : itemSalesData.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">해당 기간에 데이터가 없습니다.</div>
+        <EmptyState title="해당 기간에 데이터가 없습니다." />
       ) : (
         <div className="flex flex-col gap-6">
-          {/* 히스토리 버튼 */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowHistoryModal(true)}
-              className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-sm">history</span>
-              판매내역
-            </button>
-          </div>
-
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">분류</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>분류</th>
+                    {searchedAggregationMode === 'service' && (
+                      <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider" rowSpan={2}>서비스</th>
+                    )}
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
                       판매
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" colSpan={2}>
                       정액권 차감
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700" colSpan={2}>
-                      티켓 차감
-                    </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">합계 (A + B + C)</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">평균 단가</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">포인트 차감</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" rowSpan={2}>합계 (A + B)</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider" rowSpan={2}>평균 단가</th>
                   </tr>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th></th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (A)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (B)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">수량</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액 (C)</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
-                    <th className="px-4 py-2 text-center text-xs text-gray-600">금액</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 !border-l !border-gray-200">수량</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액 (A)</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">수량</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700">금액 (B)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {itemSalesData.map((item, idx) => (
-                    <tr key={idx} className="border-b border-gray-100">
-                      <td className="px-4 py-3 font-medium">{item.category}</td>
-                      <td className="px-4 py-3 text-center">{item.sales.quantity}</td>
-                      <td className="px-4 py-3 text-center">{item.sales.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{item.membershipDeduction.quantity}</td>
-                      <td className="px-4 py-3 text-center">{item.membershipDeduction.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{item.ticketDeduction.quantity}</td>
-                      <td className="px-4 py-3 text-center">{item.ticketDeduction.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{item.total.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{item.avgPrice.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">{item.pointDeduction.toLocaleString()}</td>
+                    <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-2 font-medium">{item.category}</td>
+                      {searchedAggregationMode === 'service' && (
+                        <td className="px-4 py-2">{item.serviceName}</td>
+                      )}
+                      <td className="px-4 py-2 text-center tabular-nums">{item.sales.quantity}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{item.sales.amount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{item.membershipDeduction.quantity}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{item.membershipDeduction.amount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{item.total.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{item.avgPrice.toLocaleString()}</td>
                     </tr>
                   ))}
                   {summary && (
                     <tr className="bg-yellow-50 border-t-2 border-yellow-200">
-                      <td className="px-4 py-3 font-bold">합계</td>
-                      <td className="px-4 py-3 text-center font-semibold">{summary.salesQuantity}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{summary.salesAmount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{summary.membershipQuantity}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{summary.membershipAmount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">0</td>
-                      <td className="px-4 py-3 text-center font-semibold">0</td>
-                      <td className="px-4 py-3 text-center font-bold">{summary.totalAmount.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">{summary.avgPrice.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center font-semibold">0</td>
+                      <td className="px-4 py-2 font-bold">합계</td>
+                      {searchedAggregationMode === 'service' && (
+                        <td className="px-4 py-2"></td>
+                      )}
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.salesQuantity}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.salesAmount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.membershipQuantity}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.membershipAmount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-bold tabular-nums">{summary.totalAmount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.avgPrice.toLocaleString()}</td>
                     </tr>
                   )}
                 </tbody>
@@ -1370,18 +1129,6 @@ function ByItemSalesTab({
         </div>
       )}
 
-      {/* Sales History Modal */}
-      {showHistoryModal && (
-        <SalesHistoryModal
-          dateMode={dateMode}
-          selectedDate={selectedDate}
-          startDate={startDate}
-          endDate={endDate}
-          designerId={selectedDesignerId}
-          itemType={selectedItemType}
-          onClose={() => setShowHistoryModal(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1414,8 +1161,8 @@ function SalesHistoryModal({
   const [showDeleted, setShowDeleted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
-  const [designers, setDesigners] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
+  const { staff: designers } = useStaff();
+  const { services } = useServices();
   const [shops, setShops] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1423,31 +1170,37 @@ function SalesHistoryModal({
   const [totalCount, setTotalCount] = useState(0);
   const ITEMS_PER_PAGE = 10;
 
-  // Comment: Fetch initial data
+  // Customer info drawer state
+  const [viewingCustomerId, setViewingCustomerId] = useState<number | null>(null);
+  const [viewingCustomer, setViewingCustomer] = useState<any>(null);
+  const [customerInfoLoading, setCustomerInfoLoading] = useState(false);
+  const [customerInfoTab, setCustomerInfoTab] = useState<'sales' | 'bookings' | 'prepaid'>('sales');
+
+  // Sales detail modal state
+  const [selectedSalesDetail, setSelectedSalesDetail] = useState<any>(null);
+  const [isSalesDetailOpen, setIsSalesDetailOpen] = useState(false);
+  const [isDeleteSaleAlertOpen, setIsDeleteSaleAlertOpen] = useState(false);
+  const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
+  const [isSalesRegistrationModalOpen, setIsSalesRegistrationModalOpen] = useState(false);
+  const [salesRegistrationCustomer, setSalesRegistrationCustomer] = useState<{ id: number; name: string; phone: string | null } | null>(null);
+  const [editingSaleData, setEditingSaleData] = useState<any | null>(null);
+  const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
+
+  // Comment: Fetch initial data (shops and customers)
   useEffect(() => {
     let isMounted = true;
     const fetchInitialData = async () => {
       try {
-        const [designersRes, servicesRes, shopsRes, customersRes] = await Promise.all([
-          fetch('/api/staff'),
-          fetch('/api/services'),
+        const [shopsRes, customersRes] = await Promise.all([
           fetch('/api/shops'),
           fetch('/api/customers?limit=1000'),
         ]);
 
         if (!isMounted) return;
 
-        const designersData = await designersRes.json();
-        const servicesData = await servicesRes.json();
         const shopsData = await shopsRes.json();
         const customersData = await customersRes.json();
 
-        if (designersRes.ok && designersData.staff) {
-          setDesigners(designersData.staff);
-        }
-        if (servicesRes.ok && servicesData.services) {
-          setServices(servicesData.services);
-        }
         if (shopsRes.ok && shopsData.shops) {
           setShops(shopsData.shops);
         }
@@ -1481,8 +1234,20 @@ function SalesHistoryModal({
         params.append('designer_id', selectedDesignerId);
       }
 
-      const bookingsRes = await fetch(`/api/appointment?${params.toString()}`);
+      // Fetch bookings and refunds in parallel
+      const refundParams = new URLSearchParams();
+      refundParams.append('start_date', actualStartDate);
+      refundParams.append('end_date', actualEndDate);
+
+      const [bookingsRes, refundsRes] = await Promise.all([
+        fetch(`/api/appointment?${params.toString()}`),
+        fetch(`/api/refunds?${refundParams.toString()}`),
+      ]);
+
       const bookingsData = await bookingsRes.json();
+      const refundsData = await refundsRes.json();
+
+      let allHistory: any[] = [];
 
       if (bookingsRes.ok && bookingsData.bookings) {
         let bookings = bookingsData.bookings;
@@ -1534,25 +1299,9 @@ function SalesHistoryModal({
               });
             });
 
-            let history = Array.from(grouped.values());
-
-            // Comment: Filter by payment method
-            if (selectedPaymentMethod !== '전체') {
-              history = history.filter((h: any) => {
-                if (h.payments.length === 0) return false;
-                return h.payments.some((p: any) => {
-                  if (selectedPaymentMethod === '현금') return p.method === 'cash';
-                  if (selectedPaymentMethod === '카드') return p.method === 'card';
-                  return true;
-                });
-              });
-            }
-
-            setHistoryData(history);
-            setTotalCount(history.length);
-            setTotalPages(Math.ceil(history.length / ITEMS_PER_PAGE));
+            allHistory = Array.from(grouped.values());
           } else {
-            setHistoryData(bookings.map((b: any) => ({
+            allHistory = bookings.map((b: any) => ({
               id: b.id,
               customer_id: b.customer_id,
               booking_date: b.booking_date,
@@ -1565,16 +1314,63 @@ function SalesHistoryModal({
                 memo: b.memo,
               }],
               payments: [],
-            })));
-            setTotalCount(bookings.length);
-            setTotalPages(Math.ceil(bookings.length / ITEMS_PER_PAGE));
+            }));
           }
-        } else {
-          setHistoryData([]);
-          setTotalCount(0);
-          setTotalPages(1);
         }
       }
+
+      // Merge refund records
+      const refunds = refundsData.refunds || [];
+      const refundHistory = refunds.map((r: any) => ({
+        id: r.id,
+        _isRefund: true,
+        customer_id: r.customer_id,
+        shop_id: r.shop_id || null,
+        booking_date: r.refund_date,
+        booking_time: r.refund_time,
+        items: (r.refund_items || []).map((ri: any) => ({
+          service_id: null,
+          designer_id: null,
+          total_amount: ri.amount,
+          item_name: ri.item_name,
+          manager: ri.manager,
+          memo: r.memo,
+        })),
+        payments: [
+          ...(r.cash_amount > 0 ? [{ method: 'cash', amount: r.cash_amount }] : []),
+          ...(r.card_amount > 0 ? [{ method: 'card', amount: r.card_amount }] : []),
+          ...(r.bank_transfer_amount > 0 ? [{ method: 'bank_transfer', amount: r.bank_transfer_amount }] : []),
+        ],
+        refund_total: r.total_amount,
+        refund_memo: r.memo,
+      }));
+
+      let history = [...allHistory, ...refundHistory];
+
+      // Sort by date+time descending
+      history.sort((a: any, b: any) => {
+        const dateA = `${a.booking_date} ${a.booking_time || ''}`;
+        const dateB = `${b.booking_date} ${b.booking_time || ''}`;
+        return dateB.localeCompare(dateA);
+      });
+
+      // Comment: Filter by payment method
+      if (selectedPaymentMethod !== '전체') {
+        history = history.filter((h: any) => {
+          if (h.payments.length === 0) return false;
+          return h.payments.some((p: any) => {
+            if (selectedPaymentMethod === '현금') return p.method === 'cash';
+            if (selectedPaymentMethod === '카드') return p.method === 'card';
+            if (selectedPaymentMethod === '계좌이체') return p.method === 'bank_transfer';
+            if (selectedPaymentMethod === '정액권 차감') return p.method === 'prepaid_pass';
+            return true;
+          });
+        });
+      }
+
+      setHistoryData(history);
+      setTotalCount(history.length);
+      setTotalPages(Math.ceil(history.length / ITEMS_PER_PAGE));
     } catch (error) {
       console.error('Error fetching sales history:', error);
       setHistoryData([]);
@@ -1623,6 +1419,59 @@ function SalesHistoryModal({
     return customer?.name || '-';
   };
 
+  const getShopName = (shopId: number | null) => {
+    if (!shopId) return '-';
+    const shop = shops.find((s: any) => s.id === shopId);
+    return shop?.name || '-';
+  };
+
+  const handleCustomerClick = async (customerId: number) => {
+    if (!customerId) return;
+    setViewingCustomerId(customerId);
+    setCustomerInfoTab('sales');
+    setCustomerInfoLoading(true);
+    try {
+      const res = await fetch(`/api/customers/${customerId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setViewingCustomer(data.customer || data);
+      }
+    } catch (error) {
+      console.error('Error fetching customer:', error);
+    } finally {
+      setCustomerInfoLoading(false);
+    }
+  };
+
+  const handleViewSalesDetail = (item: any) => {
+    const salesData = {
+      id: item.id,
+      customer_id: item.customer_id,
+      customer_name: getCustomerName(item.customer_id),
+      sales_date: item.booking_date,
+      sales_time: item.booking_time,
+      sales_amount: item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0),
+      discount_amount: 0,
+      total_amount: item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0),
+      cash_amount: item.payments?.filter((p: any) => p.method === 'cash').reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0,
+      card_amount: item.payments?.filter((p: any) => p.method === 'card').reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0,
+      bank_transfer_amount: item.payments?.filter((p: any) => p.method === 'bank_transfer').reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0,
+      point_accumulation: 0,
+      memo: item.items[0]?.memo || null,
+      items: item.items.map((it: any) => ({
+        item_type: 'service',
+        item_name: getServiceName(it.service_id),
+        unit_price: Number(it.total_amount) || 0,
+        quantity: 1,
+        discount: 0,
+        amount: Number(it.total_amount) || 0,
+        manager: getDesignerName(it.designer_id),
+      })),
+    };
+    setSelectedSalesDetail(salesData);
+    setIsSalesDetailOpen(true);
+  };
+
   const formatTime = (time: string) => {
     if (!time) return '';
     const [hours, minutes] = time.split(':');
@@ -1630,314 +1479,388 @@ function SalesHistoryModal({
     return `${hour}:${minutes}`;
   };
 
-  const formatPaymentMethod = (method: string) => {
-    if (method === 'cash') return '현금';
-    if (method === 'card') return '카드';
-    return method;
-  };
-
   const paginatedData = historyData.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="bg-black text-white p-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold">매출 히스토리</h2>
-          <button onClick={onClose} className="text-white hover:text-gray-200">
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchHistory(page);
+  };
 
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Filters */}
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={dateMode === 'daily'}
-                    onChange={() => setDateMode('daily')}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm font-medium">일별</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={dateMode === 'period'}
-                    onChange={() => setDateMode('period')}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm font-medium">기간</span>
-                </label>
-              </div>
+  const itemTypeOptions = [
+    { value: '전체', label: '전체' },
+    { value: '서비스', label: '서비스' },
+    { value: '제품', label: '제품' },
+    { value: '정액권', label: '정액권' },
+  ];
 
-              {dateMode === 'daily' ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleDateChange('prev')}
-                    className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-                  >
-                    &lt;
-                  </button>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  />
-                  <button
-                    onClick={() => handleDateChange('next')}
-                    className="px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-                  >
-                    &gt;
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  />
-                  <span className="text-gray-400">~</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    min={startDate}
-                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-                  />
-                </div>
+  const paymentMethodOptions = [
+    { value: '전체', label: '전체' },
+    { value: '현금', label: '현금' },
+    { value: '카드', label: '카드' },
+    { value: '계좌이체', label: '계좌이체' },
+    { value: '정액권 차감', label: '정액권 차감' },
+  ];
+
+  const designerOptions = designers.map((d) => ({ value: String(d.id), label: d.name }));
+
+  const historyColumns = [
+    {
+      key: 'shop',
+      header: '지점',
+      render: (item: any) => getShopName(item.shop_id),
+    },
+    {
+      key: 'date',
+      header: '날짜',
+      render: (item: any) => (
+        <span>{item.booking_date} {formatTime(item.booking_time)}</span>
+      ),
+    },
+    {
+      key: 'customer',
+      header: '고객명',
+      render: (item: any) => (
+        <button
+          className="hover:underline cursor-pointer"
+          onClick={() => item.customer_id && handleCustomerClick(item.customer_id)}
+        >
+          {getCustomerName(item.customer_id)}
+        </button>
+      ),
+    },
+    {
+      key: 'items',
+      header: '판매 항목',
+      render: (item: any) => (
+        <div className="flex flex-col gap-1">
+          {item.items.map((it: any, i: number) => (
+            <div key={i} className="flex items-center gap-1.5">
+              {item._isRefund && i === 0 && (
+                <Badge variant="error" size="sm">환불</Badge>
               )}
-
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">항목</label>
-                <select
-                  value={selectedItemType}
-                  onChange={(e) => setSelectedItemType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-                >
-                  <option value="전체">전체</option>
-                  <option value="서비스">서비스</option>
-                  <option value="제품">제품</option>
-                  <option value="정액권">정액권</option>
-                  <option value="티켓">티켓</option>
-                </select>
-              </div>
-
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">결제 방법</label>
-                <select
-                  value={selectedPaymentMethod}
-                  onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-                >
-                  <option value="전체">전체</option>
-                  <option value="현금">현금</option>
-                  <option value="카드">카드</option>
-                </select>
-              </div>
-
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">담당자</label>
-                <select
-                  value={selectedDesignerId}
-                  onChange={(e) => setSelectedDesignerId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent bg-white"
-                >
-                  <option value="">전체</option>
-                  {designers.map((designer) => (
-                    <option key={designer.id} value={designer.id}>
-                      {designer.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={handleSearch}
-                className="px-4 py-2 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-sm">search</span>
-                검색
-              </button>
+              <span>{item._isRefund ? (it.item_name || '-') : getServiceName(it.service_id)}</span>
             </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'designer',
+      header: '담당자',
+      render: (item: any) => (
+        <div className="flex flex-col gap-1">
+          {item.items.map((it: any, i: number) => (
+            <div key={i}>{item._isRefund ? (it.manager || '-') : getDesignerName(it.designer_id)}</div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'salesType',
+      header: '영업 구분',
+      render: () => '-',
+    },
+    {
+      key: 'discount',
+      header: '할인',
+      render: () => '-',
+    },
+    {
+      key: 'amount',
+      header: '금액',
+      align: 'right' as const,
+      render: (item: any) => (
+        <div className={`flex flex-col gap-1 items-end ${item._isRefund ? 'text-red-500 font-medium' : ''}`}>
+          {item.items.map((it: any, i: number) => (
+            <div key={i}>
+              {it.total_amount
+                ? (item._isRefund ? `-${Number(it.total_amount).toLocaleString()}` : Number(it.total_amount).toLocaleString())
+                : '-'}
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'paymentMethod',
+      header: '결제 방법',
+      render: (item: any) => {
+        const paymentMethods = item.payments.map((p: any) => formatPaymentMethod(p.method)).join(', ') || '-';
+        return paymentMethods;
+      },
+    },
+    {
+      key: 'paymentAmount',
+      header: '결제 금액',
+      align: 'right' as const,
+      render: (item: any) => {
+        if (item._isRefund) {
+          const refundTotal = item.refund_total || item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+          return <span className="text-red-500 font-medium">-{Number(refundTotal).toLocaleString()}</span>;
+        }
+        const totalAmount = item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+        const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+        return totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString();
+      },
+    },
+    {
+      key: 'memo',
+      header: '메모',
+      render: (item: any) => item._isRefund ? (item.refund_memo || '-') : (item.items[0]?.memo || '-'),
+    },
+    {
+      key: 'detail',
+      header: '',
+      width: 50,
+      render: (item: any) => (
+        item._isRefund ? null : (
+          <button
+            className="text-gray-500 hover:text-gray-800 cursor-pointer"
+            onClick={() => handleViewSalesDetail(item)}
+          >
+            <span className="material-symbols-outlined text-[20px]">visibility</span>
+          </button>
+        )
+      ),
+    },
+  ];
+
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="매출 히스토리"
+      maxWidth="max-w-7xl"
+      scrollable
+    >
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-5.5">
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                checked={dateMode === 'daily'}
+                onChange={() => setDateMode('daily')}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium">일별</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                checked={dateMode === 'period'}
+                onChange={() => setDateMode('period')}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium">기간</span>
+            </label>
           </div>
 
-          {/* Table */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">로딩 중...</div>
-            </div>
-          ) : paginatedData.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">해당 기간에 내역이 없습니다.</div>
+          {dateMode === 'daily' ? (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
+                &lt;
+              </Button>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                wrapperClassName="w-auto"
+              />
+              <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
+                &gt;
+              </Button>
             </div>
           ) : (
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                <div className="text-sm font-medium text-gray-700">
-                  총 {totalCount}건
-                </div>
-                <label className="flex items-center gap-2 text-sm text-gray-600">
-                  <input
-                    type="checkbox"
-                    checked={showDeleted}
-                    onChange={(e) => setShowDeleted(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <span>삭제 항목 표시</span>
-                  <span className="material-symbols-outlined text-sm text-gray-400">help_outline</span>
-                </label>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">날짜</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">고객명</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">판매 항목</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">담당자</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">영업 구분</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">할인</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">금액</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">결제 방법</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">결제 금액</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">메모</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {paginatedData.map((item: any, idx: number) => {
-                      const totalAmount = item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
-                      const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-                      const paymentMethods = item.payments.map((p: any) => formatPaymentMethod(p.method)).join(', ') || '-';
-                      
-                      return (
-                        <tr key={`${item.id}_${idx}`} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {item.booking_date} {formatTime(item.booking_time)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {getCustomerName(item.customer_id)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            <div className="flex flex-col gap-1">
-                              {item.items.map((it: any, i: number) => (
-                                <div key={i}>{getServiceName(it.service_id)}</div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            <div className="flex flex-col gap-1">
-                              {item.items.map((it: any, i: number) => (
-                                <div key={i}>{getDesignerName(it.designer_id)}</div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">-</td>
-                          <td className="px-4 py-3 text-sm text-gray-900">-</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                            <div className="flex flex-col gap-1 items-end">
-                              {item.items.map((it: any, i: number) => (
-                                <div key={i}>{it.total_amount ? Number(it.total_amount).toLocaleString() : '-'}</div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">{paymentMethods}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                            {totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900">
-                            {item.items[0]?.memo || '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  페이지 {currentPage} 의 {totalPages}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (currentPage > 1) {
-                        setCurrentPage(1);
-                        fetchHistory(1);
-                      }
-                    }}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                  >
-                    &lt;&lt;
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (currentPage > 1) {
-                        setCurrentPage(currentPage - 1);
-                        fetchHistory(currentPage - 1);
-                      }
-                    }}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                  >
-                    &lt;
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (currentPage < totalPages) {
-                        setCurrentPage(currentPage + 1);
-                        fetchHistory(currentPage + 1);
-                      }
-                    }}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                  >
-                    &gt;
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (currentPage < totalPages) {
-                        setCurrentPage(totalPages);
-                        fetchHistory(totalPages);
-                      }
-                    }}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                  >
-                    &gt;&gt;
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={totalPages}
-                    value={currentPage}
-                    onChange={(e) => {
-                      const page = parseInt(e.target.value);
-                      if (page >= 1 && page <= totalPages) {
-                        setCurrentPage(page);
-                        fetchHistory(page);
-                      }
-                    }}
-                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                  />
-                  <span className="text-sm text-gray-700">이동</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                wrapperClassName="w-auto"
+              />
+              <span className="text-gray-400">~</span>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate}
+                wrapperClassName="w-auto"
+              />
             </div>
           )}
+
+          <Select
+            label="항목"
+            value={selectedItemType}
+            onChange={(e) => setSelectedItemType(e.target.value)}
+            options={itemTypeOptions}
+            wrapperClassName="flex-1"
+          />
+
+          <Select
+            label="결제 방법"
+            value={selectedPaymentMethod}
+            onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+            options={paymentMethodOptions}
+            wrapperClassName="flex-1"
+          />
+
+          <Select
+            label="담당자"
+            value={selectedDesignerId}
+            onChange={(e) => setSelectedDesignerId(e.target.value)}
+            options={designerOptions}
+            placeholder="전체"
+            wrapperClassName="flex-1"
+          />
+
+          <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
+            검색
+          </Button>
         </div>
       </div>
-    </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-11.5">
+          <div className="text-gray-500">로딩 중...</div>
+        </div>
+      ) : paginatedData.length === 0 ? (
+        <EmptyState title="해당 기간에 내역이 없습니다." />
+      ) : (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+            <div className="text-sm font-medium text-gray-700">
+              총 {totalCount}건
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={showDeleted}
+                onChange={(e) => setShowDeleted(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span>삭제 항목 표시</span>
+              <span className="material-symbols-outlined text-sm text-gray-400">help_outline</span>
+            </label>
+          </div>
+
+          <DataTable
+            columns={historyColumns}
+            data={paginatedData}
+            keyExtractor={(item: any) => `${item._isRefund ? 'r' : 's'}_${item.id}_${item.booking_date}_${item.booking_time}_${item.customer_id}`}
+            className="rounded-none border-0 shadow-none"
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
+
+      {/* Customer Info Drawer */}
+      {viewingCustomerId && (
+        <CustomerInfoDrawer
+          customerId={viewingCustomerId}
+          customer={viewingCustomer}
+          loading={customerInfoLoading}
+          tab={customerInfoTab}
+          onClose={() => {
+            setViewingCustomerId(null);
+            setViewingCustomer(null);
+          }}
+          onTabChange={setCustomerInfoTab}
+        />
+      )}
+
+      {/* Sales Detail Modal */}
+      <SalesDetailModal
+        isOpen={isSalesDetailOpen}
+        salesData={selectedSalesDetail}
+        onClose={() => {
+          setIsSalesDetailOpen(false);
+          setSelectedSalesDetail(null);
+        }}
+        onEdit={() => {
+          if (!selectedSalesDetail) return;
+          const currentData = selectedSalesDetail;
+          setIsSalesDetailOpen(false);
+          setSelectedSalesDetail(null);
+          setSalesRegistrationCustomer({
+            id: currentData.customer_id,
+            name: currentData.customer_name,
+            phone: null,
+          });
+          setEditingSaleData(currentData);
+          setEditingSaleId(currentData.id);
+          setIsSalesRegistrationModalOpen(true);
+        }}
+        onDelete={() => {
+          if (!selectedSalesDetail) return;
+          setDeletingSaleId(selectedSalesDetail.id);
+          setIsDeleteSaleAlertOpen(true);
+        }}
+      />
+
+      {/* Sales Delete Alert Modal */}
+      <AlertModal
+        isOpen={isDeleteSaleAlertOpen}
+        title="판매 삭제"
+        message="이 판매 내역을 삭제하시겠습니까? 삭제된 내역은 복구할 수 없습니다."
+        highlightText="복구할 수 없습니다"
+        variant="confirm"
+        zIndex={Z.MODAL_ALERT_TOP}
+        onConfirm={async () => {
+          if (!deletingSaleId) return;
+          try {
+            const response = await fetch(`/api/sales/${deletingSaleId}`, {
+              method: 'DELETE',
+            });
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || '판매 삭제에 실패했습니다.');
+            }
+            setIsDeleteSaleAlertOpen(false);
+            setDeletingSaleId(null);
+            setIsSalesDetailOpen(false);
+            setSelectedSalesDetail(null);
+            fetchHistory(currentPage);
+          } catch (error: any) {
+            console.error('판매 삭제 오류:', error);
+            alert(error.message || '판매 삭제 중 오류가 발생했습니다.');
+            setIsDeleteSaleAlertOpen(false);
+          }
+        }}
+        onClose={() => {
+          setIsDeleteSaleAlertOpen(false);
+          setDeletingSaleId(null);
+        }}
+      />
+
+      {/* Sales Registration Modal (for editing) */}
+      <SalesRegistrationModal
+        isOpen={isSalesRegistrationModalOpen}
+        onClose={() => {
+          setIsSalesRegistrationModalOpen(false);
+          setSalesRegistrationCustomer(null);
+          setEditingSaleData(null);
+          setEditingSaleId(null);
+        }}
+        onComplete={() => {
+          setIsSalesRegistrationModalOpen(false);
+          setSalesRegistrationCustomer(null);
+          setEditingSaleData(null);
+          setEditingSaleId(null);
+          fetchHistory(currentPage);
+        }}
+        customer={salesRegistrationCustomer}
+        initialData={editingSaleData}
+        editSaleId={editingSaleId}
+      />
+    </Modal>
   );
 }

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Comment: Load active designers
     const { data: designers, error: designersError } = await supabase
       .from('designers')
-      .select('id, name, role, is_active');
+      .select('id, name, role, is_active, shop_id');
 
     if (designersError) {
       console.error('Error fetching designers for working-designers:', designersError);
@@ -104,6 +104,7 @@ export async function GET(request: NextRequest) {
         id: d.id,
         name: d.name,
         role: d.role,
+        shop_id: d.shop_id || null,
       })),
     });
   } catch (error) {

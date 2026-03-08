@@ -57,6 +57,7 @@ export interface Booking {
   deposit_amount: number;
   total_amount: number | null;
   memo?: string | null;
+  color_label?: string | null;
   created_at: string;
 }
 
@@ -91,4 +92,120 @@ export interface DesignerSales {
   bookings_count: number;
   created_at: string;
   updated_at: string;
+}
+
+// Booking with joined relation fields (returned by API with select joins)
+export type BookingWithRelations = Booking & {
+  designer?: { id: number; name: string | null } | null;
+  service?: { id: number; name: string | null; duration_minutes?: number | null } | null;
+  customer?: { id: number; name: string | null; phone?: string | null } | null;
+  shop?: { id: number; name: string | null } | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  created_at?: string | null;
+};
+
+// Business hours (from reservation settings)
+export interface BusinessHourEntry {
+  id: number;
+  shop_id: number | null;
+  start_time: string;
+  end_time: string;
+  days: string[];
+  created_at: string;
+}
+
+// Booking items (from reservation settings)
+export interface BookingItemEntry {
+  id: number;
+  name: string;
+  duration_hours: number;
+  duration_minutes: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+// Holiday calendar types
+export type HolidayType = 'regular' | 'arbitrary' | 'special';
+
+export interface DayEntry {
+  name: string;
+  type: HolidayType;
+}
+
+// Sales types
+export type SalesItemType = 'service' | 'product' | 'prepaid';
+
+export interface SalesDetailItem {
+  item_type: SalesItemType;
+  item_name: string;
+  unit_price: number;
+  quantity: number;
+  discount: number;
+  discount_type?: string | null;
+  discount_value?: number | string | null;
+  amount: number;
+  manager: string | null;
+  sales_classification: string | null;
+  prepaid_deduction: number;
+}
+
+export interface SalesDetailData {
+  id: number;
+  customer_id: number;
+  customer_name: string;
+  sales_date: string;
+  sales_time: string;
+  sales_amount: number;
+  discount_amount: number;
+  total_amount: number;
+  cash_amount: number;
+  card_amount: number;
+  bank_transfer_amount: number;
+  point_accumulation: number;
+  memo: string | null;
+  items: SalesDetailItem[];
+  created_by?: string;
+  created_at?: string;
+  edit_history?: string[];
+}
+
+// Temporary sales data (임시저장)
+export interface TempSalesData {
+  bookingId: number;
+  customerId: number;
+  customerName: string;
+  customerPhone?: string;
+  salesItems: Array<{
+    id: string;
+    type: SalesItemType;
+    name: string;
+    unitPrice: number;
+    quantity: number;
+    discount: number;
+    discountType?: 'percentage' | 'amount' | 'category';
+    discountValue?: number | string;
+    amount: number;
+    manager: string;
+    salesClassification: string;
+    prepaidDeduction: number;
+  }>;
+  paymentAmounts: { cash: number; card: number; bank_transfer: number };
+  pointAccumulation: number;
+  memo: string;
+  salesDate: string;
+  salesTime: string;
+  selectedShopId?: number | null;
+}
+
+// Refund types (환불)
+export interface RefundItem {
+  id: string;
+  type: SalesItemType;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  amount: number;
+  manager: string;
 }

@@ -5,7 +5,8 @@ interface ScheduleGridHeaderProps {
   weekViewDesignerId: number | null;
   weekDates: string[];
   visibleDesigners: string[];
-  allDesigners: Array<{ id: number; name: string }>;
+  allDesigners: Array<{ id: number; name: string; shop_id?: number }>;
+  allShops: Array<{ id: number; name: string }>;
   selectedDesignerFilter: string;
   weekViewStartDate: string;
   openDesignerDropdown: number | null;
@@ -16,6 +17,8 @@ interface ScheduleGridHeaderProps {
   onOpenHolidayModal: (designerId: number, designerName: string) => void;
   onOpenAttendanceModal: (designerId: number, designerName: string) => void;
   canUseAttendanceManagement?: boolean;
+  availableDesignerIds?: number[];
+  weekViewAvailableDates?: Set<string>;
 }
 
 export default function ScheduleGridHeader({
@@ -24,6 +27,7 @@ export default function ScheduleGridHeader({
   weekDates,
   visibleDesigners,
   allDesigners,
+  allShops,
   selectedDesignerFilter,
   weekViewStartDate,
   openDesignerDropdown,
@@ -34,6 +38,8 @@ export default function ScheduleGridHeader({
   onOpenHolidayModal,
   onOpenAttendanceModal,
   canUseAttendanceManagement = false,
+  availableDesignerIds = [],
+  weekViewAvailableDates = new Set(),
 }: ScheduleGridHeaderProps) {
   if (!isWeekViewMode) {
     // Day view header
@@ -41,10 +47,10 @@ export default function ScheduleGridHeader({
       <div 
         className="sticky top-0 bg-[#f8f9fc] shadow-sm" 
         style={{
-          position: 'sticky', 
+          position: 'sticky',
           top: 0,
           zIndex: 100,
-          width: 'max-content',
+          width: 'fit-content',
           minWidth: '100%'
         }}
       >
@@ -69,23 +75,50 @@ export default function ScheduleGridHeader({
             const dayName = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
-            const designerColumnWidth = visibleDesigners.length * 150; // Each designer column is min 150px
             return (
-              <div key={dateStr} className="border-r border-[#e2e8f0] bg-[#f8f9fc] shrink-0" style={{ width: `${designerColumnWidth}px` }}>
-                <div className="px-2 py-2 text-center border-b border-[#e2e8f0] flex items-center justify-center" style={{ minHeight: '40px' }}>
-                  <p className="text-xs font-bold text-[#0d121b]">{month}-{day} ({dayName})</p>
-                </div>
-                {/* Designer headers for this date - hide only when a specific designer is selected */}
+              <div key={dateStr} className="border-r border-[#e2e8f0] bg-[#f8f9fc] flex-1" style={{ minWidth: `${visibleDesigners.length * 150}px` }}>
+                {/* Shop grouping + Designer headers - hide only when a specific designer is selected */}
                 {(selectedDesignerFilter === '전체' ||
-                  selectedDesignerFilter === '전체(휴무 제외)') && (
-                  <div className="grid" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, 150px)` }}>
+                  selectedDesignerFilter === '전체(휴무 제외)') && (() => {
+                  // Compute shop groups from visible designers
+                  const shopGroups: Array<{ shopId: number | null; shopName: string; count: number }> = [];
+                  visibleDesigners.forEach((name) => {
+                    const designer = allDesigners.find((d) => d.name === name);
+                    const shopId = designer?.shop_id || null;
+                    const shop = shopId ? allShops.find((s) => s.id === shopId) : null;
+                    const shopName = shop?.name || '미지정';
+                    const lastGroup = shopGroups[shopGroups.length - 1];
+                    if (lastGroup && lastGroup.shopId === shopId) {
+                      lastGroup.count++;
+                    } else {
+                      shopGroups.push({ shopId, shopName, count: 1 });
+                    }
+                  });
+                  const showShopRow = shopGroups.length > 1 || (shopGroups.length === 1 && shopGroups[0].shopName !== '미지정');
+                  return (
+                    <>
+                      {showShopRow && (
+                        <div className="grid border-b border-[#e2e8f0]" style={{ gridTemplateColumns: shopGroups.map((g) => `repeat(${g.count}, minmax(150px, 1fr))`).join(' ') }}>
+                          {shopGroups.map((group, idx) => (
+                            <div
+                              key={`shop-${idx}`}
+                              className="px-2 py-1.5 bg-gray-50 text-center border-r border-[#e2e8f0] last:border-r-0"
+                              style={{ gridColumn: `span ${group.count}` }}
+                            >
+                              <p className="text-[11px] font-semibold text-gray-500">{group.shopName}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="grid" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
                     {visibleDesigners.map((name) => {
                       const designer = allDesigners.find((d) => d.name === name);
                       const designerId = designer?.id;
+                      const isOff = designerId ? !availableDesignerIds.includes(designerId) : false;
                       return (
                         <div
                           key={`${dateStr}-${name}`}
-                          className="relative px-2 py-2 bg-white/50 backdrop-blur-sm border-r border-[#e2e8f0] last:border-r-0 flex items-center justify-center"
+                          className={`relative backdrop-blur-sm border-r border-[#e2e8f0] last:border-r-0 flex items-center justify-center ${isOff ? 'bg-gray-200' : 'bg-white/50'}`}
                           style={{ minHeight: '40px' }}
                         >
                           <button
@@ -96,9 +129,9 @@ export default function ScheduleGridHeader({
                                 openDesignerDropdown === designerId ? null : designerId || null,
                               );
                             }}
-                            className="w-full text-center hover:bg-gray-100 rounded-lg transition-colors"
+                            className="w-full h-full px-2 py-2 text-center hover:bg-gray-100 transition-colors"
                           >
-                            <p className="text-xs font-bold text-[#0d121b] truncate">{name}</p>
+                            <p className={`text-xs font-bold truncate ${isOff ? 'text-gray-400' : 'text-[#0d121b]'}`}>{name}</p>
                           </button>
                           {designerId &&
                             openDesignerDropdown === designerId && (
@@ -168,7 +201,9 @@ export default function ScheduleGridHeader({
                       );
                     })}
                   </div>
-                )}
+                    </>
+                  );
+                })()}
               </div>
             );
           })}
@@ -179,54 +214,57 @@ export default function ScheduleGridHeader({
 
   // Week view header
   return (
-    <div 
-      className="sticky top-0 flex border-b border-[#e2e8f0] bg-[#f8f9fc] shadow-sm"
-      style={{ position: 'sticky', top: 0, zIndex: 100 }}
+    <div
+      className="sticky top-0 bg-[#f8f9fc] shadow-sm"
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        width: 'fit-content',
+        minWidth: '100%'
+      }}
     >
-      {/* Time column header */}
-      <div className="w-20 shrink-0 border-r border-[#e2e8f0] bg-[#f8f9fc] flex flex-col items-center justify-center p-2">
-        <span className="text-xs font-medium text-gray-600">시간</span>
-      </div>
-      {weekViewDesignerId ? (
-        <div className="grid flex-1 relative" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
-          {/* Vertical column dividers for week view header */}
-          {Array.from({ length: 7 }).map((_, colIndex) => {
-            const columnWidth = 100 / 7;
-            return (
-              <div
-                key={`week-header-divider-${colIndex}`}
-                className="absolute border-r border-[#e2e8f0] pointer-events-none z-0"
-                style={{
-                  left: `${(colIndex + 1) * columnWidth}%`,
-                  width: '1px',
-                  top: 0,
-                  bottom: 0,
-                  height: '100%',
-                }}
-              />
-            );
-          })}
-          {Array.from({ length: 7 }).map((_, dayIndex) => {
-            const currentDate = new Date(weekViewStartDate);
-            currentDate.setDate(currentDate.getDate() + dayIndex);
-            const dateStr = currentDate.toISOString().split('T')[0];
-            const dayName = ['일', '월', '화', '수', '목', '금', '토'][currentDate.getDay()];
-            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-            const day = String(currentDate.getDate()).padStart(2, '0');
-            return (
-              <div
-                key={dayIndex}
-                className="relative px-2 py-2 bg-white/50 backdrop-blur-sm z-10"
-              >
-                <div className="text-center">
-                  <p className="text-xs font-bold text-[#0d121b]">{dayName}</p>
-                  <p className="text-[10px] text-[#64748b]">{month}-{day}</p>
-                </div>
-              </div>
-            );
-          })}
+      <div className="flex border-b border-[#e2e8f0]">
+        {/* Time column header - sticky left */}
+        <div
+          className="w-20 shrink-0 border-r border-[#e2e8f0] bg-[#f8f9fc] flex flex-col items-center justify-center p-2"
+          style={{
+            position: 'sticky',
+            left: 0,
+            zIndex: 50,
+            backgroundColor: '#f8f9fc',
+            boxShadow: '2px 0 4px rgba(0,0,0,0.1)'
+          }}
+        >
+          <span className="text-xs font-medium text-gray-600">시간</span>
         </div>
-      ) : null}
+        {weekViewDesignerId ? (
+          <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
+            {Array.from({ length: 7 }).map((_, dayIndex) => {
+              const currentDate = new Date(weekViewStartDate);
+              currentDate.setDate(currentDate.getDate() + dayIndex);
+              const dateStr = currentDate.toISOString().split('T')[0];
+              const dayName = ['일', '월', '화', '수', '목', '금', '토'][currentDate.getDay()];
+              const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+              const day = String(currentDate.getDate()).padStart(2, '0');
+              const isDayOff = weekViewAvailableDates.size > 0 && !weekViewAvailableDates.has(dateStr);
+              return (
+                <div
+                  key={dayIndex}
+                  className={`relative px-2 py-2 backdrop-blur-sm border-r border-[#e2e8f0] last:border-r-0 ${
+                    isDayOff ? 'bg-gray-200' : 'bg-white/50'
+                  }`}
+                >
+                  <div className="text-center">
+                    <p className={`text-xs font-bold ${isDayOff ? 'text-gray-400' : 'text-[#0d121b]'}`}>{dayName}</p>
+                    <p className={`text-[10px] ${isDayOff ? 'text-gray-400' : 'text-[#64748b]'}`}>{month}-{day}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -126,7 +126,6 @@ export async function GET(request: NextRequest) {
         product: { quantity: number; amount: number };
         subtotal: number;
         membership: { quantity: number; amount: number };
-        ticket: { quantity: number; amount: number };
         total: number;
       };
       membershipDeduction: {
@@ -154,7 +153,6 @@ export async function GET(request: NextRequest) {
             product: { quantity: 0, amount: 0 },
             subtotal: 0,
             membership: { quantity: 0, amount: 0 },
-            ticket: { quantity: 0, amount: 0 },
             total: 0,
           },
           membershipDeduction: {
@@ -214,8 +212,7 @@ export async function GET(request: NextRequest) {
         staffData.sales.service.amount + staffData.sales.product.amount;
       staffData.sales.total =
         staffData.sales.subtotal +
-        staffData.sales.membership.amount +
-        staffData.sales.ticket.amount;
+        staffData.sales.membership.amount;
 
       staffData.membershipDeduction.subtotal =
         staffData.membershipDeduction.service.amount;

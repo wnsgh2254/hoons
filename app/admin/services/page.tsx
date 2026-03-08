@@ -1,7 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AdminTopNav from '@/components/AdminTopNav';
+import { invalidateServicesCache } from '@/hooks/useServices';
+import {
+  AdminPageLayout,
+  PageHeader,
+  SearchBar,
+  DataTable,
+  Modal,
+  Input,
+  Button,
+  IconButton,
+  Badge,
+  FormAlert,
+  EmptyState,
+} from '@/components/ui';
 
 interface Service {
   id: number;
@@ -20,7 +33,7 @@ interface Service {
 function getServiceCategory(name: string): string {
   const cleanName = name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
   const lowerName = cleanName.toLowerCase();
-  
+
   // Check for category suffix first (e.g., "- Perm", "- Magic", "- Hot Perm", "- Color", "- Clinic", "- Package")
   if (lowerName.includes('- perm') && !lowerName.includes('hot perm') && !lowerName.includes('magic')) return 'Perm';
   if (lowerName.includes('- magic')) return 'Magic';
@@ -28,7 +41,7 @@ function getServiceCategory(name: string): string {
   if (lowerName.includes('- color')) return 'Color';
   if (lowerName.includes('- clinic')) return 'Clinic';
   if (lowerName.includes('- package')) return 'Package';
-  
+
   // Check for specific patterns
   // Package category - includes packages and design additions (without category suffix)
   if (lowerName.includes('package') || (lowerName.includes('design addition') && !lowerName.includes('-'))) return 'Package';
@@ -38,18 +51,18 @@ function getServiceCategory(name: string): string {
   if (lowerName.includes('magic') || lowerName.includes('iron perm') || lowerName.includes('iron root')) return 'Magic';
   if (lowerName.includes('perm') && !lowerName.includes('magic') && !lowerName.includes('special') && !lowerName.includes('setting')) return 'Perm';
   if (lowerName.includes('styling') || lowerName.includes('shampoo') || lowerName.includes('dry')) return 'Dry';
-  
+
   // Cut category - includes all cut-related services and additions (without category suffix)
-  if (lowerName.includes('cut') || 
-      (lowerName.includes('length addition') && !lowerName.includes('-')) || 
-      lowerName.includes('hair extension') || 
-      (lowerName.includes('director level') && !lowerName.includes('-')) || 
+  if (lowerName.includes('cut') ||
+      (lowerName.includes('length addition') && !lowerName.includes('-')) ||
+      lowerName.includes('hair extension') ||
+      (lowerName.includes('director level') && !lowerName.includes('-')) ||
       (lowerName.includes('manager level') && !lowerName.includes('-')) ||
       lowerName.includes('kids cut') ||
       lowerName.includes('bangs cut')) {
     return 'Cut';
   }
-  
+
   return 'Others';
 }
 
@@ -135,6 +148,7 @@ export default function ServiceMenuSettingPage() {
       setServices((prev) =>
         prev.map((s) => (s.id === serviceId ? { ...s, ...updates } : s))
       );
+      invalidateServicesCache();
       setSuccessMessage('Service updated successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
@@ -157,6 +171,7 @@ export default function ServiceMenuSettingPage() {
       }
 
       setServices((prev) => prev.filter((s) => s.id !== serviceId));
+      invalidateServicesCache();
       setSuccessMessage('Service deleted successfully');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
@@ -169,9 +184,103 @@ export default function ServiceMenuSettingPage() {
     handleUpdateService(service.id, { is_active: !service.is_active });
   };
 
+  // Filtered & sorted services for the category modal table
+  const filteredServices = selectedCategory
+    ? (servicesByCategory[selectedCategory] || [])
+        .filter((service) =>
+          searchQuery.trim() === '' || service.name.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .sort((a, b) => {
+          // Sort: card services first, then cash services
+          const aIsCard = a.name.toLowerCase().includes('(card)');
+          const bIsCard = b.name.toLowerCase().includes('(card)');
+          if (aIsCard && !bIsCard) return -1;
+          if (!aIsCard && bIsCard) return 1;
+          // Within same type, sort alphabetically
+          return a.name.localeCompare(b.name);
+        })
+    : [];
+
+  // DataTable columns for the category service list
+  const serviceColumns = [
+    {
+      key: 'name',
+      header: '시술 이름',
+      render: (service: Service) => {
+        const isCard = service.name.toLowerCase().includes('(card)');
+        const isCash = service.name.toLowerCase().includes('(cash)');
+        const displayName = service.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+
+        return (
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium text-black">{displayName}</div>
+            {isCard && <Badge variant="info">카드</Badge>}
+            {isCash && <Badge variant="success">현금</Badge>}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'price',
+      header: '가격 ($)',
+      render: (service: Service) => (
+        <Input
+          type="number"
+          value={service.price}
+          onChange={(e) =>
+            handleUpdateService(service.id, { price: Number(e.target.value) })
+          }
+          className="!w-24"
+          min={0}
+          step={0.01}
+        />
+      ),
+    },
+    {
+      key: 'duration',
+      header: '시간 (분)',
+      render: (service: Service) => (
+        <Input
+          type="number"
+          value={service.duration_minutes}
+          onChange={(e) =>
+            handleUpdateService(service.id, { duration_minutes: Number(e.target.value) })
+          }
+          className="!w-24"
+          min={1}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      header: '액션',
+      align: 'center' as const,
+      render: (service: Service) => (
+        <div className="flex items-center justify-center gap-2">
+          <IconButton
+            icon="edit"
+            size="sm"
+            variant="ghost"
+            title="수정"
+            onClick={() => {
+              setEditingService(service);
+              setIsServiceModalOpen(false);
+            }}
+          />
+          <IconButton
+            icon="delete"
+            size="sm"
+            variant="danger"
+            title="삭제"
+            onClick={() => handleDeleteService(service.id)}
+          />
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
-      <AdminTopNav />
+    <AdminPageLayout>
       {successMessage && (
         <div className="pointer-events-none fixed right-4 top-20 z-50">
           <div className="pointer-events-auto rounded-xl bg-black text-white shadow-lg px-4 py-3 text-xs flex items-center gap-2">
@@ -188,200 +297,78 @@ export default function ServiceMenuSettingPage() {
           </div>
         </div>
       )}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-white">
-          <div className="max-w-7xl mx-auto flex flex-col gap-8">
-            {/* Page header: unified admin style */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">서비스 메뉴 설정</h2>
-              </div>
-            </div>
 
-            {/* Category Grid */}
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="inline-block w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin"></div>
-                <p className="text-gray-500 text-sm mt-4">Loading services...</p>
-              </div>
-            ) : services.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No services found</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {categoryOrder.map((category) => {
-                  const categoryServices = servicesByCategory[category] || [];
-                  // Always show "Others" category, even if it has 0 services
-                  if (category !== 'Others' && categoryServices.length === 0) return null;
-                  
-                  return (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => handleCategoryClick(category)}
-                      className="bg-white border-2 border-gray-200 rounded-2xl p-6 hover:border-black hover:shadow-md transition-all text-center"
-                    >
-                      <h4 className="text-lg font-bold text-black mb-2">{category}</h4>
-                      <p className="text-sm text-gray-500">{categoryServices.length} services</p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+      {/* Page header */}
+      <PageHeader title="서비스 메뉴 설정" />
 
-            {/* Service Management Modal */}
-            {isServiceModalOpen && selectedCategory && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
-                <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                    <h3 className="text-2xl font-bold text-black">{selectedCategory}</h3>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAddModal(true);
-                        }}
-                        className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-2 text-sm"
-                      >
-                        <span className="material-symbols-outlined text-sm">add</span>
-                        시술 추가
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsServiceModalOpen(false);
-                          setSearchQuery('');
-                        }}
-                        className="text-gray-500 hover:text-black transition-colors"
-                      >
-                        <span className="material-symbols-outlined">close</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-h-0 flex flex-col p-6 overflow-hidden">
-                    {/* Search */}
-                    <div className="flex-shrink-0 mb-4">
-                      <input
-                        type="text"
-                        placeholder="시술 검색..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-                      />
-                    </div>
-                    {/* Services Table - scrollable area only */}
-                    <div className="flex-1 min-h-0 rounded-xl border border-gray-200 shadow-sm overflow-auto">
-                      <table className="w-full">
-                          <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                시술 이름
-                              </th>
-                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                가격 ($)
-                              </th>
-                              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                시간 (분)
-                              </th>
-                              <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                액션
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {servicesByCategory[selectedCategory]
-                              ?.filter((service) =>
-                                searchQuery.trim() === '' || service.name.toLowerCase().includes(searchQuery.toLowerCase())
-                              )
-                              .sort((a, b) => {
-                                // Sort: card services first, then cash services
-                                const aIsCard = a.name.toLowerCase().includes('(card)');
-                                const bIsCard = b.name.toLowerCase().includes('(card)');
-                                if (aIsCard && !bIsCard) return -1;
-                                if (!aIsCard && bIsCard) return 1;
-                                // Within same type, sort alphabetically
-                                return a.name.localeCompare(b.name);
-                              })
-                              .map((service) => {
-                                const isCard = service.name.toLowerCase().includes('(card)');
-                                const isCash = service.name.toLowerCase().includes('(cash)');
-                                const displayName = service.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
-                                
-                                return (
-                                <tr key={service.id} className={`hover:bg-gray-50 ${isCash ? 'bg-gray-50/50' : ''}`}>
-                                  <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                      <div className="text-sm font-medium text-black">{displayName}</div>
-                                      {isCard && (
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                                          카드
-                                        </span>
-                                      )}
-                                      {isCash && (
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
-                                          현금
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-6 py-4">
-                                    <input
-                                      type="number"
-                                      value={service.price}
-                                      onChange={(e) =>
-                                        handleUpdateService(service.id, { price: Number(e.target.value) })
-                                      }
-                                      className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-sm"
-                                      min="0"
-                                      step="0.01"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4">
-                                    <input
-                                      type="number"
-                                      value={service.duration_minutes}
-                                      onChange={(e) =>
-                                        handleUpdateService(service.id, { duration_minutes: Number(e.target.value) })
-                                      }
-                                      className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-sm"
-                                      min="1"
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                      <button
-                                        onClick={() => {
-                                          setEditingService(service);
-                                          setIsServiceModalOpen(false);
-                                        }}
-                                        className="text-gray-500 hover:text-black transition-colors"
-                                        title="수정"
-                                      >
-                                        <span className="material-symbols-outlined text-lg">edit</span>
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteService(service.id)}
-                                        className="text-gray-500 hover:text-red-600 transition-colors"
-                                        title="삭제"
-                                      >
-                                        <span className="material-symbols-outlined text-lg">delete</span>
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                              })}
-                          </tbody>
-                        </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+      {/* Category Grid */}
+      {loading ? (
+        <div className="text-center py-11.5">
+          <div className="inline-block w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin"></div>
+          <p className="text-gray-500 text-sm mt-4">Loading services...</p>
         </div>
-      </main>
+      ) : services.length === 0 ? (
+        <EmptyState title="No services found" />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {categoryOrder.map((category) => {
+            const categoryServices = servicesByCategory[category] || [];
+            // Always show "Others" category, even if it has 0 services
+            if (category !== 'Others' && categoryServices.length === 0) return null;
+
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() => handleCategoryClick(category)}
+                className="bg-white border-2 border-gray-200 rounded-2xl p-5.5 hover:border-black hover:shadow-md transition-all text-center"
+              >
+                <h4 className="text-lg font-bold text-black mb-2">{category}</h4>
+                <p className="text-sm text-gray-500">{categoryServices.length} services</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Service Management Modal */}
+      <Modal
+        isOpen={isServiceModalOpen && !!selectedCategory}
+        onClose={() => {
+          setIsServiceModalOpen(false);
+          setSearchQuery('');
+        }}
+        title={selectedCategory || ''}
+        maxWidth="max-w-6xl"
+        scrollable
+      >
+        <div className="flex items-center justify-end -mt-2 mb-4">
+          <Button
+            variant="primary"
+            size="sm"
+            icon="add"
+            onClick={() => {
+              setShowAddModal(true);
+            }}
+          >
+            시술 추가
+          </Button>
+        </div>
+
+        <SearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="시술 검색..."
+          className="mb-4"
+        />
+
+        <DataTable
+          columns={serviceColumns}
+          data={filteredServices}
+          keyExtractor={(service) => service.id}
+          emptyMessage="No services found"
+        />
+      </Modal>
 
       {/* Add Service Modal */}
       {showAddModal && (
@@ -408,7 +395,7 @@ export default function ServiceMenuSettingPage() {
           }}
         />
       )}
-    </div>
+    </AdminPageLayout>
   );
 }
 
@@ -441,10 +428,10 @@ function AddServiceModal({
     try {
       setLoading(true);
       setError(null);
-      
+
       // Add (card) or (cash) suffix to service name
       const serviceName = `${name.trim()} (${serviceType})`;
-      
+
       const res = await fetch('/api/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -473,111 +460,101 @@ function AddServiceModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-black">새 시술 추가</h2>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="새 시술 추가"
+      zIndex="z-[60]"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} className="flex-1">
+            취소
+          </Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            onClick={(e) => {
+              // Trigger form submit via the form's onSubmit
+              const form = document.getElementById('add-service-form') as HTMLFormElement;
+              form?.requestSubmit();
+            }}
+            className="flex-1"
+          >
+            {loading ? '생성 중...' : '시술 생성'}
+          </Button>
+        </>
+      }
+    >
+      <form id="add-service-form" onSubmit={handleSubmit} className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        {category && (
+          <FormAlert
+            message={`${category} 카테고리에 시술을 추가합니다.`}
+            variant="info"
+          />
+        )}
+        <Input
+          label="시술 이름"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g., Men's Cut"
+          required
+        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">시술 유형</label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="serviceType"
+                value="card"
+                checked={serviceType === 'card'}
+                onChange={() => {
+                  setServiceType('card');
+                  setVisibleTo('both'); // Comment: card services are visible to both customer & admin
+                }}
+                className="w-4 h-4 text-black border-gray-300 focus:ring-black"
+              />
+              <span className="text-sm">카드</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="serviceType"
+                value="cash"
+                checked={serviceType === 'cash'}
+                onChange={() => {
+                  setServiceType('cash');
+                  setVisibleTo('admin'); // Comment: cash-only services are visible to admin only
+                }}
+                className="w-4 h-4 text-black border-gray-300 focus:ring-black"
+              />
+              <span className="text-sm">현금</span>
+            </label>
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-          {category && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
-              <strong>{category}</strong> 카테고리에 시술을 추가합니다.
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">시술 이름</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="e.g., Men's Cut"
-              required
-            />
-            
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">시술 유형</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="serviceType"
-                  value="card"
-                  checked={serviceType === 'card'}
-                  onChange={() => {
-                    setServiceType('card');
-                    setVisibleTo('both'); // Comment: card services are visible to both customer & admin
-                  }}
-                  className="w-4 h-4 text-black border-gray-300 focus:ring-black"
-                />
-                <span className="text-sm">카드</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="serviceType"
-                  value="cash"
-                  checked={serviceType === 'cash'}
-                  onChange={() => {
-                    setServiceType('cash');
-                    setVisibleTo('admin'); // Comment: cash-only services are visible to admin only
-                  }}
-                  className="w-4 h-4 text-black border-gray-300 focus:ring-black"
-                />
-                <span className="text-sm">현금</span>
-              </label>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">가격 ($)</label>
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="55"
-              min="0"
-              step="0.01"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">시간 (분)</label>
-            <input
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="45"
-              min="1"
-              required
-            />
-          </div>
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
-            >
-              {loading ? '생성 중...' : '시술 생성'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <Input
+          label="가격 ($)"
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="55"
+          min={0}
+          step={0.01}
+          required
+        />
+        <Input
+          label="시간 (분)"
+          type="number"
+          value={duration}
+          onChange={(e) => setDuration(e.target.value)}
+          placeholder="45"
+          min={1}
+          required
+        />
+      </form>
+    </Modal>
   );
 }
 
@@ -631,68 +608,56 @@ function EditServiceModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-black">Edit Service</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">시술 이름</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">가격 ($)</label>
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              min="0"
-              step="0.01"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">시간 (분)</label>
-            <input
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              min="1"
-              required
-            />
-          </div>
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Updating...' : 'Update Service'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="Edit Service"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} className="flex-1">
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            onClick={() => {
+              const form = document.getElementById('edit-service-form') as HTMLFormElement;
+              form?.requestSubmit();
+            }}
+            className="flex-1"
+          >
+            {loading ? 'Updating...' : 'Update Service'}
+          </Button>
+        </>
+      }
+    >
+      <form id="edit-service-form" onSubmit={handleSubmit} className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        <Input
+          label="시술 이름"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+        <Input
+          label="가격 ($)"
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          min={0}
+          step={0.01}
+          required
+        />
+        <Input
+          label="시간 (분)"
+          type="number"
+          value={duration}
+          onChange={(e) => setDuration(e.target.value)}
+          min={1}
+          required
+        />
+      </form>
+    </Modal>
   );
 }

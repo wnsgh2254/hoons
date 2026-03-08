@@ -1,6 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
+import FormAlert from '@/components/ui/FormAlert';
+import { Z } from '@/lib/constants';
 
 interface EditPrepaidMemberModalProps {
   isOpen: boolean;
@@ -50,7 +55,7 @@ export default function EditPrepaidMemberModal({
       setError(null);
       const res = await fetch(`/api/prepaid?customer_id=${customerId}`);
       const data = await res.json();
-      
+
       if (res.ok && data.member) {
         setPrepaidMemberId(data.member.id);
         setPoints(String(data.member.points || 0));
@@ -71,7 +76,7 @@ export default function EditPrepaidMemberModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (Number(points) < 0) {
       setError('정액제 포인트는 0 이상이어야 합니다.');
       return;
@@ -117,140 +122,75 @@ export default function EditPrepaidMemberModal({
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[100010] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-      style={{ pointerEvents: 'auto', zIndex: 100010 }}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="선불권 회원 수정"
+      zIndex={Z.MODAL_EDIT_PP}
+      maxWidth="max-w-lg"
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg relative z-[100011]"
-        onClick={(e) => e.stopPropagation()}
-        style={{ pointerEvents: 'auto', zIndex: 100011 }}
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-black">선불권 회원 수정</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-black transition-colors"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {fetching && (
+          <FormAlert variant="info" message="선불권 회원 정보를 불러오는 중..." />
+        )}
+        {error && (
+          <FormAlert variant="error" message={error} />
+        )}
+
+        {/* Name - Disabled */}
+        <Input label="이름" type="text" value={customerName} disabled />
+
+        {/* Phone - Disabled */}
+        <Input label="전화번호" type="tel" value={customerPhone || ''} disabled />
+
+        {/* Email - Disabled */}
+        <Input label="이메일" type="email" value={customerEmail || ''} disabled />
+
+        {/* Points - Enabled */}
+        <Input
+          label="포인트 *"
+          type="number"
+          required
+          min="0"
+          value={points}
+          onChange={(e) => setPoints(e.target.value)}
+          placeholder="선불권 포인트 입력"
+        />
+
+        {/* Expires At */}
+        <div>
+          <Input
+            label="Expires At"
+            type="date"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+          />
+          <p className="text-xs text-gray-500 mt-1">만료일을 선택하세요 (선택사항).</p>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {fetching && (
-            <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm px-3 py-2 rounded-lg">
-              선불권 회원 정보를 불러오는 중...
-            </div>
-          )}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          {/* Name - Disabled */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              이름
-            </label>
+        {/* Active Checkbox */}
+        <div>
+          <label className="flex items-center gap-2">
             <input
-              type="text"
-              value={customerName}
-              disabled
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black"
             />
-          </div>
+            <span className="text-sm font-medium text-gray-700">Active</span>
+          </label>
+        </div>
 
-          {/* Phone - Disabled */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              전화번호
-            </label>
-            <input
-              type="tel"
-              value={customerPhone || ''}
-              disabled
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
-            />
-          </div>
-
-          {/* Email - Disabled */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              이메일
-            </label>
-            <input
-              type="email"
-              value={customerEmail || ''}
-              disabled
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed"
-            />
-          </div>
-
-          {/* Points - Enabled */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              포인트 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              required
-              min="0"
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-              placeholder="선불권 포인트 입력"
-            />
-          </div>
-
-          {/* Expires At */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Expires At</label>
-            <input
-              type="date"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-            <p className="text-xs text-gray-500 mt-1">만료일을 선택하세요 (선택사항).</p>
-          </div>
-
-          {/* Active Checkbox */}
-          <div>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black"
-              />
-              <span className="text-sm font-medium text-gray-700">Active</span>
-            </label>
-          </div>
-
-          {/* Footer */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-800 disabled:opacity-60 transition-colors"
-            >
-              {loading ? '저장 중...' : '저장'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Footer */}
+        <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <Button variant="ghost" className="flex-1" onClick={onClose}>
+            취소
+          </Button>
+          <Button type="submit" className="flex-1" loading={loading}>
+            저장
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

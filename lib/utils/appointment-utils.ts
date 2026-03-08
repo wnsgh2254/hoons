@@ -12,6 +12,20 @@ export const DESIGNER_COLORS = [
   { bg: 'bg-amber-100', text: 'text-amber-600', border: 'border-amber-500' },
 ];
 
+// Comment: Color label options for booking icons
+export const COLOR_LABEL_OPTIONS = [
+  { value: 'red', label: '빨강', hex: '#DC2626' },
+  { value: 'orange', label: '주황', hex: '#EA580C' },
+  { value: 'yellow', label: '노랑', hex: '#EAB308' },
+  { value: 'green', label: '초록', hex: '#16A34A' },
+  { value: 'blue', label: '파랑', hex: '#2563EB' },
+  { value: 'purple', label: '보라', hex: '#7C3AED' },
+] as const;
+
+export const COLOR_LABEL_MAP: Record<string, string> = Object.fromEntries(
+  COLOR_LABEL_OPTIONS.map(opt => [opt.value, opt.hex])
+);
+
 // Comment: Booking status enum (고정)
 export type BookingStatus = 'BOOKED' | 'ARRIVED' | 'PAID' | 'NOSHOW' | 'BLOCKED' | 'UNKNOWN';
 
@@ -153,14 +167,8 @@ export function buildDateFromDay(baseDate: string, day: number): string {
 }
 
 // Comment: Convert DB time 'HH:MM:SS' to 12h label like '3:00 PM'
-export function bookingTimeToLabel(dbTime: string): string {
-  const [hhStr, mmStr] = dbTime.split(':');
-  const hh = Number(hhStr);
-  if (Number.isNaN(hh)) return dbTime;
-  const isPM = hh >= 12;
-  const displayHour = hh % 12 === 0 ? 12 : hh % 12;
-  return `${displayHour}:${mmStr.padStart(2, '0')} ${isPM ? 'PM' : 'AM'}`;
-}
+// Delegates to formatTimeString from lib/utils.ts (same logic)
+export { formatTimeString as bookingTimeToLabel } from '@/lib/utils';
 
 // Comment: Convert label like '3:00 PM' to DB time '15:00:00'
 export function labelToDbTime(label: string): string | null {

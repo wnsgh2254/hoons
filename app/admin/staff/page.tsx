@@ -3,7 +3,17 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import type { Designer } from '@/lib/types';
-import AdminTopNav from '@/components/AdminTopNav';
+import {
+  AdminPageLayout,
+  PageHeader,
+  StatCard,
+  Modal,
+  Button,
+  Input,
+  Select,
+  Badge,
+  EmptyState,
+} from '@/components/ui';
 
 export default function StaffManagementPage() {
   const [staffMembers, setStaffMembers] = useState<Designer[]>([]);
@@ -79,14 +89,14 @@ export default function StaffManagementPage() {
       if (roleLower.includes('designer') || roleLower.includes('stylist')) return 3;
       return 4;
     };
-    
+
     const orderA = getRoleOrder(a.role);
     const orderB = getRoleOrder(b.role);
-    
+
     if (orderA !== orderB) {
       return orderA - orderB;
     }
-    
+
     // If same role order, sort by name
     return a.name.localeCompare(b.name);
   });
@@ -129,139 +139,131 @@ export default function StaffManagementPage() {
 
 
   return (
-    <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
-      <AdminTopNav />
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-white">
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth bg-gray-50/50">
-          <div className="max-w-7xl mx-auto flex flex-col gap-8">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold tracking-tight text-black">직원 관리</h2>
-                
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button 
-                  onClick={() => setShowAddStaffModal(true)}
-                  className="flex items-center gap-2 bg-linear-to-r from-black to-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg"
-                >
-                  <span className="material-symbols-outlined text-lg">add</span>
-                  직원 추가
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">전체 직원 수</p>
-                  <h3 className="text-2xl font-bold text-black mt-1">{loading ? '...' : stats.totalStaff}</h3>
-                </div>
-                <div className="size-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400">
-                  <span className="material-symbols-outlined">badge</span>
-                </div>
-              </div>
-            </div>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-gray-500">Loading staff data...</div>
-              </div>
-            ) : sortedStaff.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-gray-500">No staff members found.</div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sortedStaff.map((member) => {
-                  const wageType = formatWageType(member);
-                  const wageRate = formatWage(member);
-                  return (
-                    <div key={member.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition-all">
-                      <div className="p-6 flex items-start justify-between">
-                        <div>
-                          <h3 className="font-bold text-lg text-black">{member.name}</h3>
-                          <p className="text-xs text-gray-500 font-medium">{formatRoleWithVenue(member)}</p>
-                        </div>
-                        {/* Don't show pay type badge for Director */}
-                        {member.role !== 'Director' && member.role !== 'director' && (
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider whitespace-nowrap ${
-                              wageType === 'COMMISSION' ? 'bg-black text-white' : 'bg-gray-200 text-gray-600'
-                            }`}
-                          >
-                            {wageType}
-                          </span>
-                        )}
-                      </div>
-                      <div className="px-6 py-4 bg-gray-50 border-t border-b border-gray-100 flex justify-between items-center text-sm">
-                        <div className="flex flex-col">
-                          <span className="text-gray-500 text-xs">Rate</span>
-                          <span className="font-bold text-black">{wageRate}</span>
-                        </div>
-                        <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex flex-col">
-                          <span className="text-gray-500 text-xs">{wageType === 'COMMISSION' ? `Sales (${currentMonthName})` : `Hours (${currentMonthName})`}</span>
-                          <span className="font-bold text-black">
-                            {wageType === 'COMMISSION' 
-                              ? (member as any).sales 
-                                ? `AU$${((member as any).sales || 0).toLocaleString()}` 
-                                : '-'
-                              : '-'}
-                          </span>
-                        </div>
-                        <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex flex-col text-right">
-                          <span className="text-gray-500 text-xs">Est. Pay</span>
-                          <span className="font-bold text-black">
-                            {wageType === 'COMMISSION' && (member as any).sales && member.percent_rate
-                              ? `AU$${Math.round(((member as any).sales * (member.percent_rate / 100)) || 0).toLocaleString()}`
-                              : '-'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4 flex gap-2">
-                        <button 
-                          onClick={() => {
-                            setSelectedDesigner(member);
-                            setShowManageServiceModal(true);
-                          }}
-                          className="flex-1 py-2 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black"
-                        >
-                          Manage Designer
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setSelectedDesigner(member);
-                            setShowViewScheduleModal(true);
-                          }}
-                          className="flex-1 py-2 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black"
-                        >
-                          View Schedule
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
+    <AdminPageLayout>
+      <PageHeader
+        title="직원 관리"
+        actions={
+          <Button
+            icon="add"
+            onClick={() => setShowAddStaffModal(true)}
+            className="shadow-md hover:shadow-lg bg-linear-to-r from-black to-gray-600"
+          >
+            직원 추가
+          </Button>
+        }
+      />
 
-      {/* Add Staff Modal */}
-      {showAddStaffModal && (
-        <AddStaffModal
-          shops={shops}
-          onClose={() => setShowAddStaffModal(false)}
-          onSuccess={() => {
-            setShowAddStaffModal(false);
-            // Refresh staff data
-            window.location.reload();
-          }}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="전체 직원 수"
+          value={loading ? '...' : stats.totalStaff}
+          icon="badge"
         />
+      </div>
+
+      {loading ? (
+        <EmptyState title="Loading staff data..." />
+      ) : sortedStaff.length === 0 ? (
+        <EmptyState icon="group_off" title="No staff members found." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {sortedStaff.map((member) => {
+            const wageType = formatWageType(member);
+            const wageRate = formatWage(member);
+            return (
+              <div key={member.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition-all">
+                <div className="p-5.5 flex items-start justify-between">
+                  <div>
+                    <h3 className="font-bold text-lg text-black">{member.name}</h3>
+                    <p className="text-xs text-gray-500 font-medium">{formatRoleWithVenue(member)}</p>
+                  </div>
+                  {/* Don't show pay type badge for Director */}
+                  {member.role !== 'Director' && member.role !== 'director' && (
+                    <Badge
+                      variant={wageType === 'COMMISSION' ? 'default' : 'default'}
+                      size="sm"
+                      className={
+                        wageType === 'COMMISSION'
+                          ? 'bg-black text-white text-[9px] font-bold tracking-wider rounded'
+                          : 'bg-gray-200 text-gray-600 text-[9px] font-bold tracking-wider rounded'
+                      }
+                    >
+                      {wageType}
+                    </Badge>
+                  )}
+                </div>
+                <div className="px-5.5 py-4 bg-gray-50 border-t border-b border-gray-100 flex justify-between items-center text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 text-xs">Rate</span>
+                    <span className="font-bold text-black">{wageRate}</span>
+                  </div>
+                  <div className="h-8 w-px bg-gray-200"></div>
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 text-xs">{wageType === 'COMMISSION' ? `Sales (${currentMonthName})` : `Hours (${currentMonthName})`}</span>
+                    <span className="font-bold text-black">
+                      {wageType === 'COMMISSION'
+                        ? (member as any).sales
+                          ? `AU$${((member as any).sales || 0).toLocaleString()}`
+                          : '-'
+                        : '-'}
+                    </span>
+                  </div>
+                  <div className="h-8 w-px bg-gray-200"></div>
+                  <div className="flex flex-col text-right">
+                    <span className="text-gray-500 text-xs">Est. Pay</span>
+                    <span className="font-bold text-black">
+                      {wageType === 'COMMISSION' && (member as any).sales && member.percent_rate
+                        ? `AU$${Math.round(((member as any).sales * (member.percent_rate / 100)) || 0).toLocaleString()}`
+                        : '-'}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4 flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setSelectedDesigner(member);
+                      setShowManageServiceModal(true);
+                    }}
+                  >
+                    Manage Designer
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setSelectedDesigner(member);
+                      setShowViewScheduleModal(true);
+                    }}
+                  >
+                    View Schedule
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
+      {/* Add Staff Modal */}
+      <AddStaffModal
+        isOpen={showAddStaffModal}
+        shops={shops}
+        onClose={() => setShowAddStaffModal(false)}
+        onSuccess={() => {
+          setShowAddStaffModal(false);
+          // Refresh staff data
+          window.location.reload();
+        }}
+      />
+
       {/* Manage Service Modal */}
-      {showManageServiceModal && selectedDesigner && (
+      {selectedDesigner && (
         <ManageServiceModal
+          isOpen={showManageServiceModal}
           designer={selectedDesigner}
           onClose={() => {
             setShowManageServiceModal(false);
@@ -271,8 +273,9 @@ export default function StaffManagementPage() {
       )}
 
       {/* View Schedule Modal */}
-      {showViewScheduleModal && selectedDesigner && (
+      {selectedDesigner && (
         <ViewScheduleModal
+          isOpen={showViewScheduleModal}
           designer={selectedDesigner}
           onClose={() => {
             setShowViewScheduleModal(false);
@@ -280,12 +283,12 @@ export default function StaffManagementPage() {
           }}
         />
       )}
-    </div>
+    </AdminPageLayout>
   );
 }
 
 // Add Staff Modal Component
-function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: () => void; onSuccess: () => void }) {
+function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean; shops: any[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({
     name: '',
     english_name: '',
@@ -297,6 +300,26 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
     instagramLink: '',
   });
   const [loading, setLoading] = useState(false);
+
+  const roleOptions = [
+    { value: 'Director', label: 'Director' },
+    { value: 'Senior Designer', label: 'Senior Designer' },
+    { value: 'Designer', label: 'Designer' },
+    { value: 'Senior Director', label: 'Senior Director' },
+    { value: 'Top Stylist', label: 'Top Stylist' },
+    { value: 'Stylist', label: 'Stylist' },
+    { value: 'Assistant', label: 'Assistant' },
+  ];
+
+  const shopOptions = shops.map((shop) => ({
+    value: shop.id,
+    label: shop.name,
+  }));
+
+  const wageTypeOptions = [
+    { value: 'percent', label: 'Commission (Percent)' },
+    { value: 'hourly', label: 'Hourly' },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -350,142 +373,104 @@ function AddStaffModal({ shops, onClose, onSuccess }: { shops: any[]; onClose: (
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-black">Add Staff Member</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Korean Name</label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">English Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Yoonhoon"
-              value={formData.english_name}
-              onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select
-              required
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="">Select Role</option>
-              <option value="Director">Director</option>
-              <option value="Senior Designer">Senior Designer</option>
-              <option value="Designer">Designer</option>
-              <option value="Senior Director">Senior Director</option>
-              <option value="Top Stylist">Top Stylist</option>
-              <option value="Stylist">Stylist</option>
-              <option value="Assistant">Assistant</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Venue (Shop)</label>
-            <select
-              value={formData.shop_id}
-              onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="">Select Venue</option>
-              {shops.map((shop) => (
-                <option key={shop.id} value={shop.id}>
-                  {shop.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Wage Type</label>
-            <select
-              required
-              value={formData.wage_type}
-              onChange={(e) => setFormData({ ...formData, wage_type: e.target.value as 'percent' | 'hourly' })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="percent">Commission (Percent)</option>
-              <option value="hourly">Hourly</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram URL</label>
-            <input
-              type="url"
-              placeholder="https://www.instagram.com/username"
-              value={formData.instagramLink}
-              onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          {formData.wage_type === 'percent' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                max="100"
-                step="0.1"
-                value={formData.percent_rate}
-                onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                value={formData.hourly_rate}
-                onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          )}
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
-            >
-              {loading ? 'Adding...' : 'Add Staff'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add Staff Member"
+      maxWidth="max-w-2xl"
+      scrollable
+      footer={
+        <>
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            className="flex-1"
+            loading={loading}
+            onClick={() => {
+              const form = document.getElementById('add-staff-form') as HTMLFormElement;
+              form?.requestSubmit();
+            }}
+          >
+            {loading ? 'Adding...' : 'Add Staff'}
+          </Button>
+        </>
+      }
+    >
+      <form id="add-staff-form" onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Korean Name"
+          type="text"
+          required
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        />
+        <Input
+          label="English Name"
+          type="text"
+          placeholder="e.g. Yoonhoon"
+          value={formData.english_name}
+          onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
+        />
+        <Select
+          label="Role"
+          required
+          value={formData.role}
+          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+          options={roleOptions}
+          placeholder="Select Role"
+        />
+        <Select
+          label="Venue (Shop)"
+          value={formData.shop_id}
+          onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+          options={shopOptions}
+          placeholder="Select Venue"
+        />
+        <Select
+          label="Wage Type"
+          required
+          value={formData.wage_type}
+          onChange={(e) => setFormData({ ...formData, wage_type: e.target.value as 'percent' | 'hourly' })}
+          options={wageTypeOptions}
+        />
+        <Input
+          label="Instagram URL"
+          type="url"
+          placeholder="https://www.instagram.com/username"
+          value={formData.instagramLink}
+          onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
+        />
+        {formData.wage_type === 'percent' ? (
+          <Input
+            label="Commission Rate (%)"
+            type="number"
+            required
+            min={0}
+            max={100}
+            step={0.1}
+            value={formData.percent_rate}
+            onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
+          />
+        ) : (
+          <Input
+            label="Hourly Rate ($)"
+            type="number"
+            required
+            min={0}
+            step={0.01}
+            value={formData.hourly_rate}
+            onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+          />
+        )}
+      </form>
+    </Modal>
   );
 }
 
 // Manage Designer Modal Component
-function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose: () => void }) {
+function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; designer: Designer; onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: designer.name,
     english_name: designer.english_name || '',
@@ -509,6 +494,26 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
       })
       .catch(console.error);
   }, []);
+
+  const roleOptions = [
+    { value: 'Director', label: 'Director' },
+    { value: 'Senior Designer', label: 'Senior Designer' },
+    { value: 'Designer', label: 'Designer' },
+    { value: 'Senior Director', label: 'Senior Director' },
+    { value: 'Top Stylist', label: 'Top Stylist' },
+    { value: 'Stylist', label: 'Stylist' },
+    { value: 'Assistant', label: 'Assistant' },
+  ];
+
+  const shopOptions = shops.map((shop) => ({
+    value: shop.id,
+    label: shop.name,
+  }));
+
+  const wageTypeOptions = [
+    { value: 'percent', label: 'Commission (Percent)' },
+    { value: 'hourly', label: 'Hourly' },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -578,149 +583,105 @@ function ManageServiceModal({ designer, onClose }: { designer: Designer; onClose
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-black">Manage Designer - {designer.name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Korean Name</label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">English Name</label>
-            <input
-              type="text"
-              value={formData.english_name}
-              onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select
-              required
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="">Select Role</option>
-              <option value="Director">Director</option>
-              <option value="Senior Designer">Senior Designer</option>
-              <option value="Designer">Designer</option>
-              <option value="Senior Director">Senior Director</option>
-              <option value="Top Stylist">Top Stylist</option>
-              <option value="Stylist">Stylist</option>
-              <option value="Assistant">Assistant</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Venue (Shop)</label>
-            <select
-              value={formData.shop_id}
-              onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="">Select Venue</option>
-              {shops.map((shop) => (
-                <option key={shop.id} value={shop.id}>
-                  {shop.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Instagram URL</label>
-            <input
-              type="url"
-              value={formData.instagramLink}
-              onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Wage Type</label>
-            <select
-              required
-              value={formData.wage_type}
-              onChange={(e) => setFormData({ ...formData, wage_type: e.target.value as 'percent' | 'hourly' })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="percent">Commission (Percent)</option>
-              <option value="hourly">Hourly</option>
-            </select>
-          </div>
-          {formData.wage_type === 'percent' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Commission Rate (%)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                max="100"
-                step="0.1"
-                value={formData.percent_rate}
-                onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate ($)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                step="0.01"
-                value={formData.hourly_rate}
-                onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          )}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
-            >
-              {deleting ? 'Deleting...' : 'Delete Designer'}
-            </button>
-            <div className="flex-1"></div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
-            >
-              {loading ? 'Updating...' : 'Update Designer'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Manage Designer - ${designer.name}`}
+      maxWidth="max-w-2xl"
+      scrollable
+      footer={
+        <>
+          <Button variant="danger" loading={deleting} onClick={handleDelete}>
+            {deleting ? 'Deleting...' : 'Delete Designer'}
+          </Button>
+          <div className="flex-1" />
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            onClick={() => {
+              const form = document.getElementById('manage-staff-form') as HTMLFormElement;
+              form?.requestSubmit();
+            }}
+          >
+            {loading ? 'Updating...' : 'Update Designer'}
+          </Button>
+        </>
+      }
+    >
+      <form id="manage-staff-form" onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Korean Name"
+          type="text"
+          required
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        />
+        <Input
+          label="English Name"
+          type="text"
+          value={formData.english_name}
+          onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
+        />
+        <Select
+          label="Role"
+          required
+          value={formData.role}
+          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+          options={roleOptions}
+          placeholder="Select Role"
+        />
+        <Select
+          label="Venue (Shop)"
+          value={formData.shop_id}
+          onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+          options={shopOptions}
+          placeholder="Select Venue"
+        />
+        <Input
+          label="Instagram URL"
+          type="url"
+          value={formData.instagramLink}
+          onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
+        />
+        <Select
+          label="Wage Type"
+          required
+          value={formData.wage_type}
+          onChange={(e) => setFormData({ ...formData, wage_type: e.target.value as 'percent' | 'hourly' })}
+          options={wageTypeOptions}
+        />
+        {formData.wage_type === 'percent' ? (
+          <Input
+            label="Commission Rate (%)"
+            type="number"
+            required
+            min={0}
+            max={100}
+            step={0.1}
+            value={formData.percent_rate}
+            onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
+          />
+        ) : (
+          <Input
+            label="Hourly Rate ($)"
+            type="number"
+            required
+            min={0}
+            step={0.01}
+            value={formData.hourly_rate}
+            onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+          />
+        )}
+      </form>
+    </Modal>
   );
 }
 
 // View Schedule Modal Component
-function ViewScheduleModal({ designer, onClose }: { designer: Designer; onClose: () => void }) {
+function ViewScheduleModal({ isOpen, designer, onClose }: { isOpen: boolean; designer: Designer; onClose: () => void }) {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -849,88 +810,75 @@ function ViewScheduleModal({ designer, onClose }: { designer: Designer; onClose:
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-black">정기 휴일 설정 - {designer.name}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-        <div className="p-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">스케줄을 불러오는 중...</div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600 mb-4">
-                출근하는 요일을 선택하세요. 출근하는 요일은 기본 근무시간(월-금: 10:00-19:00, 토: 09:00-17:00)으로 자동 설정됩니다.
-              </p>
-              <div className="space-y-2">
-                {weekdays.map(({ day, name, label }) => {
-                  const isWorking = workingDays.has(day);
-                  const schedule = getScheduleForDay(day);
-                  const isSaturday = day === 6;
-                  const defaultTime = isSaturday ? '09:00-17:00' : '10:00-19:00';
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`정기 휴일 설정 - ${designer.name}`}
+      maxWidth="max-w-2xl"
+      scrollable
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button variant="primary" loading={saving} onClick={handleSave}>
+            {saving ? '저장 중...' : '저장하기'}
+          </Button>
+        </>
+      }
+    >
+      {loading ? (
+        <EmptyState title="스케줄을 불러오는 중..." />
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 mb-4">
+            출근하는 요일을 선택하세요. 출근하는 요일은 기본 근무시간(월-금: 10:00-19:00, 토: 09:00-17:00)으로 자동 설정됩니다.
+          </p>
+          <div className="space-y-2">
+            {weekdays.map(({ day, name, label }) => {
+              const isWorking = workingDays.has(day);
+              const schedule = getScheduleForDay(day);
+              const isSaturday = day === 6;
+              const defaultTime = isSaturday ? '09:00-17:00' : '10:00-19:00';
 
-                  return (
-                    <div
-                      key={day}
-                      className={`border rounded-lg p-4 transition-colors ${
-                        isWorking ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 flex-1">
-                          <div className="w-20">
-                            <span className="text-sm font-semibold text-gray-900">{name}</span>
-                            <span className="text-xs text-gray-500 ml-2">({label})</span>
-                          </div>
-                          <div className="flex-1">
-                            {isWorking ? (
-                              <span className="text-sm text-gray-900 font-medium">
-                                출근 ({defaultTime})
-                              </span>
-                            ) : (
-                              <span className="text-sm text-gray-500 font-medium">휴일</span>
-                            )}
-                          </div>
-                        </div>
-                        <label className="flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isWorking}
-                            onChange={() => handleToggleDay(day)}
-                            className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
-                          />
-                        </label>
+              return (
+                <div
+                  key={day}
+                  className={`border rounded-lg p-4 transition-colors ${
+                    isWorking ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="w-20">
+                        <span className="text-sm font-semibold text-gray-900">{name}</span>
+                        <span className="text-xs text-gray-500 ml-2">({label})</span>
+                      </div>
+                      <div className="flex-1">
+                        {isWorking ? (
+                          <span className="text-sm text-gray-900 font-medium">
+                            출근 ({defaultTime})
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-500 font-medium">휴일</span>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-black font-medium"
-            >
-              취소
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
-            >
-              {saving ? '저장 중...' : '저장하기'}
-            </button>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isWorking}
+                        onChange={() => handleToggleDay(day)}
+                        className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }
-
-

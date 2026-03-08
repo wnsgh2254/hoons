@@ -1,20 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { EDIT_TIME_OPTIONS, SERVICE_PICKER_CATEGORY_ORDER, getServiceCategoryForPicker, labelToDbTime } from '@/lib/utils/appointment-utils';
+import { EDIT_TIME_OPTIONS, SERVICE_PICKER_CATEGORY_ORDER, getServiceCategoryForPicker, labelToDbTime, COLOR_LABEL_OPTIONS } from '@/lib/utils/appointment-utils';
 import ServicePickerModal from './ServicePickerModal';
-import type { Booking } from '@/lib/types';
-
-type BookingWithRelations = Booking & {
-  designer?: { id: number; name: string } | null;
-  service?: { id: number; name: string; duration_minutes?: number | null } | null;
-};
+import type { BookingWithRelations } from '@/lib/types';
+import { useServices } from '@/hooks/useServices';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
+import Select from '@/components/ui/Select';
+import { Z } from '@/lib/constants';
 
 interface EditBookingModalProps {
   booking: BookingWithRelations;
   selectedDate: string;
   onClose: () => void;
-  onSave: (bookingId: number, updates: { booking_date: string; booking_time: string; service_id?: number; memo: string }) => Promise<void>;
+  onSave: (bookingId: number, updates: { booking_date: string; booking_time: string; service_id?: number; memo: string; color_label?: string | null }) => Promise<void>;
 }
 
 export default function EditBookingModal({
@@ -26,12 +27,12 @@ export default function EditBookingModal({
   const [editDate, setEditDate] = useState<string>(selectedDate);
   const [editTime, setEditTime] = useState<string>('10:00 AM');
   const [editServiceId, setEditServiceId] = useState<number | null>(null);
-  const [editServices, setEditServices] = useState<{ id: number; name: string; duration_minutes?: number | null }[]>([]);
+  const { services: editServices } = useServices({ excludePattern: /\(cash\)/i });
   const [isServicePickerOpen, setIsServicePickerOpen] = useState(false);
   const [editMemo, setEditMemo] = useState<string>('');
+  const [editColorLabel, setEditColorLabel] = useState<string | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
-  // Comment: Sync edit modal fields when opening edit
   useEffect(() => {
     if (booking?.booking_date) {
       setEditDate(booking.booking_date);
@@ -51,30 +52,9 @@ export default function EditBookingModal({
     if ((booking as any)?.memo || (booking as any)?.note) {
       setEditMemo((booking as any).memo || (booking as any).note || '');
     }
-  }, [booking?.id]);
-
-  // Comment: Load all services for edit modal service picker (card only)
-  useEffect(() => {
-    if (!booking) {
-      setEditServices([]);
-      return;
+    if ((booking as any)?.color_label) {
+      setEditColorLabel((booking as any).color_label);
     }
-    let isMounted = true;
-    fetch('/api/services')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted || !data.services) return;
-        const cardOnly = (data.services as { id: number; name: string; duration_minutes?: number | null }[]).filter(
-          (s) => !s.name.toLowerCase().includes('(cash)')
-        );
-        setEditServices(cardOnly);
-      })
-      .catch(() => {
-        if (isMounted) setEditServices([]);
-      });
-    return () => {
-      isMounted = false;
-    };
   }, [booking?.id]);
 
   const handleSave = async () => {
@@ -88,6 +68,7 @@ export default function EditBookingModal({
         booking_time: dbTime,
         ...(editServiceId != null && { service_id: editServiceId }),
         memo: editMemo,
+        color_label: editColorLabel,
       });
       onClose();
     } finally {
@@ -104,93 +85,104 @@ export default function EditBookingModal({
       })()
     : '시술 선택';
 
+  const timeOptions = EDIT_TIME_OPTIONS.map((t) => ({ value: t, label: t }));
+
   return (
     <>
-      <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-visible">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative overflow-visible">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-4 top-4 text-gray-400 hover:text-black"
-          >
-            <span className="material-symbols-outlined text-xl">close</span>
-          </button>
-          <h2 className="text-lg font-bold text-black mb-2">예약 수정</h2>
-          <p className="text-xs text-gray-500 mb-4">
-            기존 예약의 날짜·시작 시간·시술·메모를 한 번에 수정합니다. 시술을 바꾸면 캘린더에서 예약 높이가 해당 시술 시간에 맞게 바뀝니다.
-          </p>
-          <div className="space-y-4 text-sm">
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>예약 번호</span>
-              <span className="font-semibold text-gray-800">#{booking.id}</span>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">날짜</label>
-              <input
-                type="date"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-              />
-            </div>
-            <div className="relative">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">시작 시간</label>
-              <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm appearance-none bg-white relative z-[100002]"
-                value={editTime}
-                onChange={(e) => setEditTime(e.target.value)}
-                style={{ position: 'relative', zIndex: 100002 }}
-              >
-                {EDIT_TIME_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">시술</label>
+      <Modal
+        isOpen
+        onClose={onClose}
+        title="예약 수정"
+        zIndex={Z.MODAL_PRIMARY}
+        maxWidth="max-w-md"
+        className="overflow-visible"
+        footer={
+          <>
+            <Button variant="ghost" onClick={onClose}>취소</Button>
+            <Button
+              loading={editSubmitting}
+              disabled={!editDate || !editTime || !booking.id}
+              onClick={handleSave}
+            >
+              변경 저장
+            </Button>
+          </>
+        }
+      >
+        <p className="text-xs text-gray-500 mb-4">
+          기존 예약의 날짜·시작 시간·시술·메모를 한 번에 수정합니다. 시술을 바꾸면 캘린더에서 예약 높이가 해당 시술 시간에 맞게 바뀝니다.
+        </p>
+        <div className="space-y-4 text-sm">
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>예약 번호</span>
+            <span className="font-semibold text-gray-800">#{booking.id}</span>
+          </div>
+          <Input
+            label="날짜"
+            type="date"
+            value={editDate}
+            onChange={(e) => setEditDate(e.target.value)}
+          />
+          <div className="relative">
+            <Select
+              label="시작 시간"
+              options={timeOptions}
+              value={editTime}
+              onChange={(e) => setEditTime(e.target.value)}
+              className="relative z-[100002]"
+              style={{ position: 'relative', zIndex: 100002 }}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">시술</label>
+            <button
+              type="button"
+              onClick={() => setIsServicePickerOpen(true)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between bg-white hover:bg-gray-50"
+            >
+              <span className="text-gray-800">{serviceDisplayName}</span>
+              <span className="material-symbols-outlined text-gray-400 text-lg">expand_more</span>
+            </button>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">아이콘 표시</label>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsServicePickerOpen(true)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between bg-white hover:bg-gray-50"
+                onClick={() => setEditColorLabel(null)}
+                className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                  editColorLabel === null ? 'border-black' : 'border-gray-200 hover:border-gray-400'
+                }`}
+                title="없음"
               >
-                <span className="text-gray-800">{serviceDisplayName}</span>
-                <span className="material-symbols-outlined text-gray-400 text-lg">expand_more</span>
+                <span className="material-symbols-outlined text-gray-400 text-xs">close</span>
               </button>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">메모</label>
-              <textarea
-                value={editMemo}
-                onChange={(e) => setEditMemo(e.target.value)}
-                placeholder="예약 메모"
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent resize-none"
-              />
+              {COLOR_LABEL_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setEditColorLabel(opt.value)}
+                  className={`w-6 h-6 rounded border-2 transition-all ${
+                    editColorLabel === opt.value ? 'border-black scale-110' : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: opt.hex }}
+                  title={opt.label}
+                />
+              ))}
             </div>
           </div>
-          <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              disabled={!editDate || !editTime || editSubmitting || !booking.id}
-              onClick={handleSave}
-              className={`px-5 py-2 rounded-lg text-xs md:text-sm font-semibold text-white flex items-center gap-2 ${
-                editSubmitting ? 'bg-gray-400 cursor-wait' : 'bg-black hover:bg-gray-800'
-              }`}
-            >
-              {editSubmitting ? '저장 중...' : '변경 저장'}
-            </button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">메모</label>
+            <textarea
+              value={editMemo}
+              onChange={(e) => setEditMemo(e.target.value)}
+              placeholder="예약 메모"
+              rows={3}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+            />
           </div>
         </div>
-      </div>
+      </Modal>
       {isServicePickerOpen && (
         <ServicePickerModal
           services={editServices}

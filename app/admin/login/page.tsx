@@ -58,8 +58,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <div className="text-center mb-8">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-7.5">
+        <div className="text-center mb-7.5">
           <h1 className="text-3xl font-bold text-black mb-2">Staff Login</h1>
           <p className="text-gray-500 text-sm">Enter your credentials to access the admin panel</p>
         </div>
@@ -110,7 +110,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-5.5 text-center">
           <Link href="/" className="text-sm text-gray-500 hover:text-black transition-colors">
             ← Back to Home
           </Link>

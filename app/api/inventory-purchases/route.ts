@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getInventoryStatus } from '@/lib/utils/inventory-utils';
 
 // Comment: List purchases with optional filters
 export async function GET(request: NextRequest) {
@@ -198,12 +199,10 @@ export async function POST(request: NextRequest) {
 
       const beforeStock = Number(sourceItem.stock ?? 0);
       const newStock = beforeStock + qtyChange;
-      const status =
-        newStock <= 0 ? 'Out of Stock' : newStock <= 5 ? 'Low Stock' : 'In Stock';
 
       const { error: updateError } = await supabase
         .from('inventory_items')
-        .update({ stock: newStock, status })
+        .update({ stock: newStock, status: getInventoryStatus(newStock) })
         .eq('id', inventoryId);
 
       if (updateError) {

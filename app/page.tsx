@@ -141,22 +141,22 @@ const Home = () => {
       <section className="border-b border-black bg-[#F4F4F4]">
         {/* Adjusted padding to px-6 md:px-12 */}
         <div className="flex justify-between items-center px-6 md:px-12 py-12 md:py-20 overflow-hidden">
-            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter">Book</h2>
-            <Link href="/booking" className="text-sm md:text-base font-light uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
+            <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter">Book</h2>
+            <Link href="/booking" className="text-sm md:text-base font-normal uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
-            <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter text-right">Now</h2>
+            <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-right">Now</h2>
         </div>
       </section>
 
       {/* BIG STATEMENT TEXT */}
       <section id="about" className="py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
         <div className="w-full">
-             <h3 className="font-display font-light text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
+             <h3 className="font-display font-normal text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
                 HAEYOOM originated from a pure Korean word that means "beautiful thoughts."
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
-                <p className="text-base md:text-lg font-light leading-relaxed max-w-lg">
+                <p className="text-base md:text-lg font-normal leading-relaxed max-w-lg">
                     We create moments whee beautiful thoughts bloom, in beautiful spaces, with beautiful people. Beautiful Think-we hope it becomes a lasting echo in your heart.
                 </p>
                 <div className="text-right flex flex-col items-end gap-4">
@@ -186,7 +186,7 @@ const Home = () => {
                     <div className="absolute inset-0 p-6 flex flex-col justify-end">
                         <div className="flex justify-between items-end text-white z-10">
                             {/* Matching size with Space section text below: text-2xl md:text-3xl */}
-                            <span className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter">{item.title}</span>
+                            <span className="font-display font-normal text-2xl md:text-3xl uppercase tracking-tighter">{item.title}</span>
                             <span className="font-mono text-xs md:text-sm opacity-90">From ${item.price}</span>
                 </div>
               </div>
@@ -211,7 +211,7 @@ const Home = () => {
               <div>
                         <span className="block text-xs uppercase tracking-widest mb-4">Location 0{idx + 1}</span>
                         
-                        <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6">
+                        <h4 className="font-display font-normal text-2xl md:text-3xl uppercase tracking-tighter leading-none mb-6">
                             <span className="block mb-2">HAEYOOM</span>
                             {shop.name.replace('HAEYOOM ', '')}
                         </h4>
@@ -236,11 +236,11 @@ const Home = () => {
       <section id="designers" className="border-t border-black bg-[#F4F4F4]">
         <div className="w-full">
           <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
+            <h4 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
             <div className="flex gap-4 mb-2 md:mb-4 shrink-0">
                   <button 
                       onClick={() => setSelectedShop('all')}
-                      className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                      className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
                   >
                       All
                   </button>
@@ -248,7 +248,7 @@ const Home = () => {
                       <button 
                           key={shop.id}
                           onClick={() => setSelectedShop(shop.id)}
-                          className={`px-4 py-2 text-xs uppercase font-light tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                          className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
                       >
                           {shop.name.replace('HAEYOOM ', '')}
                       </button>
@@ -272,14 +272,14 @@ const Home = () => {
                     className={`group md:border-r p-8 md:nth-[4n]:border-r-0 relative bg-[#F4F4F4] hover:bg-white transition-colors ${!isLastRowMobile ? 'border-b border-black' : ''} ${!isLastRowDesktop ? 'md:border-b md:border-black' : 'md:border-b-0'}`}
                   >
                     {/* <div className="flex flex-wrap gap-2 mb-3">
-                          <span className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-light tracking-wider">
+                          <span className="border border-black px-3 py-1 text-[10px] md:text-xs uppercase font-normal tracking-wider">
                           {designer.role}
                           </span>
                     </div> */}
 
                     <span className="block text-xs uppercase tracking-widest mb-2">{designer.role}</span>
 
-                    <h4 className="font-display font-light text-2xl md:text-3xl uppercase tracking-titter mb-8">
+                    <h4 className="font-display font-normal text-2xl md:text-3xl uppercase tracking-titter mb-8">
                       {designer.english_name || designer.name}
                     </h4>
 
@@ -307,8 +307,8 @@ const Home = () => {
         <Script src="https://elfsightcdn.com/platform.js" strategy="lazyOnload" />
         <div className="w-full">
           <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-            <h4 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
-            <p className="font-light text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
+            <h4 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
+            <p className="font-normal text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
           </div>
           <div
             className="elfsight-app-c3f65fc0-2543-463a-b7c9-9c8f2a655e4b"
@@ -320,7 +320,7 @@ const Home = () => {
       {/* NEW CTA SECTION */}
       <section className="bg-[#F4F4F4] px-6 md:px-12 py-32">
          <div className="w-full border-t border-black pt-12 flex flex-col md:flex-row justify-between md:items-end gap-10">
-             <h2 className="font-display font-light text-6xl md:text-8xl uppercase tracking-tighter leading-[0.9] text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>
+             <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter leading-[0.9] text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>
                 Ready to<br/>Transform?
              </h2>
              <Link 

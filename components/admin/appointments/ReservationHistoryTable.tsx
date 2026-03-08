@@ -2,23 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-
-type BookingWithRelations = {
-  id: number;
-  booking_date: string;
-  booking_time: string;
-  status?: string | null;
-  memo?: string | null;
-  total_amount?: number | null;
-  deposit_amount?: number | null;
-  customer?: { id: number; name: string | null; phone: string | null } | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  designer?: { id: number; name: string | null } | null;
-  service?: { id: number; name: string | null; duration_minutes?: number | null } | null;
-  shop?: { id: number; name: string | null } | null;
-  created_at?: string | null;
-};
+import type { BookingWithRelations } from '@/lib/types';
 
 interface ReservationHistoryTableProps {
   bookings: BookingWithRelations[];
@@ -132,7 +116,7 @@ export default function ReservationHistoryTable({
   };
 
   return (
-    <div className="px-6 py-4">
+    <div className="flex flex-col h-full">
       {/* 상단 요약 및 전체 선택 */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -155,8 +139,8 @@ export default function ReservationHistoryTable({
       </div>
 
       {/* 테이블 */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-        <div className="overflow-x-auto">
+      <div className="border border-gray-200 rounded-xl overflow-hidden bg-white flex-1 min-h-0 mb-5.5">
+        <div className="overflow-auto h-full">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -225,7 +209,7 @@ export default function ReservationHistoryTable({
                     {b.booking_time} ({durationMinutes})
                   </td>
                   <td 
-                    className="px-4 py-3 text-sm font-medium text-gray-900 cursor-pointer hover:text-blue-600 hover:underline"
+                    className="px-4 py-3 text-sm font-medium text-gray-900 cursor-pointer hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       const customerId = b.customer?.id || (b as any).customer_id || null;
