@@ -53,6 +53,10 @@ interface NewBookingModalProps {
   setNewBookingIsCustomerSearching: (value: boolean) => void;
   onViewCustomer?: (customerId: number) => void;
   onOpenCustomerRegistration?: () => void;
+  /** Called when booking is created successfully (e.g. from customers page) */
+  onSuccess?: (message: string) => void;
+  /** Pre-fill customer when opening from customer list */
+  registeredCustomer?: { id: number; name: string; phone: string } | null;
 }
 
 export default function NewBookingModal({
@@ -87,6 +91,8 @@ export default function NewBookingModal({
   setNewBookingIsCustomerSearching,
   onViewCustomer,
   onOpenCustomerRegistration,
+  onSuccess,
+  registeredCustomer,
 }: NewBookingModalProps) {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
@@ -243,7 +249,9 @@ export default function NewBookingModal({
           alert('예약 생성에 실패했습니다.');
         }
       } else {
-        setBookingSuccessMessage('예약이 성공적으로 등록되었습니다.');
+        const successMessage = '예약이 성공적으로 등록되었습니다.';
+        setBookingSuccessMessage(successMessage);
+        onSuccess?.(successMessage);
       }
 
       onClose();

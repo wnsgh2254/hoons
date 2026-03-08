@@ -36,6 +36,30 @@ export default function CustomersPage() {
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [bookingCustomer, setBookingCustomer] = useState<{ id: number; name: string; phone: string } | null>(null);
 
+  // NewBookingModal state (same shape as admin/appointments page)
+  const defaultTimeSlot = {
+    designerId: null as number | null,
+    time: '10:00 AM',
+    duration: 30,
+    serviceTab: 'service' as const,
+    serviceId: null as number | null,
+    selectedItems: [] as { id: number; type: string; name: string; durationMinutes?: number }[],
+  };
+  const [newBookingCustomerSearch, setNewBookingCustomerSearch] = useState('');
+  const [newBookingDate, setNewBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newBookingDirectVisit, setNewBookingDirectVisit] = useState(false);
+  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState([defaultTimeSlot]);
+  const [newBookingDesigners, setNewBookingDesigners] = useState<any[]>([]);
+  const [newBookingServices, setNewBookingServices] = useState<{ id: number; name: string; duration_minutes: number }[]>([]);
+  const [newBookingMemo, setNewBookingMemo] = useState('');
+  const [newBookingSubmitting, setNewBookingSubmitting] = useState(false);
+  const [newBookingLoadingOptions, setNewBookingLoadingOptions] = useState(false);
+  const [newBookingShopId, setNewBookingShopId] = useState<number | null>(null);
+  const [newBookingSelectedCustomerId, setNewBookingSelectedCustomerId] = useState<number | null>(null);
+  const [newBookingCustomerSearchResults, setNewBookingCustomerSearchResults] = useState<any[]>([]);
+  const [newBookingIsCustomerSearching, setNewBookingIsCustomerSearching] = useState(false);
+  const [isCustomerRegistrationModalOpen, setIsCustomerRegistrationModalOpen] = useState(false);
+
   const ITEMS_PER_PAGE = 20;
 
   // Comment: Fetch customers with pagination
@@ -80,6 +104,43 @@ export default function CustomersPage() {
 
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
+
+  // Comment: Load shops/designers/services when New Booking modal opens
+  useEffect(() => {
+    if (!isBookingModalOpen) return;
+    setNewBookingLoadingOptions(true);
+    const targetDate = newBookingDate || new Date().toISOString().split('T')[0];
+    const loadShops = async () => {
+      const res = await fetch('/api/shops');
+      const json = await res.json();
+      if (res.ok) {
+        const shops = json.shops || [];
+        if (shops.length > 0) setNewBookingShopId((prev) => prev ?? shops[0].id);
+      }
+    };
+    const loadDesigners = async () => {
+      const res = await fetch(`/api/working-designers?date=${encodeURIComponent(targetDate)}`);
+      const json = await res.json();
+      if (res.ok) setNewBookingDesigners(json.designers || []);
+    };
+    const loadServices = async () => {
+      const res = await fetch('/api/services');
+      const json = await res.json();
+      if (res.ok) setNewBookingServices(json.services || []);
+    };
+    Promise.all([loadShops(), loadDesigners(), loadServices()]).finally(() =>
+      setNewBookingLoadingOptions(false)
+    );
+  }, [isBookingModalOpen, newBookingDate]);
+
+  // Comment: Pre-fill customer when opening booking modal from customer row
+  useEffect(() => {
+    if (isBookingModalOpen && bookingCustomer) {
+      setNewBookingSelectedCustomerId(bookingCustomer.id);
+      setNewBookingCustomerSearchResults([bookingCustomer]);
+      setNewBookingCustomerSearch(bookingCustomer.name);
+    }
+  }, [isBookingModalOpen, bookingCustomer]);
 
   // Comment: Format phone number for display
   const formatPhone = (phone: string | null) => {
@@ -338,14 +399,43 @@ export default function CustomersPage() {
         onClose={() => {
           setIsBookingModalOpen(false);
           setBookingCustomer(null);
+          setNewBookingSelectedCustomerId(null);
+          setNewBookingCustomerSearchResults([]);
+          setNewBookingCustomerSearch('');
+          setNewBookingTimeSlots([defaultTimeSlot]);
         }}
         selectedDate={new Date().toISOString().split('T')[0]}
+        newBookingCustomerSearch={newBookingCustomerSearch}
+        newBookingDate={newBookingDate}
+        newBookingDirectVisit={newBookingDirectVisit}
+        newBookingTimeSlots={newBookingTimeSlots}
+        newBookingDesigners={newBookingDesigners}
+        newBookingServices={newBookingServices}
+        newBookingMemo={newBookingMemo}
+        newBookingSubmitting={newBookingSubmitting}
+        newBookingLoadingOptions={newBookingLoadingOptions}
+        newBookingShopId={newBookingShopId}
+        newBookingSelectedCustomerId={newBookingSelectedCustomerId}
+        newBookingCustomerSearchResults={newBookingCustomerSearchResults}
+        newBookingIsCustomerSearching={newBookingIsCustomerSearching}
+        setNewBookingCustomerSearch={setNewBookingCustomerSearch}
+        setNewBookingDate={setNewBookingDate}
+        setNewBookingDirectVisit={setNewBookingDirectVisit}
+        setNewBookingTimeSlots={setNewBookingTimeSlots}
+        setNewBookingMemo={setNewBookingMemo}
+        setNewBookingSubmitting={setNewBookingSubmitting}
+        setIsCustomerRegistrationModalOpen={setIsCustomerRegistrationModalOpen}
+        setBookingSuccessMessage={() => {}}
+        setBookings={() => {}}
+        setFilteredBookings={() => {}}
+        setNewBookingSelectedCustomerId={setNewBookingSelectedCustomerId}
+        setNewBookingCustomerSearchResults={setNewBookingCustomerSearchResults}
+        setNewBookingIsCustomerSearching={setNewBookingIsCustomerSearching}
         onSuccess={(message) => {
           setIsBookingModalOpen(false);
           setBookingCustomer(null);
           alert(message);
         }}
-        onRefreshBookings={() => {}}
         onOpenCustomerRegistration={() => setShowAddModal(true)}
         registeredCustomer={bookingCustomer}
       />
