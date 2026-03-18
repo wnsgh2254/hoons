@@ -17,7 +17,8 @@ import {
 import AddCustomerModal from '@/components/admin/customers/AddCustomerModal';
 import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDrawer';
 import NewBookingModal from '@/components/admin/appointments/NewBookingModal';
-import type { Customer } from '@/lib/types';
+import type { Customer, NewBookingTimeSlot } from '@/lib/types';
+import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import { useStaff } from '@/hooks/useStaff';
 
 export default function CustomersPage() {
@@ -37,18 +38,12 @@ export default function CustomersPage() {
   const [bookingCustomer, setBookingCustomer] = useState<{ id: number; name: string; phone: string } | null>(null);
 
   // NewBookingModal state (same shape as admin/appointments page)
-  const defaultTimeSlot = {
-    designerId: null as number | null,
-    time: '10:00 AM',
-    duration: 30,
-    serviceTab: 'service' as const,
-    serviceId: null as number | null,
-    selectedItems: [] as { id: number; type: string; name: string; durationMinutes?: number }[],
-  };
   const [newBookingCustomerSearch, setNewBookingCustomerSearch] = useState('');
   const [newBookingDate, setNewBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newBookingDirectVisit, setNewBookingDirectVisit] = useState(false);
-  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState([defaultTimeSlot]);
+  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<NewBookingTimeSlot[]>([
+    { ...DEFAULT_NEW_BOOKING_TIME_SLOT },
+  ]);
   const [newBookingDesigners, setNewBookingDesigners] = useState<any[]>([]);
   const [newBookingServices, setNewBookingServices] = useState<{ id: number; name: string; duration_minutes: number }[]>([]);
   const [newBookingMemo, setNewBookingMemo] = useState('');
@@ -402,7 +397,7 @@ export default function CustomersPage() {
           setNewBookingSelectedCustomerId(null);
           setNewBookingCustomerSearchResults([]);
           setNewBookingCustomerSearch('');
-          setNewBookingTimeSlots([defaultTimeSlot]);
+          setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
         }}
         selectedDate={new Date().toISOString().split('T')[0]}
         newBookingCustomerSearch={newBookingCustomerSearch}

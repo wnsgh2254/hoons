@@ -8,16 +8,8 @@ import Select from '@/components/ui/Select';
 import { Z } from '@/lib/constants';
 import { useServices } from '@/hooks/useServices';
 import BookingItemPickerModal from './BookingItemPickerModal';
-
-type SelectedBookingItem = { id: number; type: string; name: string; durationMinutes?: number };
-type TimeSlot = {
-  designerId: number | null;
-  time: string;
-  duration: number;
-  serviceTab: 'service';
-  serviceId: number | null;
-  selectedItems: SelectedBookingItem[];
-};
+import type { NewBookingTimeSlot, NewBookingTimeSlotSelectedItem } from '@/lib/types';
+import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 
 interface NewBookingModalProps {
   isOpen: boolean;
@@ -27,7 +19,7 @@ interface NewBookingModalProps {
   newBookingCustomerSearch: string;
   newBookingDate: string;
   newBookingDirectVisit: boolean;
-  newBookingTimeSlots: TimeSlot[];
+  newBookingTimeSlots: NewBookingTimeSlot[];
   newBookingDesigners: any[];
   newBookingServices: { id: number; name: string; duration_minutes: number }[];
   newBookingMemo: string;
@@ -41,7 +33,7 @@ interface NewBookingModalProps {
   setNewBookingCustomerSearch: (value: string) => void;
   setNewBookingDate: (value: string) => void;
   setNewBookingDirectVisit: (value: boolean) => void;
-  setNewBookingTimeSlots: React.Dispatch<React.SetStateAction<TimeSlot[]>>;
+  setNewBookingTimeSlots: React.Dispatch<React.SetStateAction<NewBookingTimeSlot[]>>;
   setNewBookingMemo: (value: string) => void;
   setNewBookingSubmitting: (value: boolean) => void;
   setIsCustomerRegistrationModalOpen: (value: boolean) => void;
@@ -100,8 +92,8 @@ export default function NewBookingModal({
   const [isCustomerSearching, setIsCustomerSearching] = useState(false);
   const [directVisit, setDirectVisit] = useState(false);
   const [bookingDate, setBookingDate] = useState(selectedDate);
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([
-    { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] },
+  const [timeSlots, setTimeSlots] = useState<NewBookingTimeSlot[]>([
+    { ...DEFAULT_NEW_BOOKING_TIME_SLOT },
   ]);
   const [memo, setMemo] = useState('');
   const [colorLabel, setColorLabel] = useState<string | null>(null);
@@ -134,17 +126,17 @@ export default function NewBookingModal({
   const formatDurationLabel = (min: number) => `${min}분`;
 
   const handleRemoveBookingItem = (slotIndex: number, itemId: number, itemType: string) => {
-    const next = newBookingTimeSlots.map((slot: TimeSlot, i: number) =>
+    const next = newBookingTimeSlots.map((slot: NewBookingTimeSlot, i: number) =>
       i === slotIndex
-        ? { ...slot, selectedItems: slot.selectedItems.filter((it: SelectedBookingItem) => it.id !== itemId || it.type !== itemType) }
+        ? { ...slot, selectedItems: slot.selectedItems.filter((it: NewBookingTimeSlotSelectedItem) => it.id !== itemId || it.type !== itemType) }
         : slot
     );
     setNewBookingTimeSlots(next);
   };
 
-  const handleBookingItemsSelected = (items: SelectedBookingItem[]) => {
+  const handleBookingItemsSelected = (items: NewBookingTimeSlotSelectedItem[]) => {
     if (activeSlotIndex === null) return;
-    const next = newBookingTimeSlots.map((slot: TimeSlot, i: number) =>
+    const next = newBookingTimeSlots.map((slot: NewBookingTimeSlot, i: number) =>
       i === activeSlotIndex ? { ...slot, selectedItems: [...slot.selectedItems, ...items] } : slot
     );
     setNewBookingTimeSlots(next);
@@ -159,9 +151,7 @@ export default function NewBookingModal({
 
   const handleCancel = () => {
     onClose();
-    setNewBookingTimeSlots([
-      { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] },
-    ]);
+    setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
     setNewBookingSelectedCustomerId(null);
     setNewBookingCustomerSearchResults([]);
   };
@@ -255,9 +245,7 @@ export default function NewBookingModal({
       }
 
       onClose();
-      setNewBookingTimeSlots([
-        { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] },
-      ]);
+      setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
 
       // Comment: Refetch full week range (same as main schedule) so UI shows correct data
       const weekStart = getWeekStart(selectedDate);
@@ -636,10 +624,7 @@ export default function NewBookingModal({
                       onClick={() => {
                         setTimeSlots((prev) => {
                           const newSlots = [...prev];
-                          newSlots.splice(idx + 1, 0, {
-                            designerId: null, time: '10:00 AM', duration: 30,
-                            serviceTab: 'service', serviceId: null, selectedItems: [],
-                          });
+                          newSlots.splice(idx + 1, 0, { ...DEFAULT_NEW_BOOKING_TIME_SLOT });
                           return newSlots;
                         });
                       }}

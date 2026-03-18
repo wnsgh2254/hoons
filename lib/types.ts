@@ -199,6 +199,32 @@ export interface TempSalesData {
   selectedShopId?: number | null;
 }
 
+// New booking modal time slot (shared by appointments + customers pages)
+export interface NewBookingTimeSlotSelectedItem {
+  id: number;
+  type: string;
+  name: string;
+  durationMinutes?: number;
+}
+
+export interface NewBookingTimeSlot {
+  designerId: number | null;
+  time: string;
+  duration: number;
+  serviceTab: 'service';
+  serviceId: number | null;
+  selectedItems: NewBookingTimeSlotSelectedItem[];
+}
+
+export const DEFAULT_NEW_BOOKING_TIME_SLOT: NewBookingTimeSlot = {
+  designerId: null,
+  time: '10:00 AM',
+  duration: 30,
+  serviceTab: 'service',
+  serviceId: null,
+  selectedItems: [],
+};
+
 // Refund types (환불)
 export interface RefundItem {
   id: string;

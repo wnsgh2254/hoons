@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type React from 'react';
-import type { Booking, BookingWithRelations } from '@/lib/types';
+import type { Booking, BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
+import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import AdminTopNav from '@/components/AdminTopNav';
 import { useServices } from '@/hooks/useServices';
 import { useAdminMemo } from '@/hooks/useAdminMemo';
@@ -85,17 +86,8 @@ export default function AppointmentsManagementPage() {
   const [newBookingIsCustomerSearching, setNewBookingIsCustomerSearching] = useState(false);
   const [isCustomerRegistrationModalOpen, setIsCustomerRegistrationModalOpen] = useState(false);
   const [registeredCustomer, setRegisteredCustomer] = useState<any | null>(null);
-  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<
-    Array<{
-      designerId: number | null;
-      time: string;
-      duration: number;
-      serviceTab: 'service' | 'appointment';
-      serviceId: number | null;
-      selectedItems: { id: number; type: string; name: string; durationMinutes?: number }[];
-    }>
-  >([
-    { designerId: null, time: '10:00 AM', duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] },
+  const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<NewBookingTimeSlot[]>([
+    { ...DEFAULT_NEW_BOOKING_TIME_SLOT },
   ]);
   const [newBookingSubmitting, setNewBookingSubmitting] = useState(false);
   const [newBookingLoadingOptions, setNewBookingLoadingOptions] = useState(false);
