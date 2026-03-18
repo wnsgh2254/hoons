@@ -41,7 +41,7 @@ interface NewBookingModalProps {
   setNewBookingCustomerSearch: (value: string) => void;
   setNewBookingDate: (value: string) => void;
   setNewBookingDirectVisit: (value: boolean) => void;
-  setNewBookingTimeSlots: (value: TimeSlot[]) => void;
+  setNewBookingTimeSlots: React.Dispatch<React.SetStateAction<TimeSlot[]>>;
   setNewBookingMemo: (value: string) => void;
   setNewBookingSubmitting: (value: boolean) => void;
   setIsCustomerRegistrationModalOpen: (value: boolean) => void;
