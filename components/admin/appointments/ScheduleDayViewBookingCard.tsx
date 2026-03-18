@@ -89,6 +89,14 @@ function ScheduleDayViewBookingCard({
   const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone || '';
   const bookingMemo = (booking as any).memo || (booking as any).note || '';
 
+  const depositPaid =
+    Number((booking as any).deposit_paid ?? (booking as any).depositAmount ?? 0) || 0;
+  const depositAmount =
+    Number((booking as any).deposit_amount ?? (booking as any).depositAmount ?? 0) || 0;
+  const totalAmount =
+    Number((booking as any).total_amount ?? (booking as any).totalAmount ?? 0) || 0;
+  const hasDepositPaid = depositPaid > 0;
+
   const endTimeLabel = (() => {
     const endTime = new Date(`2000-01-01T${hourStr}:${minuteStr}`);
     endTime.setMinutes(endTime.getMinutes() + durationMinutes);
@@ -119,6 +127,18 @@ function ScheduleDayViewBookingCard({
           booking.id && onCardClick(e, booking.id);
         }}
       >
+        {/* Top-right indicators */}
+        {hasDepositPaid && (
+          <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
+            <div
+              className="w-5 h-5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold"
+              title={`Deposit paid: ${depositPaid.toLocaleString('ko-KR')} / Total: ${totalAmount.toLocaleString('ko-KR')}`}
+            >
+              D
+            </div>
+          </div>
+        )}
+
         <div>
           <p className={`text-xs font-bold ${statusColor.text} mb-0.5`}>{customerName}</p>
           <p className={`text-[11px] ${statusColor.text} opacity-70`}>{serviceName}</p>
@@ -159,6 +179,22 @@ function ScheduleDayViewBookingCard({
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 w-16 shrink-0">시술명</span>
                     <span className="text-gray-900">{serviceName}</span>
+                  </div>
+                )}
+                {(depositAmount > 0 || depositPaid > 0) && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 w-16 shrink-0">Deposit</span>
+                    <span className="text-gray-900">
+                      ₩{depositPaid.toLocaleString('ko-KR')}
+                      {totalAmount > 0 && (
+                        <>
+                          {' '}
+                          <span className="text-gray-500">
+                            / ₩{totalAmount.toLocaleString('ko-KR')}
+                          </span>
+                        </>
+                      )}
+                    </span>
                   </div>
                 )}
                 {bookingMemo && (

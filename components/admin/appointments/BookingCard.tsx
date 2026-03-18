@@ -114,6 +114,13 @@ function BookingCard({
   const customerPhone =
     (b as any).customer?.phone || (b as any).customer_phone || '';
   const bookingMemo = (b as any).memo || (b as any).note || '';
+  const depositPaid =
+    Number((b as any).deposit_paid ?? (b as any).depositAmount ?? 0) || 0;
+  const depositAmount =
+    Number((b as any).deposit_amount ?? (b as any).depositAmount ?? 0) || 0;
+  const totalAmount =
+    Number((b as any).total_amount ?? (b as any).totalAmount ?? 0) || 0;
+  const hasDepositPaid = depositPaid > 0;
 
   return (
     <div
@@ -190,21 +197,37 @@ function BookingCard({
           }
         }}
       >
-        {/* Temp sale indicator */}
-        {hasTempSale && (
-          <button
-            type="button"
-            className="absolute top-1 right-1 z-10 w-5 h-5 flex items-center justify-center rounded bg-red-500 hover:bg-red-600 transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenTempSale?.(b);
-            }}
-            title="임시 저장된 판매 등록"
-          >
-            <span className="material-symbols-outlined text-white" style={{ fontSize: '14px' }}>
-              credit_card
-            </span>
-          </button>
+        {/* Top-right indicators container */}
+        {(hasDepositPaid || hasTempSale) && (
+          <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
+            {/* Deposit paid indicator */}
+            {hasDepositPaid && (
+              <div
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold"
+                title={`Deposit paid: ${depositPaid.toLocaleString('ko-KR')} / Total: ${totalAmount.toLocaleString(
+                  'ko-KR',
+                )}`}
+              >
+                D
+              </div>
+            )}
+            {/* Temp sale indicator */}
+            {hasTempSale && (
+              <button
+                type="button"
+                className="w-5 h-5 flex items-center justify-center rounded bg-red-500 hover:bg-red-600 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenTempSale?.(b);
+                }}
+                title="임시 저장된 판매 등록"
+              >
+                <span className="material-symbols-outlined text-white" style={{ fontSize: '14px' }}>
+                  credit_card
+                </span>
+              </button>
+            )}
+          </div>
         )}
 
         {/* Card content */}
@@ -263,6 +286,22 @@ function BookingCard({
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 w-16 shrink-0">시술명</span>
                     <span className="text-gray-900">{serviceName}</span>
+                  </div>
+                )}
+                {(depositAmount > 0 || depositPaid > 0) && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 w-16 shrink-0">Deposit</span>
+                    <span className="text-gray-900">
+                      ₩{depositPaid.toLocaleString('ko-KR')}
+                      {totalAmount > 0 && (
+                        <>
+                          {' '}
+                          <span className="text-gray-500">
+                            / ₩{totalAmount.toLocaleString('ko-KR')}
+                          </span>
+                        </>
+                      )}
+                    </span>
                   </div>
                 )}
                 {bookingMemo && (
