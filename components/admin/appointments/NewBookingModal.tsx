@@ -14,7 +14,7 @@ type TimeSlot = {
   designerId: number | null;
   time: string;
   duration: number;
-  serviceTab: 'service' | 'appointment';
+  serviceTab: 'service';
   serviceId: number | null;
   selectedItems: SelectedBookingItem[];
 };
