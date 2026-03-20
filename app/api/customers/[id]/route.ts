@@ -38,9 +38,23 @@ export async function GET(
       );
     }
 
+    // Comment: Include assigned_designer when assigned_designer_id exists
+    let assignedDesigner = null;
+    if (customer.assigned_designer_id) {
+      const { data: designerData } = await supabase
+        .from('designers')
+        .select('id, name')
+        .eq('id', customer.assigned_designer_id)
+        .maybeSingle();
+      assignedDesigner = designerData;
+    }
+
     return NextResponse.json(
       {
-        customer,
+        customer: {
+          ...customer,
+          assigned_designer: assignedDesigner,
+        },
       },
       { status: 200 }
     );

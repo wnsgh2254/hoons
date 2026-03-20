@@ -2979,15 +2979,40 @@ export default function AppointmentsManagementPage() {
       />
 
       {/* Appointment Detail Modal */}
-      <AppointmentDetailModal
-        booking={viewingBookingDetail}
-        onClose={() => setViewingBookingDetail(null)}
-        onEdit={(booking: BookingWithRelations) => {
-          setEditingBooking(booking);
-          setViewingBookingDetail(null);
-        }}
-        bookingTimeToLabel={bookingTimeToLabel}
-      />
+      {(() => {
+        const relatedBookingsForDetail = (() => {
+          if (!viewingBookingDetail) return [];
+
+          const source = isWeekViewMode ? weekViewBookings : bookings;
+          const { booking_date, booking_time, customer_id, shop_id } = viewingBookingDetail;
+          if (!booking_date || !booking_time || customer_id == null) return [];
+
+          return (source || []).filter((b) => {
+            if (!b?.id) return false;
+            if (b.id === viewingBookingDetail.id) return false;
+            return (
+              b.booking_date === booking_date &&
+              b.booking_time === booking_time &&
+              b.customer_id === customer_id &&
+              (shop_id != null ? b.shop_id === shop_id : true)
+            );
+          });
+        })();
+
+        return (
+          <AppointmentDetailModal
+            booking={viewingBookingDetail}
+            relatedBookings={relatedBookingsForDetail}
+            onClose={() => setViewingBookingDetail(null)}
+            onEdit={(booking: BookingWithRelations) => {
+              setEditingBooking(booking);
+              setViewingBookingDetail(null);
+            }}
+            bookingTimeToLabel={bookingTimeToLabel}
+          />
+        );
+      })()}
+
 
       {/* Edit Booking Modal */}
       {editingBooking && (

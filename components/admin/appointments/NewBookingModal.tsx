@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { EDIT_TIME_OPTIONS, getWeekStart, getWeekEnd, COLOR_LABEL_OPTIONS } from '@/lib/utils/appointment-utils';
+import {
+  EDIT_TIME_OPTIONS,
+  getWeekStart,
+  getWeekEnd,
+  COLOR_LABEL_OPTIONS,
+  labelToDbTime,
+} from '@/lib/utils/appointment-utils';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
@@ -89,12 +95,11 @@ export default function NewBookingModal({
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
+  // Comment: Persist selected customer snapshot so past records section never disappears when search results change
+  const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<any | null>(null);
   const [isCustomerSearching, setIsCustomerSearching] = useState(false);
   const [directVisit, setDirectVisit] = useState(false);
   const [bookingDate, setBookingDate] = useState(selectedDate);
-  const [timeSlots, setTimeSlots] = useState<NewBookingTimeSlot[]>([
-    { ...DEFAULT_NEW_BOOKING_TIME_SLOT },
-  ]);
   const [memo, setMemo] = useState('');
   const [colorLabel, setColorLabel] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -107,7 +112,6 @@ export default function NewBookingModal({
   const [shops, setShops] = useState<any[]>([]);
   const [shopId, setShopId] = useState<number | null>(null);
   const shopManuallySet = useRef(false);
-  const [designers, setDesigners] = useState<any[]>([]);
   const { services } = useServices();
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(() => {
@@ -116,9 +120,133 @@ export default function NewBookingModal({
   });
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
 
-  const selectedCustomerDetail = customerSearchResults.find((r: any) => r.id === selectedCustomerId) ?? null;
+  // Sync from parent when modal opens with pre-filled customer (e.g. from customers page)
+  useEffect(() => {
+    if (!isOpen) return;
+    if (registeredCustomer) {
+      setSelectedCustomerId(registeredCustomer.id);
+      setNewBookingSelectedCustomerId(registeredCustomer.id);
+      setCustomerSearch(registeredCustomer.name || '');
+      setCustomerSearchResults([registeredCustomer]);
+      setSelectedCustomerSnapshot(registeredCustomer);
+    }
+  }, [isOpen, registeredCustomer?.id]);
+
+  // Comment: 저장 버튼 disable 조건에 `shopId`가 들어가므로,
+  // 모달 오픈 시 부모에서 내려오는 `newBookingShopId`로 shopId를 초기화합니다.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (newBookingShopId != null) setShopId(newBookingShopId);
+  }, [isOpen, newBookingShopId]);
+
+  // Debounced customer search - call API when user types
+  // Comment: Skip search when customer is selected to avoid overwriting results and losing selectedCustomerDetail
+  useEffect(() => {
+    if (!isOpen) return;
+    if (selectedCustomerId) return;
+    const q = customerSearch.trim();
+    if (!q) {
+      setCustomerSearchResults([]);
+      return;
+    }
+    const timeoutId = setTimeout(async () => {
+      setIsCustomerSearching(true);
+      try {
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.customers)) {
+          setCustomerSearchResults(data.customers);
+          setIsCustomerDropdownOpen(true);
+        } else {
+          setCustomerSearchResults([]);
+        }
+      } catch (err) {
+        console.error('Customer search error:', err);
+        setCustomerSearchResults([]);
+      } finally {
+        setIsCustomerSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [isOpen, customerSearch, selectedCustomerId]);
+
+  const selectedCustomerDetail =
+    selectedCustomerSnapshot ??
+    customerSearchResults.find((r: any) => r.id === selectedCustomerId) ??
+    null;
+
   type CustomerStats = { lastVisitDate?: string; daysSinceLastVisit?: number; appointmentsCount?: number; cancelledCount?: number };
-  const customerStats: CustomerStats = {};
+  const [customerDetail, setCustomerDetail] = useState<any | null>(null);
+  const [customerStats, setCustomerStats] = useState<CustomerStats>({});
+  const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
+
+  // Fetch customer detail + stats when customer is selected
+  useEffect(() => {
+    if (!isOpen || !selectedCustomerId) {
+      setCustomerDetail(null);
+      setCustomerStats({});
+      return;
+    }
+    let cancelled = false;
+    setCustomerDetailLoading(true);
+    (async () => {
+      try {
+        const [customerRes, bookingsRes] = await Promise.all([
+          fetch(`/api/customers/${selectedCustomerId}`),
+          fetch(`/api/appointment?customer_id=${selectedCustomerId}&limit=500`),
+        ]);
+        if (cancelled) return;
+        const customerData = await customerRes.json();
+        const bookingsData = await bookingsRes.json();
+        if (!customerRes.ok || !customerData.customer) {
+          setCustomerDetail(null);
+          setCustomerStats({});
+          return;
+        }
+        setCustomerDetail(customerData.customer);
+        const bookings = bookingsData.bookings || [];
+        const completedStatuses = ['confirmed', 'PAID', 'COMPLETED'];
+        const completedBookings = bookings.filter((b: any) =>
+          completedStatuses.includes(String(b.status || '').toUpperCase())
+        );
+        const lastBooking = [...completedBookings].sort((a: any, b: any) => {
+          const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);
+          const dateB = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
+          return dateB.getTime() - dateA.getTime();
+        })[0];
+        const lastVisitDate = lastBooking?.booking_date ?? null;
+        let daysSinceLastVisit: number | null = null;
+        if (lastVisitDate) {
+          const diff = new Date().getTime() - new Date(lastVisitDate).getTime();
+          daysSinceLastVisit = Math.floor(diff / (1000 * 60 * 60 * 24));
+        }
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        const recentBookings = bookings.filter((b: any) => new Date(b.booking_date) >= oneYearAgo);
+        const cancelledStatuses = ['cancelled', 'CANCELLED', 'canceled', 'CANCELED'];
+        const cancelledCount = recentBookings.filter((b: any) =>
+          cancelledStatuses.includes(String(b.status || ''))
+        ).length;
+        if (!cancelled) {
+          setCustomerStats({
+            lastVisitDate: lastVisitDate ?? undefined,
+            daysSinceLastVisit: daysSinceLastVisit ?? undefined,
+            appointmentsCount: recentBookings.length,
+            cancelledCount,
+          });
+        }
+      } catch (err) {
+        console.error('Error loading customer detail:', err);
+        if (!cancelled) {
+          setCustomerDetail(null);
+          setCustomerStats({});
+        }
+      } finally {
+        if (!cancelled) setCustomerDetailLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, selectedCustomerId]);
 
   // Duration options in 30-min steps only
   const durationOptions = [30, 60, 90, 120, 150, 180];
@@ -154,6 +282,13 @@ export default function NewBookingModal({
     setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
     setNewBookingSelectedCustomerId(null);
     setNewBookingCustomerSearchResults([]);
+    setCustomerSearch('');
+    setSelectedCustomerId(null);
+    setSelectedCustomerSnapshot(null);
+    setCustomerSearchResults([]);
+    setIsCustomerDropdownOpen(false);
+    setCustomerDetail(null);
+    setCustomerStats({});
   };
 
   const handleSubmit = async () => {
@@ -162,87 +297,109 @@ export default function NewBookingModal({
       return;
     }
 
-    const firstSlot = timeSlots[0];
-    if (!firstSlot?.designerId || !bookingDate || !firstSlot?.time) {
+    if (!shopId) {
+      alert('지점을 선택해주세요.');
+      return;
+    }
+
+    const slots = newBookingTimeSlots;
+    if (!bookingDate || slots.length === 0 || slots.some((s) => !s.designerId || !s.time)) {
       alert('디자이너, 날짜, 시작 시간을 모두 선택해주세요.');
       return;
     }
 
     try {
-      const [hourStr, minuteStr] = firstSlot.time.split(':');
-      const startHour = Number(hourStr);
-      const startMinute = Number(minuteStr);
-      const newStartMinutes = startHour * 60 + startMinute;
-      const newEndMinutes = newStartMinutes + (firstSlot.duration || 60);
-
-      const resExisting = await fetch(
-        `/api/appointment?date=${encodeURIComponent(bookingDate)}&designer_id=${encodeURIComponent(
-          String(firstSlot.designerId),
-        )}`,
-      );
-      const dataExisting = await resExisting.json();
-      if (resExisting.ok && Array.isArray(dataExisting.bookings)) {
-        let maxOverlap = 0;
-        for (const b of dataExisting.bookings) {
-          if (!b.booking_time) continue;
-          const [bh, bm] = String(b.booking_time).split(':');
-          const existStart = Number(bh) * 60 + Number(bm);
-          const existDuration =
-            b.service?.duration_minutes && b.service.duration_minutes > 0
-              ? b.service.duration_minutes
-              : 60;
-          const existEnd = existStart + existDuration;
-          const overlap = Math.max(newStartMinutes, existStart) < Math.min(newEndMinutes, existEnd);
-          if (overlap) maxOverlap += 1;
-        }
-        if (maxOverlap >= 2) {
-          alert('같은 시간대에 이미 2개의 예약이 있어 더 이상 등록할 수 없습니다.');
+      // Comment: Overlap check needs minutes; check each slot before creating.
+      for (const slot of slots) {
+        const dbTime = labelToDbTime(slot.time);
+        if (!dbTime) {
+          alert('시간 형식 오류가 발생했습니다.');
           return;
+        }
+
+        const [hh, mm] = dbTime.split(':');
+        const startHour = Number(hh);
+        const startMinute = Number(mm);
+        if (Number.isNaN(startHour) || Number.isNaN(startMinute)) {
+          alert('시간 형식 오류가 발생했습니다.');
+          return;
+        }
+
+        const newStartMinutes = startHour * 60 + startMinute;
+        const newEndMinutes = newStartMinutes + (slot.duration || 60);
+
+        const resExisting = await fetch(
+          `/api/appointment?date=${encodeURIComponent(bookingDate)}&designer_id=${encodeURIComponent(
+            String(slot.designerId),
+          )}`,
+        );
+        const dataExisting = await resExisting.json();
+
+        if (resExisting.ok && Array.isArray(dataExisting.bookings)) {
+          let maxOverlap = 0;
+          for (const b of dataExisting.bookings) {
+            if (!b.booking_time) continue;
+            const [bh, bm] = String(b.booking_time).split(':');
+            const existStart = Number(bh) * 60 + Number(bm);
+            const existDuration =
+              b.service?.duration_minutes && b.service.duration_minutes > 0 ? b.service.duration_minutes : 60;
+            const existEnd = existStart + existDuration;
+            const overlap = Math.max(newStartMinutes, existStart) < Math.min(newEndMinutes, existEnd);
+            if (overlap) maxOverlap += 1;
+          }
+
+          if (maxOverlap >= 2) {
+            alert('같은 시간대에 이미 2개의 예약이 있어 더 이상 등록할 수 없습니다.');
+            return;
+          }
         }
       }
     } catch (e) {
       console.error('Error checking overlapping bookings', e);
     }
 
-    const selectedCustomer =
-      customerSearchResults.find((c: any) => c.id === selectedCustomerId) || null;
+    const selectedCustomer = selectedCustomerDetail || null;
 
     setSubmitting(true);
     try {
-      const resCreate = await fetch('/api/appointment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopId,
-          designerId: firstSlot.designerId,
-          serviceId: firstSlot.serviceId ?? null,
-          day: Number(bookingDate.split('-')[2]),
-          timeLabel: firstSlot.time,
-          totalAmount: null,
-          depositAmount: null,
-          fullDate: bookingDate,
-          memo,
-          colorLabel,
-          customerName: selectedCustomer?.name ?? null,
-          customerPhone: selectedCustomer?.phone ?? (customerSearch || null),
-          existingCustomerId: selectedCustomer?.id ?? selectedCustomerId ?? null,
-        }),
-      });
+      // Comment: Create one booking per slot.
+      for (const slot of slots) {
+        const resCreate = await fetch('/api/appointment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shopId,
+            designerId: slot.designerId,
+            serviceId: slot.serviceId ?? null,
+            day: Number(bookingDate.split('-')[2]),
+            timeLabel: slot.time,
+            totalAmount: null,
+            depositAmount: null,
+            fullDate: bookingDate,
+            memo,
+            colorLabel,
+            customerName: selectedCustomer?.name ?? null,
+            customerPhone: selectedCustomer?.phone ?? (customerSearch || null),
+            existingCustomerId: selectedCustomer?.id ?? selectedCustomerId ?? null,
+          }),
+        });
 
-      if (!resCreate.ok) {
-        const errorText = await resCreate.text();
-        console.error('Failed to create booking', errorText);
-        try {
-          const parsed = JSON.parse(errorText);
-          alert(parsed.error || '예약 생성에 실패했습니다.');
-        } catch {
-          alert('예약 생성에 실패했습니다.');
+        if (!resCreate.ok) {
+          const errorText = await resCreate.text();
+          console.error('Failed to create booking', errorText);
+          try {
+            const parsed = JSON.parse(errorText);
+            alert(parsed.error || '예약 생성에 실패했습니다.');
+          } catch {
+            alert('예약 생성에 실패했습니다.');
+          }
+          return;
         }
-      } else {
-        const successMessage = '예약이 성공적으로 등록되었습니다.';
-        setBookingSuccessMessage(successMessage);
-        onSuccess?.(successMessage);
       }
+
+      const successMessage = '예약이 성공적으로 등록되었습니다.';
+      setBookingSuccessMessage(successMessage);
+      onSuccess?.(successMessage);
 
       onClose();
       setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
@@ -291,7 +448,8 @@ export default function NewBookingModal({
   }, [isOpen, isDatePickerOpen]);
 
   const shopOptions = shops.map((s: any) => ({ value: s.id, label: s.name }));
-  const designerOptions = designers.map((d: any) => ({ value: d.id, label: d.name }));
+  // Comment: "자원"은 디자이너/직원 선택인데, 여기서는 부모로부터 내려오는 designer 목록을 사용합니다.
+  const designerOptions = newBookingDesigners.map((d: any) => ({ value: d.id, label: d.name }));
   const timeOptions = EDIT_TIME_OPTIONS.map((label) => ({
     value: label,
     label: label.replace('AM', '오전').replace('PM', '오후'),
@@ -311,7 +469,13 @@ export default function NewBookingModal({
           <Button variant="ghost" onClick={handleCancel}>취소</Button>
           <Button
             loading={submitting}
-            disabled={!timeSlots[0]?.designerId || !bookingDate || !timeSlots[0]?.time}
+            disabled={
+              !selectedCustomerId ||
+              !shopId ||
+              !bookingDate ||
+              newBookingTimeSlots.length === 0 ||
+              newBookingTimeSlots.some((s) => !s.designerId || !s.time)
+            }
             onClick={handleSubmit}
           >
             저장
@@ -335,10 +499,13 @@ export default function NewBookingModal({
                   setCustomerSearch(e.target.value);
                   if (selectedCustomerId) {
                     setSelectedCustomerId(null);
+                    setNewBookingSelectedCustomerId(null);
+                    setSelectedCustomerSnapshot(null);
                   }
+                  setIsCustomerDropdownOpen(true);
                 }}
                 onFocus={() => {
-                  if (customerSearchResults.length > 0 && !selectedCustomerId) {
+                  if ((customerSearch.trim() || customerSearchResults.length > 0) && !selectedCustomerId) {
                     setIsCustomerDropdownOpen(true);
                   }
                 }}
@@ -362,6 +529,8 @@ export default function NewBookingModal({
                           className="px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 flex items-center justify-between"
                           onClick={() => {
                             setSelectedCustomerId(customer.id);
+                            setNewBookingSelectedCustomerId(customer.id);
+                            setSelectedCustomerSnapshot(customer);
                             setCustomerSearch(
                               `${customer.name || ''}${customer.phone ? ` (${customer.phone})` : ''}`.trim(),
                             );
@@ -384,16 +553,16 @@ export default function NewBookingModal({
             <Button onClick={onOpenCustomerRegistration}>고객등록</Button>
           </div>
 
-          {selectedCustomerId && selectedCustomerDetail ? (
+          {selectedCustomerId && (selectedCustomerDetail || customerDetail) ? (
             <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
               {/* Customer header */}
               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">
-                    {selectedCustomerDetail.name} ({selectedCustomerDetail.customer_number || selectedCustomerDetail.id})
+                    {(customerDetail || selectedCustomerDetail).name} ({(customerDetail || selectedCustomerDetail).customer_number || (customerDetail || selectedCustomerDetail).id})
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {selectedCustomerDetail.phone || '-'}
+                    {(customerDetail || selectedCustomerDetail).phone || '-'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -410,8 +579,12 @@ export default function NewBookingModal({
                     type="button"
                     onClick={() => {
                       setSelectedCustomerId(null);
+                      setNewBookingSelectedCustomerId(null);
+                      setSelectedCustomerSnapshot(null);
                       setCustomerSearch('');
                       setCustomerSearchResults([]);
+                      setCustomerDetail(null);
+                      setCustomerStats({});
                     }}
                     className="text-gray-400 hover:text-gray-600 p-1"
                   >
@@ -421,34 +594,43 @@ export default function NewBookingModal({
               </div>
               {/* Customer details */}
               <div className="px-4 py-3 space-y-3">
-                <div className="flex items-center gap-3">
-                  <p className="text-xs text-gray-500 w-20 flex-shrink-0">담당자</p>
-                  <p className="text-sm font-medium text-black">{selectedCustomerDetail.assigned_designer?.name || '-'}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <p className="text-xs text-gray-500 w-20 flex-shrink-0">최근 방문일</p>
-                  <p className="text-sm font-medium text-black">
-                    {customerStats?.lastVisitDate
-                      ? `${customerStats.daysSinceLastVisit}일전`
-                      : '-'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <p className="text-xs text-gray-500 w-20 flex-shrink-0">최근 1년 예약</p>
-                  <p className="text-sm font-medium text-black">
-                    {customerStats
-                      ? `${customerStats.appointmentsCount}건${(customerStats.cancelledCount ?? 0) > 0 ? ` (취소 ${customerStats.cancelledCount ?? 0}건)` : ''}`
-                      : '-'}
-                  </p>
-                </div>
-                <div>
-                  <textarea
-                    value={selectedCustomerDetail.memo || ''}
-                    readOnly
-                    placeholder="메모 없음"
-                    className="w-full min-h-[80px] border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none bg-gray-50 text-gray-700"
-                  />
-                </div>
+                {customerDetailLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                    <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                    과거 기록 불러오는 중...
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500 w-20 flex-shrink-0">담당자</p>
+                      <p className="text-sm font-medium text-black">{customerDetail?.assigned_designer?.name || '-'}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500 w-20 flex-shrink-0">최근 방문일</p>
+                      <p className="text-sm font-medium text-black">
+                        {customerStats?.lastVisitDate
+                          ? `${customerStats.daysSinceLastVisit}일전`
+                          : '-'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500 w-20 flex-shrink-0">최근 1년 예약</p>
+                      <p className="text-sm font-medium text-black">
+                        {customerStats.appointmentsCount != null
+                          ? `${customerStats.appointmentsCount}건${(customerStats.cancelledCount ?? 0) > 0 ? ` (취소 ${customerStats.cancelledCount ?? 0}건)` : ''}`
+                          : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <textarea
+                        value={customerDetail?.memo || ''}
+                        readOnly
+                        placeholder="메모 없음"
+                        className="w-full min-h-[80px] border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none bg-gray-50 text-gray-700"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ) : !selectedCustomerId ? (
@@ -592,146 +774,147 @@ export default function NewBookingModal({
             </div>
           )}
 
-          {/* Per-slot cards */}
-          <div className="space-y-3">
-            {timeSlots.map((slot, idx) => (
-              <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-3">
-                {/* Row 1: Designer + Add/Remove + Start Time + Duration */}
-                <div className="grid grid-cols-[1fr_auto_1fr_1fr] gap-3 items-end">
-                  <Select
-                    label="자원"
-                    options={designerOptions}
-                    placeholder="선택하세요"
-                    value={slot.designerId ?? ''}
-                    onChange={(e) => {
-                      const newDesignerId = e.target.value ? Number(e.target.value) : null;
-                      const updated = [...timeSlots];
-                      updated[idx] = { ...updated[idx], designerId: newDesignerId };
-                      setTimeSlots(updated);
-                      // 첫 번째 슬롯 디자이너 변경 시, 수동 설정 아닌 경우 지점 자동 변경
-                      if (idx === 0 && newDesignerId && !shopManuallySet.current) {
-                        const designer = designers.find((d: any) => d.id === newDesignerId);
-                        if (designer?.shop_id) {
-                          setShopId(designer.shop_id);
-                        }
-                      }
-                    }}
-                    wrapperClassName="min-w-0"
-                  />
-                  <div className="flex items-center gap-1 pb-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTimeSlots((prev) => {
-                          const newSlots = [...prev];
-                          newSlots.splice(idx + 1, 0, { ...DEFAULT_NEW_BOOKING_TIME_SLOT });
-                          return newSlots;
-                        });
-                      }}
-                      className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-                      title="자원 추가"
-                    >
-                      <span className="material-symbols-outlined text-base">add</span>
-                    </button>
-                    {timeSlots.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTimeSlots((prev) => prev.filter((_, i) => i !== idx));
-                          if (activeSlotIndex === idx) setActiveSlotIndex(null);
-                          else if (activeSlotIndex !== null && activeSlotIndex > idx) {
-                            setActiveSlotIndex(activeSlotIndex - 1);
-                          }
-                        }}
-                        className="w-8 h-8 flex items-center justify-center border border-gray-300 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors"
-                        title="자원 삭제"
-                      >
-                        <span className="material-symbols-outlined text-base">close</span>
-                      </button>
-                    )}
-                  </div>
-                  <Select
-                    label="시작시간"
-                    options={timeOptions}
-                    value={slot.time}
-                    onChange={(e) => {
-                      const updated = [...timeSlots];
-                      updated[idx] = { ...updated[idx], time: e.target.value };
-                      setTimeSlots(updated);
-                    }}
-                    wrapperClassName="min-w-0"
-                  />
-                  <span className="flex items-center gap-1 text-sm text-gray-500">
-                    바로 방문
-                    <span className="material-symbols-outlined text-sm text-gray-400">help</span>
-                  </span>
+          {/* Single block 내부에 service/designer 선택 행만 추가 */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+            {/* Top row: 시작시간 + 추가 */}
+            <div className="flex items-end gap-2">
+              <div className="flex-1 min-w-0">
+                <Select
+                  label="시작시간"
+                  options={timeOptions}
+                  value={newBookingTimeSlots[0]?.time ?? ''}
+                  onChange={(e) => {
+                    const nextTime = e.target.value;
+                    setNewBookingTimeSlots((prev) =>
+                      prev.map((s, i) => (i === 0 ? { ...s, time: nextTime } : { ...s, time: nextTime })),
+                    );
+                  }}
+                  wrapperClassName="min-w-0"
+                />
               </div>
 
-              {/* Designer, Start Time, Duration Groups */}
-              <div className="space-y-4">
-                {newBookingTimeSlots.map((slot, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
-                      {/* Service - category services only (saved with service_id) */}
-                      <div className="min-w-0">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
-                        <select
-                          disabled={newBookingLoadingOptions}
-                          value={slot.serviceId != null ? String(slot.serviceId) : ''}
-                          onChange={(e) => {
-                            const updated = [...newBookingTimeSlots];
-                            const val = e.target.value;
-                            updated[index].serviceId = val ? Number(val) : null;
-                            if (val) {
-                              const svc = categoryServices.find((s) => s.id === Number(val));
-                              if (svc?.duration_minutes) {
-                                const rounded = Math.round(svc.duration_minutes / 30) * 30;
-                                updated[index].duration = Math.min(180, Math.max(30, rounded));
-                              }
-                            }
-                            setNewBookingTimeSlots(updated);
-                          }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
-                        >
-                          <option value="">
-                            {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
-                          </option>
-                          {!newBookingLoadingOptions &&
-                            categoryServices.map((s) => (
-                              <option key={s.id} value={String(s.id)}>
-                                {s.name}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
+              <button
+                type="button"
+                onClick={() => {
+                  // Comment: + 버튼은 "행(row)"만 추가해야 하며,
+                  // setNewBookingTimeSlots 업데이터 함수 안에서 다른 setState를 호출하지 않도록 분리합니다.
+                  const base = newBookingTimeSlots[0] ?? { ...DEFAULT_NEW_BOOKING_TIME_SLOT };
+                  const nextSlot: NewBookingTimeSlot = {
+                    ...DEFAULT_NEW_BOOKING_TIME_SLOT,
+                    time: base.time,
+                    duration: base.duration,
+                    selectedItems: [],
+                    serviceId: null,
+                    designerId: null,
+                  };
+                  const next = [...newBookingTimeSlots, nextSlot];
+                  setNewBookingTimeSlots(next);
+                  setActiveSlotIndex(next.length - 1);
+                }}
+                className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                title="추가"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+              </button>
+            </div>
 
-                      {/* Designer */}
-                      <div className="min-w-0">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
-                        <select
-                          disabled={newBookingLoadingOptions}
-                          value={slot.designerId ?? ''}
-                          onChange={(e) => {
-                            const updated = [...newBookingTimeSlots];
-                            updated[index].designerId = e.target.value ? Number(e.target.value) : null;
-                            setNewBookingTimeSlots(updated);
-                          }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
-                        >
-                          <option value="">
-                            {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
+            {/* Rows: 서비스 + 디자이너 (행 단위로만 추가) */}
+            {newBookingTimeSlots.map((slot, idx) => (
+              <div
+                key={idx}
+                className={
+                  idx === 0
+                    ? 'space-y-4'
+                    : 'space-y-4 pt-4 border-t border-gray-200'
+                }
+              >
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+                  <div className="min-w-0">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
+                    <select
+                      disabled={newBookingLoadingOptions}
+                      value={slot.serviceId != null ? String(slot.serviceId) : ''}
+                      onChange={(e) => {
+                        const updated = [...newBookingTimeSlots];
+                        const val = e.target.value;
+                        updated[idx].serviceId = val ? Number(val) : null;
+                        if (val) {
+                          const svc = categoryServices.find((s) => s.id === Number(val));
+                          if (svc?.duration_minutes) {
+                            const rounded = Math.round(svc.duration_minutes / 30) * 30;
+                            updated[idx].duration = Math.min(180, Math.max(30, rounded));
+                          }
+                        }
+                        setNewBookingTimeSlots(updated);
+                      }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
+                    >
+                      <option value="">
+                        {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
+                      </option>
+                      {!newBookingLoadingOptions &&
+                        categoryServices.map((s) => (
+                          <option key={s.id} value={String(s.id)}>
+                            {s.name}
                           </option>
-                          {!newBookingLoadingOptions &&
-                            newBookingDesigners.map((d: any) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="min-w-0 md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
+                    <div className="flex items-end gap-2">
+                      <select
+                        disabled={newBookingLoadingOptions}
+                        value={slot.designerId ?? ''}
+                        onChange={(e) => {
+                          const newDesignerId = e.target.value ? Number(e.target.value) : null;
+                          const updated = [...newBookingTimeSlots];
+                          updated[idx] = { ...updated[idx], designerId: newDesignerId };
+                          setNewBookingTimeSlots(updated);
+
+                          // 첫 행 디자이너 선택 시 지점 자동 세팅
+                          if (idx === 0 && newDesignerId && !shopManuallySet.current) {
+                            const designer = newBookingDesigners.find((d: any) => d.id === newDesignerId);
+                            if (designer?.shop_id) setShopId(designer.shop_id);
+                          }
+                        }}
+                        className="flex-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
+                      >
+                        <option value="">
+                          {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
+                        </option>
+                        {!newBookingLoadingOptions &&
+                          newBookingDesigners.map((d: any) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                      </select>
+
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewBookingTimeSlots((prev) => prev.filter((_, i) => i !== idx));
+                            setActiveSlotIndex((prev) => {
+                              if (prev == null) return prev;
+                              if (prev === idx) return Math.max(0, idx - 1);
+                              if (prev > idx) return prev - 1;
+                              return prev;
+                            });
+                          }}
+                          className="w-8 h-8 flex items-center justify-center border border-gray-300 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors"
+                          title="삭제"
+                        >
+                          <span className="material-symbols-outlined text-base">close</span>
+                        </button>
+                      )}
                     </div>
+                  </div>
+                </div>
 
-                {/* Row 2: Item selection buttons */}
+                {/* 항목 선택 */}
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium text-gray-700">항목 선택</label>
                   <Button
@@ -758,7 +941,7 @@ export default function NewBookingModal({
                   </Button>
                 </div>
 
-                {/* Row 3: Selected items for this slot */}
+                {/* 선택된 항목 */}
                 {slot.selectedItems.length > 0 && (
                   <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
                     {slot.selectedItems.map((item) => (
@@ -768,11 +951,13 @@ export default function NewBookingModal({
                       >
                         <div>
                           <span className="text-sm text-gray-900">{item.name}</span>
-                          <span className="text-xs text-gray-500 ml-2">{formatDurationLabel(item.durationMinutes ?? 0)}</span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {formatDurationLabel(item.durationMinutes ?? 0)}
+                          </span>
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleRemoveBookingItem(index, item.id, item.type)}
+                          onClick={() => handleRemoveBookingItem(idx, item.id, item.type)}
                           className="text-gray-400 hover:text-red-500 transition-colors"
                         >
                           <span className="material-symbols-outlined text-base">close</span>
@@ -782,9 +967,6 @@ export default function NewBookingModal({
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-            </div>
             ))}
           </div>
 

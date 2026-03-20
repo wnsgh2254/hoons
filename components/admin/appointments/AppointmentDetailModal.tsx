@@ -7,6 +7,7 @@ import { Z } from '@/lib/constants';
 
 interface AppointmentDetailModalProps {
   booking: BookingWithRelations | null;
+  relatedBookings?: BookingWithRelations[];
   onClose: () => void;
   onEdit: (booking: any) => void;
   bookingTimeToLabel: (time: string) => string;
@@ -14,11 +15,40 @@ interface AppointmentDetailModalProps {
 
 export default function AppointmentDetailModal({
   booking,
+  relatedBookings,
   onClose,
   onEdit,
   bookingTimeToLabel,
 }: AppointmentDetailModalProps) {
   if (!booking) return null;
+
+  const groupBookings: BookingWithRelations[] = (() => {
+    const all = [booking, ...(relatedBookings || [])].filter(Boolean);
+    // Deduplicate by booking id
+    const seen = new Set<number>();
+    return all.filter((b) => {
+      if (!b?.id) return false;
+      if (seen.has(b.id)) return false;
+      seen.add(b.id);
+      return true;
+    });
+  })();
+
+  const designerNames = Array.from(
+    new Map(
+      groupBookings
+        .filter((b) => b.designer_id != null)
+        .map((b) => [b.designer_id, b.designer?.name || ''])
+    ).values(),
+  ).filter(Boolean);
+
+  const serviceNames = Array.from(
+    new Set(
+      groupBookings
+        .map((b) => (b as any).custom_service_name || b.service?.name || '')
+        .filter(Boolean)
+    )
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -39,13 +69,13 @@ export default function AppointmentDetailModal({
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">시술</span>
             <span className="font-medium text-gray-900">
-              {(booking as any).custom_service_name || booking.service?.name || '—'}
+              {serviceNames.length > 0 ? serviceNames.join(', ') : '—'}
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">디자이너</span>
             <span className="font-medium text-gray-900">
-              {booking.designer?.name || '—'}
+              {designerNames.length > 0 ? designerNames.join(', ') : '—'}
             </span>
           </div>
           <div className="flex justify-between text-sm">
