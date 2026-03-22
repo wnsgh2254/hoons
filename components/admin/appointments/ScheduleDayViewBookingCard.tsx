@@ -3,7 +3,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
-import { getBookingStatusColor } from '@/lib/utils/appointment-utils';
+import { resolveBookingCardStatusColor } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 
 export interface ScheduleDayViewMenuHandlers {
@@ -81,9 +81,7 @@ function ScheduleDayViewBookingCard({
     booking.service?.name ||
     'Service';
   const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
-  const statusColor = getBookingStatusColor(
-    (booking as any).status || (booking as any).booking_status
-  );
+  const statusColor = resolveBookingCardStatusColor(booking as any);
   const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
   const customerId = (booking as any).customer?.id || (booking as any).customer_id || booking.id;
   const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone || '';

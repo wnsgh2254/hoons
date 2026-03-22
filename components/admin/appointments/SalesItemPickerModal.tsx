@@ -128,7 +128,7 @@ export default function SalesItemPickerModal({
         type: activeTab,
         manager: selectedManager,
       });
-      onClose();
+      // Parent onSelect closes the modal; avoid onClose here (would run before batched state updates).
     }
   };
 
@@ -143,10 +143,8 @@ export default function SalesItemPickerModal({
         ...item,
         manager: selectedManager,
       }));
-      // 모든 항목을 배열로 한 번에 전달
+      // 모든 항목을 배열로 한 번에 전달 (parent onSelect closes modal)
       onSelect(itemsWithManager);
-      // 모든 항목을 추가한 후 모달 닫기
-      onClose();
     } else if (activeTab === 'prepaid' && selectedPrepaid && customPrice) {
       // 정액권 탭인 경우 선택한 정액권 정보를 전달
       const prepaidItem = {
@@ -157,7 +155,6 @@ export default function SalesItemPickerModal({
         manager: selectedManager,
       };
       onSelect(prepaidItem);
-      onClose();
     } else {
       // 서비스/제품이 아닌 경우는 이미 handleItemSelect에서 처리됨
       onClose();

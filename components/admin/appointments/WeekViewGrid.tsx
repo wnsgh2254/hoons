@@ -10,7 +10,7 @@ import {
   GRID_END_HOUR,
   GRID_30MIN_HEIGHT,
   DESIGNER_COLORS,
-  getBookingStatusColor,
+  resolveBookingCardStatusColor,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 import BookingCard from './BookingCard';
@@ -77,6 +77,7 @@ interface WeekViewGridProps {
   setViewingBookingDetail: (booking: BookingWithRelations | null) => void;
   onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
   onCancelBooking?: (booking: BookingWithRelations) => void;
+  onRegisterSale?: (booking: BookingWithRelations) => void;
   movingBooking: BookingWithRelations | null;
   weekViewAvailableDates?: Set<string>;
   setNewBookingDate?: (date: string) => void;
@@ -121,6 +122,7 @@ export default function WeekViewGrid({
   setViewingBookingDetail,
   onBookingStatusChange,
   onCancelBooking,
+  onRegisterSale,
   movingBooking,
   onSelectMoveTarget,
   weekViewAvailableDates = new Set<string>(),
@@ -944,9 +946,7 @@ export default function WeekViewGrid({
                 b.service?.name ||
                 'Service';
               const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
-              const statusColor = getBookingStatusColor(
-                (b as any).status || (b as any).booking_status,
-              );
+              const statusColor = resolveBookingCardStatusColor(b as any);
               const customerName =
                 (b as any).customer?.name || (b as any).customer_name || '고객';
               const customerId =
@@ -1267,8 +1267,7 @@ export default function WeekViewGrid({
                               }
                             } : undefined}
                             onRegisterSale={(booking) => {
-                              // TODO: 판매 등록 구현
-                              console.log('Register sale:', booking.id);
+                              onRegisterSale?.(booking);
                               setBookingMenuOpen(null);
                               setBookingMenuPosition(null);
                               if (bookingMenuOriginalPositionRef.current) {

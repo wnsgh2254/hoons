@@ -56,6 +56,8 @@ export interface Booking {
   status: 'pending' | 'confirmed' | 'cancelled' | 'noshow';
   deposit_amount: number;
   total_amount: number | null;
+  /** 0 | 1 — set when admin completes sale registration for this visit */
+  sale_completed?: number;
   memo?: string | null;
   color_label?: string | null;
   created_at: string;

@@ -10,6 +10,22 @@ import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesDetailData, TempSalesData } from '@/lib/types';
 
+function formatAudAmount(value: number): string {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+/** Gross sale total minus deposit credit (capped), never negative */
+function netDueAfterDeposit(grossTotal: number, depositPaid: number): number {
+  const g = Math.max(0, grossTotal);
+  const d = Math.max(0, depositPaid);
+  return Math.max(0, g - Math.min(d, g));
+}
+
 type DiscountType = 'percentage' | 'amount' | 'category';
 
 type SalesItem = {
@@ -44,6 +60,8 @@ interface SalesRegistrationModalProps {
   shopId?: number | null;
   // 임시저장 관련
   bookingId?: number | null;
+  /** Already-paid deposit for linked booking (AUD); reduces net due / 합계 */
+  bookingDepositPaid?: number | null;
   tempSaveData?: TempSalesData | null;
   onTemporarySave?: () => void;
   onDeleteTempSave?: () => void;
@@ -59,6 +77,7 @@ export default function SalesRegistrationModal({
   editSaleId,
   shopId,
   bookingId,
+  bookingDepositPaid,
   tempSaveData,
   onTemporarySave,
   onDeleteTempSave,
@@ -110,6 +129,7 @@ export default function SalesRegistrationModal({
   const [prepaidDeductionAmount, setPrepaidDeductionAmount] = useState(0);
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
+  const [depositCredit, setDepositCredit] = useState(0);
 
   // 정액권 잔액 확인 헬퍼 함수
   const validatePrepaidBalance = (newDeductionAmount: number): boolean => {
@@ -118,11 +138,12 @@ export default function SalesRegistrationModal({
     return newDeductionAmount <= customerPrepaidBalance;
   };
 
-  // 받을 금액 계산 헬퍼 함수
-  const calculateAmountToReceive = (itemsTotal: number, prepaidDeduction: number): number => {
+  // 받을 금액 계산 헬퍼 함수 (gross total before deposit)
+  const calculateAmountToReceive = (grossTotal: number, prepaidDeduction: number): number => {
+    const netDue = netDueAfterDeposit(grossTotal, depositCredit);
     const positivePaymentAmount = Math.max(0, paymentAmounts.cash) + Math.max(0, paymentAmounts.card) + Math.max(0, paymentAmounts.bank_transfer);
     const negativePaymentAmount = Math.abs(Math.min(0, paymentAmounts.cash)) + Math.abs(Math.min(0, paymentAmounts.card)) + Math.abs(Math.min(0, paymentAmounts.bank_transfer));
-    return itemsTotal - positivePaymentAmount - negativePaymentAmount - prepaidDeduction;
+    return netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeduction;
   };
 
   // 정액권 차감 적용 및 금액 업데이트 헬퍼 함수
@@ -167,11 +188,12 @@ export default function SalesRegistrationModal({
   };
 
   // 확인 알림 표시 헬퍼 함수
-  const showOutstandingAmountConfirmation = (amountToReceive: number, onConfirm: () => void) => {
+  const showOutstandingAmountConfirmation = (outstanding: number, onConfirm: () => void) => {
+    const aud = formatAudAmount(outstanding);
     setConfirmationAlertData({
       title: '알림',
-      message: `미수금이 ${amountToReceive.toLocaleString()}원 발생됩니다. 계산완료 하시겠습니까?`,
-      highlightText: `${amountToReceive.toLocaleString()}원`,
+      message: `미수금이 ${aud} 발생됩니다. 계산완료 하시겠습니까?`,
+      highlightText: aud,
       onConfirm: async () => {
         await onConfirm();
         setIsConfirmationAlertOpen(false);
@@ -201,13 +223,14 @@ export default function SalesRegistrationModal({
     
     const newSalesAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const newDiscountAmount = items.reduce((sum, item) => sum + item.discount, 0);
-    const newTotal = newSalesAmount - newDiscountAmount;
-    
+    const grossTotal = newSalesAmount - newDiscountAmount;
+    const netDue = netDueAfterDeposit(grossTotal, depositCredit);
+
     setSalesAmount(newSalesAmount);
     setDiscountAmount(newDiscountAmount);
-    setTotal(newTotal);
-    // 받을 금액 = 합계 - 양수 결제 금액 - 음수 결제 금액의 절댓값 - 정액권 차감 금액
-    setAmountToReceive(newTotal - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount);
+    setTotal(grossTotal);
+    // 받을 금액 = (합계 − 예수금) − 결제 − 정액권
+    setAmountToReceive(netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount);
   };
 
   // 판매 항목 추가 함수
@@ -250,6 +273,10 @@ export default function SalesRegistrationModal({
 
   useEffect(() => {
     if (isOpen) {
+      const initialDeposit =
+        initialData && editSaleId ? 0 : Math.max(0, Number(bookingDepositPaid) || 0);
+      setDepositCredit(initialDeposit);
+
       // 서브 모달 상태 초기화 (공통)
       setIsDiscountModalOpen(false);
       setSelectedItemForDiscount(null);
@@ -296,9 +323,11 @@ export default function SalesRegistrationModal({
         const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
         setSalesAmount(newSalesAmount);
         setDiscountAmount(newDiscountAmount);
-        setTotal(newSalesAmount - newDiscountAmount);
+        const gross = newSalesAmount - newDiscountAmount;
+        setTotal(gross);
         const totalPaid = (initialData.cash_amount || 0) + (initialData.card_amount || 0) + (initialData.bank_transfer_amount || 0);
-        setAmountToReceive((newSalesAmount - newDiscountAmount) - totalPaid - newPrepaidDeduction);
+        const netDue = netDueAfterDeposit(gross, 0);
+        setAmountToReceive(netDue - totalPaid - newPrepaidDeduction);
       } else if (tempSaveData) {
         // 임시저장 복원 모드
         const mappedItems: SalesItem[] = tempSaveData.salesItems.map((item) => ({
@@ -332,9 +361,11 @@ export default function SalesRegistrationModal({
         const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
         setSalesAmount(newSalesAmount);
         setDiscountAmount(newDiscountAmount);
-        setTotal(newSalesAmount - newDiscountAmount);
+        const grossT = newSalesAmount - newDiscountAmount;
+        setTotal(grossT);
         const totalPaid = (tempSaveData.paymentAmounts.cash || 0) + (tempSaveData.paymentAmounts.card || 0) + (tempSaveData.paymentAmounts.bank_transfer || 0);
-        setAmountToReceive((newSalesAmount - newDiscountAmount) - totalPaid - newPrepaidDeduction);
+        const netDueT = netDueAfterDeposit(grossT, initialDeposit);
+        setAmountToReceive(netDueT - totalPaid - newPrepaidDeduction);
       } else {
         // 등록 모드: 모든 상태 초기화
         setSalesItems([]);
@@ -375,6 +406,8 @@ export default function SalesRegistrationModal({
 
   if (!isOpen || !customer) return null;
 
+  const netTotalDisplay = netDueAfterDeposit(total, depositCredit);
+
   const handleAddItem = () => {
     onOpenItemPicker?.(activeTab);
   };
@@ -388,14 +421,17 @@ export default function SalesRegistrationModal({
     // 받을 금액 확인
     const positivePaymentAmount = Math.max(0, paymentAmounts.cash) + Math.max(0, paymentAmounts.card) + Math.max(0, paymentAmounts.bank_transfer);
     const negativePaymentAmount = Math.abs(Math.min(0, paymentAmounts.cash)) + Math.abs(Math.min(0, paymentAmounts.card)) + Math.abs(Math.min(0, paymentAmounts.bank_transfer));
-    const currentAmountToReceive = total - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
+    const grossTotal = salesAmount - discountAmount;
+    const netDue = netDueAfterDeposit(grossTotal, depositCredit);
+    const currentAmountToReceive = netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
 
     // 받을 금액이 남아있으면 확인 알림 표시
     if (currentAmountToReceive > 0) {
+      const aud = formatAudAmount(currentAmountToReceive);
       setConfirmationAlertData({
         title: '알림',
-        message: `미수금이 ${currentAmountToReceive.toLocaleString()}원 발생됩니다. 계산완료 하시겠습니까?`,
-        highlightText: `${currentAmountToReceive.toLocaleString()}원`,
+        message: `미수금이 ${aud} 발생됩니다. 계산완료 하시겠습니까?`,
+        highlightText: aud,
         onConfirm: async () => {
           await performSaleRegistration();
         },
@@ -427,6 +463,7 @@ export default function SalesRegistrationModal({
         body: JSON.stringify({
           customer_id: customer.id,
           shop_id: selectedShopId || null,
+          booking_id: bookingId ?? undefined,
           items: salesItems.map(item => ({
             type: item.type,
             name: item.name,
@@ -491,8 +528,9 @@ export default function SalesRegistrationModal({
       // 받을 금액 계산
       const positivePaymentAmount = Math.max(0, newAmounts.cash) + Math.max(0, newAmounts.card) + Math.max(0, newAmounts.bank_transfer);
       const negativePaymentAmount = Math.abs(Math.min(0, newAmounts.cash)) + Math.abs(Math.min(0, newAmounts.card)) + Math.abs(Math.min(0, newAmounts.bank_transfer));
-      const newTotal = salesAmount - discountAmount;
-      const newAmountToReceive = newTotal - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
+      const gross = salesAmount - discountAmount;
+      const netDue = netDueAfterDeposit(gross, depositCredit);
+      const newAmountToReceive = netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
       
       // 받을 금액이 0이면 판매 등록 완료
       // NOTE: handleComplete()는 paymentAmounts state를 다시 읽기 때문에,
@@ -504,10 +542,11 @@ export default function SalesRegistrationModal({
         setIsPaymentInputModalOpen(false);
       } else {
         // 받을 금액이 남아있으면 확인 알림 표시
+        const aud = formatAudAmount(newAmountToReceive);
         setConfirmationAlertData({
           title: '알림',
-          message: `미수금이 ${newAmountToReceive.toLocaleString()}원 발생됩니다. 계산완료 하시겠습니까?`,
-          highlightText: `${newAmountToReceive.toLocaleString()}원`,
+          message: `미수금이 ${aud} 발생됩니다. 계산완료 하시겠습니까?`,
+          highlightText: aud,
           onConfirm: async () => {
             await performSaleRegistration();
             setIsPaymentInputModalOpen(false);
@@ -709,7 +748,7 @@ export default function SalesRegistrationModal({
                     salesItems.map((item) => (
                       <tr key={item.id} className="border-t border-gray-100">
                         <td className="py-3 px-4 text-sm text-gray-900">{item.name}</td>
-                        <td className="py-3 px-4 text-sm text-gray-900">{item.unitPrice.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-sm text-gray-900">{formatAudAmount(item.unitPrice)}</td>
                         <td 
                           className="py-3 px-4 text-sm text-gray-900"
                         >
@@ -789,13 +828,13 @@ export default function SalesRegistrationModal({
                             ? `${item.discountValue}%`
                             : item.discountType === 'amount' && item.discountValue !== undefined
                             ? typeof item.discountValue === 'number'
-                              ? item.discountValue.toLocaleString()
-                              : Number(item.discountValue).toLocaleString()
+                              ? formatAudAmount(item.discountValue)
+                              : formatAudAmount(Number(item.discountValue))
                             : item.discount > 0
-                            ? item.discount.toLocaleString()
+                            ? formatAudAmount(item.discount)
                             : ''}
                         </td>
-                        <td className="py-3 px-4 text-sm text-gray-900">{item.amount.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-sm text-gray-900">{formatAudAmount(item.amount)}</td>
                         <td 
                           className="py-3 px-4 text-sm text-gray-900 cursor-pointer hover:bg-gray-50 transition-colors"
                           onClick={(e) => {
@@ -824,7 +863,7 @@ export default function SalesRegistrationModal({
                             setIsPrepaidDeductionModalOpen(true);
                           }}
                         >
-                          {item.prepaidDeduction.toLocaleString()}
+                          {formatAudAmount(item.prepaidDeduction)}
                         </td>
                         <td className="py-3 px-4">
                           <button
@@ -856,15 +895,21 @@ export default function SalesRegistrationModal({
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-700">판매 금액</span>
-                <span className="text-sm font-medium text-gray-900">{salesAmount.toLocaleString()}</span>
+                <span className="text-sm font-medium text-gray-900">{formatAudAmount(salesAmount)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-700">할인 금액</span>
-                <span className="text-sm font-medium text-gray-900">{discountAmount.toLocaleString()}</span>
+                <span className="text-sm font-medium text-gray-900">{formatAudAmount(discountAmount)}</span>
               </div>
+              {depositCredit > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-700">예수금 (납부됨)</span>
+                  <span className="text-sm font-medium text-emerald-700">{formatAudAmount(depositCredit)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-900">합계</span>
-                <span className="text-sm font-medium text-gray-900">{total.toLocaleString()}</span>
+                <span className="text-sm font-medium text-gray-900">합계 (결제대상)</span>
+                <span className="text-sm font-medium text-gray-900">{formatAudAmount(netTotalDisplay)}</span>
               </div>
               
               {/* Payment Amounts Display */}
@@ -875,7 +920,8 @@ export default function SalesRegistrationModal({
                       <span className="text-gray-700">현금</span>
                       <div className="flex items-center gap-2">
                         <span className={`font-medium ${paymentAmounts.cash < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {paymentAmounts.cash < 0 ? '-' : ''}{Math.abs(paymentAmounts.cash).toLocaleString()}
+                          {paymentAmounts.cash < 0 ? '-' : ''}
+                          {formatAudAmount(Math.abs(paymentAmounts.cash))}
                         </span>
                         <button
                           type="button"
@@ -901,7 +947,8 @@ export default function SalesRegistrationModal({
                       <span className="text-gray-700">카드</span>
                       <div className="flex items-center gap-2">
                         <span className={`font-medium ${paymentAmounts.card < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {paymentAmounts.card < 0 ? '-' : ''}{Math.abs(paymentAmounts.card).toLocaleString()}
+                          {paymentAmounts.card < 0 ? '-' : ''}
+                          {formatAudAmount(Math.abs(paymentAmounts.card))}
                         </span>
                         <button
                           type="button"
@@ -927,7 +974,8 @@ export default function SalesRegistrationModal({
                       <span className="text-gray-700">계좌이체</span>
                       <div className="flex items-center gap-2">
                         <span className={`font-medium ${paymentAmounts.bank_transfer < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {paymentAmounts.bank_transfer < 0 ? '-' : ''}{Math.abs(paymentAmounts.bank_transfer).toLocaleString()}
+                          {paymentAmounts.bank_transfer < 0 ? '-' : ''}
+                          {formatAudAmount(Math.abs(paymentAmounts.bank_transfer))}
                         </span>
                         <button
                           type="button"
@@ -957,7 +1005,7 @@ export default function SalesRegistrationModal({
                   <span className="text-gray-700">정액권</span>
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-red-600">
-                      -{prepaidDeductionAmount.toLocaleString()}x
+                      -{formatAudAmount(prepaidDeductionAmount)}
                     </span>
                     <button
                       type="button"
@@ -985,7 +1033,7 @@ export default function SalesRegistrationModal({
               
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-700">받을 금액</span>
-                <span className="text-sm font-semibold text-red-600">{amountToReceive.toLocaleString()}</span>
+                <span className="text-sm font-semibold text-red-600">{formatAudAmount(amountToReceive)}</span>
               </div>
             </div>
 

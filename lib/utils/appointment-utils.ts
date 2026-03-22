@@ -119,6 +119,35 @@ export function getBookingStatusColor(status: string | null | undefined): {
   }
 }
 
+/** Booking row shape for schedule card coloring */
+export type BookingLikeForStatusColor = {
+  status?: string | null;
+  booking_status?: string | null;
+  sale_completed?: number | boolean | null;
+};
+
+/**
+ * Blue (PAID style) when bookings.sale_completed = 1 after admin sale registration.
+ * Deposit alone does not turn the card blue. Cancelled stays grey.
+ */
+export function resolveBookingCardStatusColor(
+  booking: BookingLikeForStatusColor,
+): ReturnType<typeof getBookingStatusColor> {
+  const statusStr = booking.status ?? booking.booking_status;
+  const base = getBookingStatusColor(statusStr);
+  const st = (statusStr || '').toLowerCase();
+  if (st === 'cancelled' || st === 'canceled') {
+    return base;
+  }
+  const raw = booking.sale_completed;
+  const saleDone =
+    raw === 1 || raw === true || String(raw) === '1';
+  if (saleDone) {
+    return getBookingStatusColor('PAID');
+  }
+  return base;
+}
+
 // Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
 export function getSydneyToday(): string {
   const sydney = new Date(

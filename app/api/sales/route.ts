@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     const {
       customer_id,
       shop_id,
+      booking_id,
       items,
       sales_amount,
       discount_amount,
@@ -133,6 +134,47 @@ export async function POST(request: NextRequest) {
         { error: '판매 항목 등록에 실패했습니다.' },
         { status: 500 }
       );
+    }
+
+    if (booking_id != null && booking_id !== '') {
+      const bid = Number(booking_id);
+      if (!Number.isNaN(bid)) {
+        const { data: bk, error: bkSelErr } = await supabase
+          .from('bookings')
+          .select('id, customer_id')
+          .eq('id', bid)
+          .maybeSingle();
+        if (bkSelErr || !bk) {
+          console.error('sale_completed: booking lookup failed', bkSelErr);
+          await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
+          await supabase.from('sales').delete().eq('id', saleHeader.id);
+          return NextResponse.json(
+            { error: '연결된 예약을 찾을 수 없습니다.' },
+            { status: 400 },
+          );
+        }
+        if (bk.customer_id != null && Number(bk.customer_id) !== Number(customer_id)) {
+          await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
+          await supabase.from('sales').delete().eq('id', saleHeader.id);
+          return NextResponse.json(
+            { error: '예약과 고객이 일치하지 않습니다.' },
+            { status: 400 },
+          );
+        }
+        const { error: updErr } = await supabase
+          .from('bookings')
+          .update({ sale_completed: 1 })
+          .eq('id', bid);
+        if (updErr) {
+          console.error('Error setting booking sale_completed:', updErr);
+          await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
+          await supabase.from('sales').delete().eq('id', saleHeader.id);
+          return NextResponse.json(
+            { error: '예약 계산완료 표시에 실패했습니다.' },
+            { status: 500 },
+          );
+        }
+      }
     }
 
     // 포인트 적립이 있으면 고객 포인트 업데이트

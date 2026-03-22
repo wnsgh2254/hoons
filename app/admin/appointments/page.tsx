@@ -49,7 +49,6 @@ import {
   GRID_HOUR_HEIGHT,
   GRID_30MIN_HEIGHT,
   DESIGNER_COLORS,
-  getBookingStatusColor,
   getSydneyToday,
   getWeekStart,
   getWeekEnd,
@@ -237,6 +236,8 @@ export default function AppointmentsManagementPage() {
   } | null>(null);
   const [isSalesItemPickerModalOpen, setIsSalesItemPickerModalOpen] = useState(false);
   const [salesItemPickerTab, setSalesItemPickerTab] = useState<'service' | 'product' | 'prepaid'>('service');
+  /** true: 항목 선택에서 취소 시 판매 등록 모달까지 닫음 (예약에서 판매등록으로 연 경우만) */
+  const [closeSalesFlowOnPickerClose, setCloseSalesFlowOnPickerClose] = useState(false);
   
   // Edit Prepaid Member Modal State
   const [isEditPrepaidMemberModalOpen, setIsEditPrepaidMemberModalOpen] = useState(false);
@@ -255,6 +256,10 @@ export default function AppointmentsManagementPage() {
   const [tempSaleBookingIds, setTempSaleBookingIds] = useState<Set<number>>(new Set());
   const [currentTempSaleBookingId, setCurrentTempSaleBookingId] = useState<number | null>(null);
   const [currentTempSaleData, setCurrentTempSaleData] = useState<any | null>(null);
+  /** 예약 카드에서 판매등록 열 때 연결할 bookings.id (계산완료 플래그용) */
+  const [salesLinkedBookingId, setSalesLinkedBookingId] = useState<number | null>(null);
+  /** 예약에 이미 납부된 예수금 (AUD), 판매 모달 합계 차감용 */
+  const [salesLinkedDepositPaid, setSalesLinkedDepositPaid] = useState(0);
 
   // Shop ID for sales/refund modals
   const [salesRegistrationShopId, setSalesRegistrationShopId] = useState<number | null>(null);
@@ -1746,7 +1751,14 @@ export default function AppointmentsManagementPage() {
         const customerId = (booking as any).customer?.id || (booking as any).customer_id;
         const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
         const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
+        if (booking.id) {
+          setSalesLinkedBookingId(booking.id);
+        }
+        setSalesLinkedDepositPaid(
+          Math.max(0, Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0),
+        );
         if (customerId) {
+          setCloseSalesFlowOnPickerClose(true);
           setViewingCustomerId(customerId);
           loadCustomerInfo(customerId);
           setSalesRegistrationCustomer({
@@ -2123,6 +2135,36 @@ export default function AppointmentsManagementPage() {
                           onCancelBooking={(booking) => {
                             setBookingToCancel(booking);
                             setIsCancelBookingModalOpen(true);
+                          }}
+                          onRegisterSale={(booking) => {
+                            const customerId = (booking as any).customer?.id || (booking as any).customer_id;
+                            const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
+                            const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
+                            if (booking.id) setSalesLinkedBookingId(booking.id);
+                            setSalesLinkedDepositPaid(
+                              Math.max(
+                                0,
+                                Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0,
+                              ),
+                            );
+                            if (customerId) {
+                              setCloseSalesFlowOnPickerClose(true);
+                              setViewingCustomerId(customerId);
+                              loadCustomerInfo(customerId);
+                              setSalesRegistrationCustomer({
+                                id: customerId,
+                                name: customerName,
+                                phone: customerPhone,
+                              });
+                              setIsSalesRegistrationModalOpen(true);
+                              setSalesItemPickerTab('service');
+                              setIsSalesItemPickerModalOpen(true);
+                            }
+                            setBookingMenuOpen(null);
+                            setBookingMenuPosition(null);
+                            if (bookingMenuOriginalPositionRef.current) {
+                              bookingMenuOriginalPositionRef.current = null;
+                            }
                           }}
                           movingBooking={movingBooking}
                           onSelectMoveTarget={(target) => {
@@ -3406,6 +3448,8 @@ export default function AppointmentsManagementPage() {
         onRegisterSale={() => {
           // 고객 정보 모달에서 판매 등록 모달 열기
           if (viewingCustomer) {
+            setSalesLinkedBookingId(null);
+            setSalesLinkedDepositPaid(0);
             setSalesRegistrationCustomer({
               id: viewingCustomer.id,
               name: viewingCustomer.name || '',
@@ -3484,8 +3528,12 @@ export default function AppointmentsManagementPage() {
           setEditingSaleId(null);
           setCurrentTempSaleBookingId(null);
           setCurrentTempSaleData(null);
+          setSalesLinkedBookingId(null);
+          setSalesLinkedDepositPaid(0);
+          setCloseSalesFlowOnPickerClose(false);
         }}
         onOpenItemPicker={(tab) => {
+          setCloseSalesFlowOnPickerClose(false);
           setSalesItemPickerTab(tab);
           setIsSalesItemPickerModalOpen(true);
         }}
@@ -3495,10 +3543,26 @@ export default function AppointmentsManagementPage() {
           }
           setEditingSaleData(null);
           setEditingSaleId(null);
+          await refreshBookings();
+          if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
+            const startDate = new Date(weekViewStartDate);
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 6);
+            const startDateStr = startDate.toISOString().split('T')[0];
+            const endDateStr = endDate.toISOString().split('T')[0];
+            const weekRes = await fetch(
+              `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`
+            );
+            const weekData = await weekRes.json();
+            if (weekRes.ok && weekData.bookings) {
+              setWeekViewBookings(weekData.bookings);
+            }
+          }
         }}
         initialData={editingSaleData}
         editSaleId={editingSaleId}
-        bookingId={currentTempSaleBookingId}
+        bookingId={salesLinkedBookingId ?? currentTempSaleBookingId}
+        bookingDepositPaid={salesLinkedDepositPaid}
         tempSaveData={currentTempSaleData}
         onTemporarySave={() => {
           refreshTempSaleBookingIds();
@@ -3540,8 +3604,23 @@ export default function AppointmentsManagementPage() {
         activeTab={salesItemPickerTab}
         onClose={() => {
           setIsSalesItemPickerModalOpen(false);
+          if (closeSalesFlowOnPickerClose) {
+            setCloseSalesFlowOnPickerClose(false);
+            setIsSalesRegistrationModalOpen(false);
+            setSalesRegistrationCustomer(null);
+            setSalesRegistrationShopId(null);
+            setEditingSaleData(null);
+            setEditingSaleId(null);
+            setCurrentTempSaleBookingId(null);
+            setCurrentTempSaleData(null);
+            setSalesLinkedBookingId(null);
+            setSalesLinkedDepositPaid(0);
+            setViewingCustomerId(null);
+            setViewingCustomer(null);
+          }
         }}
         onSelect={(itemOrItems) => {
+          setCloseSalesFlowOnPickerClose(false);
           // 판매 등록 모달에 항목 추가
           if (typeof window !== 'undefined' && (window as any).addSalesItemToModal) {
             // 배열인 경우 (서비스/제품 탭에서 여러 개 선택)

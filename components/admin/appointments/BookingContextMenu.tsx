@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { getBookingStatusColor } from '@/lib/utils/appointment-utils';
+import { resolveBookingCardStatusColor } from '@/lib/utils/appointment-utils';
 import type { BookingWithRelations } from '@/lib/types';
 
 interface BookingContextMenuProps {
@@ -35,7 +35,7 @@ function BookingContextMenu({
 }: BookingContextMenuProps) {
   // fixed positioning style merge
   const mergedStyle = style || {};
-  const statusColor = getBookingStatusColor((booking as any).status || (booking as any).booking_status);
+  const statusColor = resolveBookingCardStatusColor(booking as any);
 
   // 고객 입장 (ARRIVED) - 보라색
   if (statusColor.statusEnum === 'ARRIVED') {
