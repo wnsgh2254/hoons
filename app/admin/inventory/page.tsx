@@ -43,7 +43,7 @@ function formatDateTime(dateStr: string | null | undefined): string {
   if (s.length >= 10) return s.slice(0, 10);
   return s;
 }
-
+// .,.,.,.
 type InventoryView = {
   title: string;
   subtitle: string;
