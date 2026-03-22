@@ -430,10 +430,12 @@ export default function BookingPage() {
     const durationParts: string[] = [];
     if (hours > 0) durationParts.push(`${hours}hr`);
     if (mins > 0) durationParts.push(`${mins}min`);
+    const rawPrice = item.starting_price != null ? Number(item.starting_price) : 0;
+    const itemPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
     return {
       id: `booking_item_${item.id}`,
       name: item.name,
-      price: 0,
+      price: itemPrice,
       priceLabel: '',
       duration: durationParts.join(' ') || '0min',
       description: '',
@@ -853,9 +855,9 @@ export default function BookingPage() {
                 <h1 className="text-3xl md:text-4xl font-normal tracking-tight text-slate-900 mb-2 uppercase">Secure Your Booking</h1>
                 <p className="text-gray-500">Pay your deposit by card to confirm your appointment.</p>
                 {customerGreeting && (
-                  <div className="mt-4 inline-flex items-center gap-3 border border-black px-4 py-2 bg-[#F4F4F4]">
-                    <span className="material-symbols-outlined text-base">person</span>
-                    <span className="text-sm font-normal tracking-widest uppercase">{customerGreeting}</span>
+                  <div className="mt-4 inline-flex items-center gap-3 border border-black px-4 py-2 bg-[#F4F4F4] text-slate-900">
+                    <span className="material-symbols-outlined text-base text-slate-900">person</span>
+                    <span className="text-sm font-normal tracking-widest uppercase text-slate-900">{customerGreeting}</span>
                   </div>
                 )}
               </div>

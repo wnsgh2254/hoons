@@ -251,6 +251,10 @@ export default function BookingItemPickerModal({
                 const totalMinutes = item.duration_hours * 60 + item.duration_minutes;
                 const durationLabel = formatDuration(totalMinutes);
                 const isSelected = selectedItems.some((s) => s.id === item.id && s.type === 'booking_item');
+                const startPrice = Number(item.starting_price ?? 0);
+                const priceLabel = Number.isFinite(startPrice)
+                  ? `$${startPrice.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : '$0.00';
                 return (
                   <button
                     key={item.id}
@@ -271,6 +275,7 @@ export default function BookingItemPickerModal({
                   >
                     <div className="font-medium text-gray-900">{item.name}</div>
                     <div className="text-xs text-gray-500 mt-1">{durationLabel}</div>
+                    <div className="text-xs font-medium text-gray-700 mt-0.5">{priceLabel}</div>
                   </button>
                 );
               })}

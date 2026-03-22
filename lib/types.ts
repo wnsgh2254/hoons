@@ -121,6 +121,8 @@ export interface BookingItemEntry {
   name: string;
   duration_hours: number;
   duration_minutes: number;
+  /** AUD; used for public booking deposit when item is chosen */
+  starting_price?: number;
   is_active: boolean;
   sort_order: number;
   created_at: string;

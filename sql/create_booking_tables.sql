@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS booking_items (
   name TEXT NOT NULL,
   duration_hours INTEGER NOT NULL DEFAULT 0,
   duration_minutes INTEGER NOT NULL DEFAULT 0,
+  starting_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

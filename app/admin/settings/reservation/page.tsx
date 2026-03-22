@@ -45,6 +45,7 @@ interface BookingItem {
   name: string;
   durationHours: number;
   durationMinutes: number;
+  startingPrice: number;
   isActive: boolean;
 }
 
@@ -92,6 +93,11 @@ function formatDuration(hours: number, minutes: number): string {
   if (hours > 0) parts.push(`${hours} 시간`);
   if (minutes > 0) parts.push(`${minutes} 분`);
   return parts.join(' ') || '0 분';
+}
+
+function formatAud(price: number): string {
+  const n = Number.isFinite(price) ? price : 0;
+  return `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 let nextId = 100;
@@ -838,15 +844,33 @@ function BookingItemModal({
   const [name, setName] = useState(initial?.name || '');
   const [durationHours, setDurationHours] = useState(initial?.durationHours ?? 1);
   const [durationMinutes, setDurationMinutes] = useState(initial?.durationMinutes ?? 0);
+  const [startingPriceInput, setStartingPriceInput] = useState('');
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(initial?.name || '');
+    setDurationHours(initial?.durationHours ?? 1);
+    setDurationMinutes(initial?.durationMinutes ?? 0);
+    const p = initial != null ? Number(initial.startingPrice) : NaN;
+    setStartingPriceInput(Number.isFinite(p) && p > 0 ? String(p) : '');
+    setIsActive(initial?.isActive ?? true);
+    setError(null);
+  }, [isOpen, initial]);
 
   const handleSave = () => {
     if (!name.trim()) {
       setError('항목명을 입력해주세요.');
       return;
     }
-    onSave({ name, durationHours, durationMinutes, isActive });
+    const raw = startingPriceInput.trim().replace(/,/g, '');
+    const price = raw === '' ? 0 : Number(raw);
+    if (raw !== '' && (Number.isNaN(price) || price < 0)) {
+      setError('시작 금액을 올바르게 입력해주세요.');
+      return;
+    }
+    onSave({ name, durationHours, durationMinutes, startingPrice: price, isActive });
   };
 
   return (
@@ -875,6 +899,26 @@ function BookingItemModal({
           placeholder="항목명을 입력하세요"
           required
         />
+
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">시작 금액</p>
+          <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-black focus-within:border-transparent">
+            <span className="text-sm font-medium text-gray-600 select-none" aria-hidden>
+              $
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={startingPriceInput}
+              onChange={(e) => setStartingPriceInput(e.target.value)}
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-gray-900 outline-none placeholder:text-gray-400"
+              placeholder="예: 120.00"
+              aria-label="시작 금액 (달러)"
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">고객 예약 시 총액·보증금(20%) 계산에 사용됩니다 (AUD).</p>
+        </div>
 
         <div>
           <p className="block text-sm font-medium text-gray-700 mb-2">소요시간</p>
@@ -922,6 +966,7 @@ function BookingItemsTab() {
         name: item.name,
         durationHours: item.duration_hours,
         durationMinutes: item.duration_minutes,
+        startingPrice: Number(item.starting_price ?? 0),
         isActive: item.is_active,
       })),
     );
@@ -938,6 +983,7 @@ function BookingItemsTab() {
           name: data.name,
           duration_hours: data.durationHours,
           duration_minutes: data.durationMinutes,
+          starting_price: data.startingPrice,
           is_active: data.isActive,
           sort_order: items.length,
         }),
@@ -963,6 +1009,7 @@ function BookingItemsTab() {
           name: data.name,
           duration_hours: data.durationHours,
           duration_minutes: data.durationMinutes,
+          starting_price: data.startingPrice,
           is_active: data.isActive,
         }),
       });
@@ -997,6 +1044,14 @@ function BookingItemsTab() {
       align: 'center' as const,
       render: (item: BookingItem) => (
         <span className={!item.isActive ? 'text-gray-400' : ''}>{item.name}</span>
+      ),
+    },
+    {
+      key: 'startingPrice',
+      header: '시작 금액',
+      align: 'center' as const,
+      render: (item: BookingItem) => (
+        <span className={!item.isActive ? 'text-gray-400' : ''}>{formatAud(item.startingPrice)}</span>
       ),
     },
     {

@@ -35,10 +35,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, duration_hours, duration_minutes, is_active, sort_order } = body;
+    const { name, duration_hours, duration_minutes, starting_price, is_active, sort_order } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'name은 필수입니다.' }, { status: 400 });
+    }
+
+    const priceNum =
+      starting_price === undefined || starting_price === null
+        ? 0
+        : Number(starting_price);
+    if (Number.isNaN(priceNum) || priceNum < 0) {
+      return NextResponse.json({ error: '시작 금액이 올바르지 않습니다.' }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -47,6 +55,7 @@ export async function POST(request: NextRequest) {
         name,
         duration_hours: duration_hours ?? 0,
         duration_minutes: duration_minutes ?? 0,
+        starting_price: priceNum,
         is_active: is_active ?? true,
         sort_order: sort_order ?? 0,
       })
@@ -69,7 +78,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, duration_hours, duration_minutes, is_active, sort_order } = body;
+    const { id, name, duration_hours, duration_minutes, starting_price, is_active, sort_order } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'id는 필수입니다.' }, { status: 400 });
@@ -79,6 +88,13 @@ export async function PATCH(request: NextRequest) {
     if (name !== undefined) updateData.name = name;
     if (duration_hours !== undefined) updateData.duration_hours = duration_hours;
     if (duration_minutes !== undefined) updateData.duration_minutes = duration_minutes;
+    if (starting_price !== undefined) {
+      const priceNum = Number(starting_price);
+      if (Number.isNaN(priceNum) || priceNum < 0) {
+        return NextResponse.json({ error: '시작 금액이 올바르지 않습니다.' }, { status: 400 });
+      }
+      updateData.starting_price = priceNum;
+    }
     if (is_active !== undefined) updateData.is_active = is_active;
     if (sort_order !== undefined) updateData.sort_order = sort_order;
 
