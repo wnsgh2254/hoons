@@ -1998,15 +1998,23 @@ export default function AppointmentsManagementPage() {
                           height: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
                         }}
                       >
-                        {visibleDesigners.map((_, colIndex) => {
+                        {visibleDesigners.map((designerName, colIndex) => {
+                          const currentDesigner = allDesigners.find((d) => d.name === designerName);
+                          const nextDesignerName = visibleDesigners[colIndex + 1];
+                          const nextDesigner = nextDesignerName
+                            ? allDesigners.find((d) => d.name === nextDesignerName)
+                            : null;
+                          const isShopBoundary =
+                            !!nextDesigner &&
+                            (currentDesigner?.shop_id ?? null) !== (nextDesigner?.shop_id ?? null);
                           const columnWidth = 100 / visibleDesigners.length;
                           return (
                             <div
                               key={`full-divider-${colIndex}`}
-                              className="absolute border-r border-[#e2e8f0]"
+                              className={`absolute border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'}`}
                               style={{
                                 left: `${(colIndex + 1) * columnWidth}%`,
-                                width: '1px',
+                                width: '0px',
                                 top: 0,
                                 bottom: 0,
                                 height: '100%',
@@ -2214,6 +2222,13 @@ export default function AppointmentsManagementPage() {
                                 {visibleDesigners.map((designerName, designerIndex) => {
                           const designer = allDesigners.find((d) => d.name === designerName);
                           const designerId = designer?.id;
+                          const nextDesignerName = visibleDesigners[designerIndex + 1];
+                          const nextDesigner = nextDesignerName
+                            ? allDesigners.find((d) => d.name === nextDesignerName)
+                            : null;
+                          const isShopBoundary =
+                            !!nextDesigner &&
+                            (designer?.shop_id ?? null) !== (nextDesigner?.shop_id ?? null);
                                   const designerBookings = bookingsByDateAndDesigner[dateStr]?.[designerName] || [];
                           const color = designerColorMap[designerName] ??
                                     DESIGNER_COLORS[designerIndex % DESIGNER_COLORS.length];
@@ -2229,7 +2244,7 @@ export default function AppointmentsManagementPage() {
                           return (
                             <div
                                       key={`${dateStr}-${designerName}`}
-                                      className={`relative h-full overflow-hidden border-r border-[#e2e8f0] last:border-r-0 ${isDesignerOff ? 'bg-gray-100/50' : ''}`}
+                                      className={`relative h-full overflow-hidden border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'} last:border-r-0 ${isDesignerOff ? 'bg-gray-100/50' : ''}`}
                                       style={{
                                         minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
                                         ...(isDesignerOff ? { pointerEvents: 'none' as const } : {}),

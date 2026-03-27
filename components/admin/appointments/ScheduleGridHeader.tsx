@@ -102,7 +102,7 @@ export default function ScheduleGridHeader({
                           {shopGroups.map((group, idx) => (
                             <div
                               key={`shop-${idx}`}
-                              className="px-2 py-1.5 bg-gray-50 text-center border-r border-[#e2e8f0] last:border-r-0"
+                              className="px-2 py-1.5 bg-gray-50 text-center border-r-[3px] border-[#64748b] last:border-r-0"
                               style={{ gridColumn: `span ${group.count}` }}
                             >
                               <p className="text-[11px] font-semibold text-gray-500">{group.shopName}</p>
@@ -111,14 +111,21 @@ export default function ScheduleGridHeader({
                         </div>
                       )}
                       <div className="grid" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
-                    {visibleDesigners.map((name) => {
+                    {visibleDesigners.map((name, idx) => {
                       const designer = allDesigners.find((d) => d.name === name);
                       const designerId = designer?.id;
                       const isOff = designerId ? !availableDesignerIds.includes(designerId) : false;
+                      const nextName = visibleDesigners[idx + 1];
+                      const nextDesigner = nextName
+                        ? allDesigners.find((d) => d.name === nextName)
+                        : null;
+                      const isShopBoundary =
+                        !!nextDesigner &&
+                        (designer?.shop_id ?? null) !== (nextDesigner?.shop_id ?? null);
                       return (
                         <div
                           key={`${dateStr}-${name}`}
-                          className={`relative backdrop-blur-sm border-r border-[#e2e8f0] last:border-r-0 flex items-center justify-center ${isOff ? 'bg-gray-200' : 'bg-white/50'}`}
+                          className={`relative backdrop-blur-sm border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'} last:border-r-0 flex items-center justify-center ${isOff ? 'bg-gray-200' : 'bg-white/50'}`}
                           style={{ minHeight: '40px' }}
                         >
                           <button
