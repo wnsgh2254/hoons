@@ -16,10 +16,11 @@ function getStripe(secretKey: string): Stripe {
 const ok = () => NextResponse.json({ received: true }, { status: 200 });
 
 export async function POST(request: NextRequest) {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  const webhookSecretPrimary = process.env.STRIPE_WEBHOOK_SECRET2?.trim();
+  const webhookSecretFallback = process.env.STRIPE_WEBHOOK_SECRET?.trim();
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!webhookSecret || !stripeSecretKey) {
-    console.error("Stripe webhook: STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY not set.");
+  if ((!webhookSecretPrimary && !webhookSecretFallback) || !stripeSecretKey) {
+    console.error("Stripe webhook: STRIPE_WEBHOOK_SECRET2/STRIPE_WEBHOOK_SECRET or STRIPE_SECRET_KEY not set.");
     return NextResponse.json({ error: "Webhook not configured." }, { status: 500 });
   }
 
@@ -32,7 +33,23 @@ export async function POST(request: NextRequest) {
   try {
     const rawBuffer = await request.arrayBuffer();
     const body = Buffer.from(rawBuffer).toString("utf-8");
-    event = getStripe(stripeSecretKey).webhooks.constructEvent(body, signature, webhookSecret);
+    const webhookSecrets = [webhookSecretPrimary, webhookSecretFallback].filter((v): v is string => !!v);
+    let verifiedEvent: Stripe.Event | null = null;
+    let lastError: unknown = null;
+
+    for (const secret of webhookSecrets) {
+      try {
+        verifiedEvent = getStripe(stripeSecretKey).webhooks.constructEvent(body, signature, secret);
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!verifiedEvent) {
+      throw lastError ?? new Error("No webhook secret could verify this event.");
+    }
+    event = verifiedEvent;
   } catch (err: unknown) {
     console.error("Stripe webhook signature verification failed:", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: "Webhook signature verification failed." }, { status: 400 });
