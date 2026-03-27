@@ -92,10 +92,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Comment: Send booking confirmation SMS after deposit is confirmed
-  // Non-blocking: SMS failure does not affect the booking confirmation response
-  sendBookingConfirmationSms({ bookingId, customerPhone, customerId }).catch((err) =>
-    console.error("Stripe webhook: SMS confirmation error:", err)
-  );
+  // Await to ensure the send attempt runs before serverless execution ends.
+  try {
+    await sendBookingConfirmationSms({ bookingId, customerPhone, customerId });
+  } catch (err) {
+    console.error("Stripe webhook: SMS confirmation error:", err);
+  }
 
   return ok();
 }
@@ -146,7 +148,7 @@ async function sendBookingConfirmationSms(params: {
 
   const shop = (booking as any).shop as { name: string; location: string; phone: string | null } | null;
 
-  await sendBookingConfirmation({
+  const smsResult = await sendBookingConfirmation({
     phone: smsPhone,
     bookingDate: (booking as any).booking_date,
     bookingTime: (booking as any).booking_time,
@@ -155,5 +157,15 @@ async function sendBookingConfirmationSms(params: {
     shopPhone: shop?.phone ?? null,
   });
 
-  console.log(`Stripe webhook SMS: confirmation sent for booking ${bookingId} to ${smsPhone}`);
+  if (!smsResult.success) {
+    console.error(
+      `Stripe webhook SMS: failed for booking ${bookingId} to ${smsPhone}.`,
+      smsResult.error
+    );
+    return;
+  }
+
+  console.log(
+    `Stripe webhook SMS: confirmation sent for booking ${bookingId} to ${smsPhone}. sid=${smsResult.messageSid}`
+  );
 }
