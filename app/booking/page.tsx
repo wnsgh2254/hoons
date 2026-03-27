@@ -152,6 +152,9 @@ export default function BookingPage() {
   const [loadingDesigners, setLoadingDesigners] = useState<boolean>(false);
   const [servicesForShop, setServicesForShop] = useState<any[]>([]);
   const [bookingItemsForShop, setBookingItemsForShop] = useState<any[]>([]);
+  const [loadingServices, setLoadingServices] = useState<boolean>(true);
+  const [loadingBookingItems, setLoadingBookingItems] = useState<boolean>(true);
+  const [loadingDesignerServices, setLoadingDesignerServices] = useState<boolean>(false);
   const [businessHoursForShop, setBusinessHoursForShop] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -225,6 +228,7 @@ export default function BookingPage() {
       void loadDesignerServices(Number(selectedDesigner.id));
     } else {
       setDesignerServicesForDesigner([]);
+      setLoadingDesignerServices(false);
     }
   }, [selectedDesigner]);
 
@@ -308,6 +312,7 @@ export default function BookingPage() {
   // Comment: Load designer_services for a specific designer
   const loadDesignerServices = async (designerId: number) => {
     try {
+      setLoadingDesignerServices(true);
       const res = await fetch(`/api/designer-services?designer_id=${designerId}`);
       const json = await res.json();
       if (res.ok) {
@@ -315,6 +320,8 @@ export default function BookingPage() {
       }
     } catch (error) {
       console.error('Error fetching designer services:', error);
+    } finally {
+      setLoadingDesignerServices(false);
     }
   };
 
@@ -330,6 +337,8 @@ export default function BookingPage() {
       setServicesForShop(json.services || []);
     } catch (error) {
       console.error('Unexpected error fetching services:', error);
+    } finally {
+      setLoadingServices(false);
     }
   };
 
@@ -344,6 +353,8 @@ export default function BookingPage() {
       }
     } catch (error) {
       console.error('Error fetching booking items:', error);
+    } finally {
+      setLoadingBookingItems(false);
     }
   };
 
@@ -660,6 +671,7 @@ export default function BookingPage() {
   }, [businessHoursForShop, selectedDate]);
 
   const hasTimeSlots = dynamicTimeSlots.morning.length > 0 || dynamicTimeSlots.afternoon.length > 0 || dynamicTimeSlots.evening.length > 0;
+  const serviceSectionLoading = loadingServices || loadingBookingItems || loadingDesignerServices;
 
   const unavailableSlotLabels = useMemo(() => {
     if (!availabilityData || !selectedService) return new Set<string>();
@@ -682,6 +694,7 @@ export default function BookingPage() {
   useEffect(() => {
     if (!selectedDate || !selectedShop || !selectedDesigner || !selectedService) {
       setAvailabilityData(null);
+      setAvailabilityLoading(false);
       return;
     }
     const shop = shopsDb.find((s) => String(s.id) === selectedShop);
@@ -689,6 +702,7 @@ export default function BookingPage() {
     const designerId = Number(selectedDesigner.id);
     if (!shopDbId || !designerId) {
       setAvailabilityData(null);
+      setAvailabilityLoading(false);
       return;
     }
     const ac = new AbortController();
@@ -749,6 +763,7 @@ export default function BookingPage() {
   const handleDesignerSelect = (designer: Designer) => {
     setSelectedDesigner(designer);
     // Comment: When designer changes, clear downstream selections
+    setLoadingDesignerServices(true);
     setSelectedServices([]);
     setSelectedTime(null);
   };
@@ -1498,7 +1513,12 @@ export default function BookingPage() {
                 </p>
               )}
             </div>
-            {displayServices.length === 0 ? (
+            {serviceSectionLoading ? (
+              <div className="text-center py-8">
+                <div className="inline-block w-8 h-8 border border-black border-t-black animate-spin"></div>
+                <p className="text-gray-500 text-sm mt-4">Loading services...</p>
+              </div>
+            ) : displayServices.length === 0 ? (
               <p className="text-gray-500 text-sm">
                 No services found. Please configure booking items in the admin panel.
               </p>
@@ -1557,10 +1577,12 @@ export default function BookingPage() {
               </h1>
             </div>
                 <div className="space-y-4">
-                  {availabilityLoading && (
-                    <p className="text-xs text-gray-500">Checking availability…</p>
-                  )}
-                  {!hasTimeSlots ? (
+                  {availabilityLoading ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block w-8 h-8 border border-black border-t-black animate-spin"></div>
+                      <p className="text-gray-500 text-sm mt-4">Loading available times...</p>
+                    </div>
+                  ) : !hasTimeSlots ? (
                     <p className="text-gray-500 text-sm">
                       No available time slots for this date. Please select a different date.
                     </p>

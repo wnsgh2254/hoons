@@ -152,11 +152,11 @@ const Home = () => {
       {/* BIG STATEMENT TEXT */}
       <section id="about" className="py-32 px-6 md:px-12 bg-[#F4F4F4] overflow-hidden">
         <div className="w-full">
-             <h3 className="font-display font-normal text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12">
+             <h3 className="font-display font-normal text-6xl md:text-8xl leading-[0.9] uppercase tracking-tighter mb-12 text-black">
                 HAEYOOM originated from a pure Korean word that means "beautiful thoughts."
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t border-black pt-8">
-                <p className="text-base md:text-lg font-normal leading-relaxed max-w-lg">
+                <p className="text-base md:text-lg font-normal leading-relaxed max-w-lg text-black">
                     We create moments whee beautiful thoughts bloom, in beautiful spaces, with beautiful people. Beautiful Think-we hope it becomes a lasting echo in your heart.
                 </p>
                 <div className="text-right flex flex-col items-end gap-4">
@@ -165,35 +165,8 @@ const Home = () => {
         </div>
       </section>
 
-      {/* PRODUCT GRID (Services) - 4 Columns on one line */}
-      <section id="services" className="bg-[#F4F4F4] pb-32">
-        <div className="grid grid-cols-2 md:grid-cols-4 border-b border-black">
-             {[
-                { title: 'Cut', price: '55', img: '/images/cut.png' },
-                { title: 'Perm', price: '170', img: '/images/perm.png' },
-                { title: 'Color', price: '170', img: '/images/color.png' },
-                { title: 'Care', price: '60', img: '/images/care.png' },
-             ].map((item, idx) => (
-                <div key={idx} className="group relative aspect-square border-r border-black last:border-r-0 md:last:border-r-0 odd:border-r md:odd:border-r overflow-hidden">
-                    <img 
-                        src={item.img} 
-                        alt={item.title} 
-                        className="absolute inset-0 w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-700" 
-                    />
-                    {/* Dark gradient overlay for white text readability */}
-                    <div className="absolute inset-0 bg-linear-to-t from-black/50 to-transparent pointer-events-none" />
-                    
-                    <div className="absolute inset-0 p-6 flex flex-col justify-end">
-                        <div className="flex justify-between items-end text-white z-10">
-                            {/* Matching size with Space section text below: text-2xl md:text-3xl */}
-                            <span className="font-display font-normal text-2xl md:text-3xl uppercase tracking-tighter">{item.title}</span>
-                            <span className="font-mono text-xs md:text-sm opacity-90">From ${item.price}</span>
-                </div>
-              </div>
-                </div>
-             ))}
-              </div>
-      </section>
+      {/* Services section intentionally removed.
+          Future plan: open a popup menu board with uploaded images. */}
 
       {/* SPACE / LOCATIONS STRIP */}
       <section id="locations" className="border-t border-black">
