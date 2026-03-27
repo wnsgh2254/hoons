@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { updateBookingAfterDepositPaid, getOrCreateCustomerByNameAndPhone } from "@/lib/data";
-import { supabase } from "@/lib/supabase";
-import { sendBookingConfirmation } from "@/lib/twilio";
 
 export const runtime = "nodejs";
 
@@ -91,10 +89,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to update booking." }, { status: 500 });
   }
 
-  // Comment: Send booking confirmation SMS after deposit is confirmed
-  // Await to ensure the send attempt runs before serverless execution ends.
+  // Comment: Send booking confirmation SMS through Supabase Edge Function
   try {
-    await sendBookingConfirmationSms({ bookingId, customerPhone, customerId });
+    await invokeBookingConfirmationEdge(bookingId);
   } catch (err) {
     console.error("Stripe webhook: SMS confirmation error:", err);
   }
@@ -102,70 +99,28 @@ export async function POST(request: NextRequest) {
   return ok();
 }
 
-// Comment: Fetch booking + shop info, resolve customer phone, then send confirmation SMS
-async function sendBookingConfirmationSms(params: {
-  bookingId: number;
-  customerPhone: string | undefined;
-  customerId: number | undefined;
-}) {
-  const { bookingId, customerPhone, customerId } = params;
+// Comment: Trigger Supabase Edge Function that handles booking confirmation SMS
+async function invokeBookingConfirmationEdge(bookingId: number) {
+  const projectUrl = process.env.SUPABASE_URL?.trim() || "https://akzipcsakzuqpknkrjnb.supabase.co";
+  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
 
-  // Comment: Fetch booking with shop details in one query
-  const { data: booking, error: bookingErr } = await supabase
-    .from("bookings")
-    .select(`
-      booking_date,
-      booking_time,
-      customer_id,
-      shop:shop_id ( name, location, phone )
-    `)
-    .eq("id", bookingId)
-    .single();
-
-  if (bookingErr || !booking) {
-    console.error("Stripe webhook SMS: failed to fetch booking", bookingErr);
-    return;
+  if (!anonKey) {
+    throw new Error("Missing SUPABASE_ANON_KEY for Edge Function invoke.");
   }
 
-  // Comment: Determine customer phone — prefer Stripe metadata, fall back to DB lookup
-  let smsPhone = customerPhone ?? null;
-  if (!smsPhone) {
-    const lookupId = customerId ?? (booking as any).customer_id;
-    if (lookupId) {
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("phone")
-        .eq("id", lookupId)
-        .single();
-      smsPhone = customer?.phone ?? null;
-    }
-  }
-
-  if (!smsPhone) {
-    console.warn(`Stripe webhook SMS: no phone for booking ${bookingId}, skipping SMS`);
-    return;
-  }
-
-  const shop = (booking as any).shop as { name: string; location: string; phone: string | null } | null;
-
-  const smsResult = await sendBookingConfirmation({
-    phone: smsPhone,
-    bookingDate: (booking as any).booking_date,
-    bookingTime: (booking as any).booking_time,
-    shopName: shop?.name ?? "HAEYOOM",
-    shopLocation: shop?.location ?? "",
-    shopPhone: shop?.phone ?? null,
+  const res = await fetch(`${projectUrl}/functions/v1/booking-confirmation-sms`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify({ booking_id: bookingId }),
   });
 
-  if (!smsResult.success) {
-    console.error(
-      `Stripe webhook SMS: failed for booking ${bookingId} to ${smsPhone}.`,
-      smsResult.error
-    );
-    return;
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`booking-confirmation-sms failed (${res.status}): ${text}`);
   }
 
-  console.log(
-    `Stripe webhook SMS: confirmation sent for booking ${bookingId} to ${smsPhone}. sid=${smsResult.messageSid}`
-  );
+  console.log(`Stripe webhook: booking-confirmation-sms ok for booking ${bookingId}: ${text}`);
 }
