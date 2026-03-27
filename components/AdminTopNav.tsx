@@ -120,7 +120,7 @@ export default function AdminTopNav() {
     <header className="h-16 flex items-center px-5.5 md:px-11.5 py-4.5 bg-white border-b border-gray-200 z-[12000] sticky top-0">
       <div className="container mx-auto flex items-center justify-between w-full">
         {/* Logo */}
-        <Link href="/admin/appointments" className="flex items-center hover:opacity-70 transition-opacity">
+        <Link href="/admin/appointments" prefetch={false} className="flex items-center hover:opacity-70 transition-opacity">
           <Image
             src="/images/image3.png"
             alt="HAEYOOM Logo"
@@ -154,6 +154,7 @@ export default function AdminTopNav() {
                 <div key={item.href} className="group relative">
                   <Link
                     href={item.href}
+                    prefetch={false}
                     className={`relative flex items-center justify-center w-12 h-12 rounded-lg transition-colors ${
                       active
                         ? 'bg-black text-white'
@@ -173,6 +174,7 @@ export default function AdminTopNav() {
                               <Link
                                 key={subItem.href}
                                 href={subItem.href}
+                                prefetch={false}
                                 className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-gray-50"
                               >
                                 <span className="flex size-9 items-center justify-center rounded-full bg-gray-100 text-gray-700">
@@ -198,6 +200,7 @@ export default function AdminTopNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={`group relative flex items-center justify-center w-12 h-12 rounded-lg transition-colors ${
                   active
                     ? 'bg-black text-white'
@@ -247,6 +250,7 @@ export default function AdminTopNav() {
                     <div key={item.href} className="flex flex-col gap-1">
                       <Link
                         href={item.href}
+                        prefetch={false}
                         onClick={() => setMobileMenuOpen(false)}
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                           active ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-100'
@@ -264,6 +268,7 @@ export default function AdminTopNav() {
                             <Link
                               key={subItem.href}
                               href={subItem.href}
+                              prefetch={false}
                               onClick={() => setMobileMenuOpen(false)}
                               className="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors"
                             >
@@ -282,6 +287,7 @@ export default function AdminTopNav() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                       active ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-100'

@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import {
+  isStartSlotUnavailable,
+  timeLabelToMinutes,
+} from '@/lib/booking-time-math';
+import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
@@ -27,6 +31,21 @@ interface Service {
   description: string;
   image: string;
   selected: boolean;
+}
+
+// Comment: Short description under service title on booking cards (services table)
+function ServiceCardDescription({ text, selected }: { text: string; selected: boolean }) {
+  const t = text.trim();
+  if (!t) return null;
+  return (
+    <p
+      className={`text-xs mt-2 leading-relaxed line-clamp-4 ${
+        selected ? 'text-gray-200' : 'text-gray-600'
+      }`}
+    >
+      {t}
+    </p>
+  );
 }
 
 // Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
@@ -123,8 +142,9 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday()); // Comment: Date in YYYY-MM-DD format
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const [selectedDesigner, setSelectedDesigner] = useState<Designer | null>(null);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>('2:00 PM');
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]); // Comment: Multi-select support
+  const [designerServicesForDesigner, setDesignerServicesForDesigner] = useState<any[]>([]); // Comment: designer_services rows for selected designer
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [shopsDb, setShopsDb] = useState<any[]>([]);
   const [loadingShops, setLoadingShops] = useState<boolean>(true);
   const [designersForShop, setDesignersForShop] = useState<any[]>([]);
@@ -147,6 +167,8 @@ export default function BookingPage() {
   const [checkoutLoading, setCheckoutLoading] = useState<boolean>(false); // Comment: Loading state for payment intent
   const [checkoutRetry, setCheckoutRetry] = useState<number>(0); // Comment: Increment to retry creating payment intent
   const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false); // Comment: Delay mount to avoid multiple Elements in React Strict Mode
+  const [availabilityData, setAvailabilityData] = useState<DesignerAvailabilityIntervals | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState<boolean>(false);
 
   const paymentIntentFetchedRef = useRef(false); // Comment: Only fetch payment intent once per deposit visit (or on retry)
   const lastFetchedCheckoutRetryRef = useRef<number>(0);
@@ -187,15 +209,24 @@ export default function BookingPage() {
     loadShops();
   }, []);
 
-  // Load all services on mount (all designers can do all services regardless of venue or role)
+  // Load all services on mount (used for fallback)
   useEffect(() => {
     void loadAllServices();
   }, []);
 
-  // Load booking items on mount (shared across all shops)
+  // Load booking items on mount (shared / 공용 items)
   useEffect(() => {
     void loadBookingItems();
   }, []);
+
+  // Comment: Load designer_services when designer is selected
+  useEffect(() => {
+    if (selectedDesigner) {
+      void loadDesignerServices(Number(selectedDesigner.id));
+    } else {
+      setDesignerServicesForDesigner([]);
+    }
+  }, [selectedDesigner]);
 
   // Load business hours when shop is selected
   useEffect(() => {
@@ -246,13 +277,15 @@ export default function BookingPage() {
       const availableIds = availabilityData.designerIds || [];
       setAvailableDesignerIds(availableIds);
 
-      // Comment: Then, get full designer details for available designers
+      // Comment: Load designer rows for IDs from designer-schedules (shop + home-shop + Director logic on server)
       if (availableIds.length === 0) {
         setDesignersForShop([]);
         return;
       }
 
-      const designersRes = await fetch(`/api/designers?shopId=${shopIdDb}`);
+      const designersRes = await fetch(
+        `/api/designers?ids=${availableIds.map((id: number) => encodeURIComponent(String(id))).join(',')}`,
+      );
       const designersData = await designersRes.json();
       
       if (!designersRes.ok) {
@@ -261,10 +294,8 @@ export default function BookingPage() {
         return;
       }
 
-      // Comment: Filter designers to only include those available on the selected date
       const allDesigners = designersData.designers || [];
-      const availableDesigners = allDesigners.filter((d: any) => availableIds.includes(d.id));
-      setDesignersForShop(availableDesigners);
+      setDesignersForShop(allDesigners);
     } catch (error) {
       console.error('Unexpected error fetching available designers:', error);
       setDesignersForShop([]);
@@ -274,7 +305,20 @@ export default function BookingPage() {
     }
   };
 
-  // Load all active services (all designers can do all services regardless of venue or role)
+  // Comment: Load designer_services for a specific designer
+  const loadDesignerServices = async (designerId: number) => {
+    try {
+      const res = await fetch(`/api/designer-services?designer_id=${designerId}`);
+      const json = await res.json();
+      if (res.ok) {
+        setDesignerServicesForDesigner(json.designerServices || []);
+      }
+    } catch (error) {
+      console.error('Error fetching designer services:', error);
+    }
+  };
+
+  // Load all active services (fallback when no designer_services configured)
   const loadAllServices = async () => {
     try {
       const res = await fetch(`/api/services`);
@@ -394,15 +438,17 @@ export default function BookingPage() {
     })
     .map((s: any) => {
       const displayName = (s.name as string).replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
+      const desc =
+        typeof s.description === 'string' && s.description.trim() ? s.description.trim() : '';
       return {
         id: String(s.id),
         name: displayName,
         price: Number(s.price),
         priceLabel: 'Standard',
         duration: `${s.duration_minutes} mins`,
-        description: '',
+        description: desc,
         image: '',
-        selected: selectedService ? selectedService.id === String(s.id) : false,
+        selected: selectedServices.some((sel) => sel.id === String(s.id)),
       };
     });
 
@@ -432,20 +478,121 @@ export default function BookingPage() {
     if (mins > 0) durationParts.push(`${mins}min`);
     const rawPrice = item.starting_price != null ? Number(item.starting_price) : 0;
     const itemPrice = Number.isFinite(rawPrice) ? Math.max(0, rawPrice) : 0;
+    const memoText =
+      typeof item.memo === 'string' && item.memo.trim() ? item.memo.trim() : '';
     return {
       id: `booking_item_${item.id}`,
       name: item.name,
       price: itemPrice,
       priceLabel: '',
       duration: durationParts.join(' ') || '0min',
-      description: '',
+      description: memoText,
       image: '',
-      selected: selectedService ? selectedService.id === `booking_item_${item.id}` : false,
+      selected: selectedServices.some((sel) => sel.id === `booking_item_${item.id}`),
     };
   });
 
-  // Use booking items if available, otherwise fallback to services
-  const displayServices = bookingItemServices.length > 0 ? bookingItemServices : services;
+  // Comment: Map designer_services rows to Service UI objects (designer-specific services)
+  const designerSpecificServices: Service[] = useMemo(() => {
+    return designerServicesForDesigner
+      .filter((ds: any) => ds.is_active && ds.services)
+      .map((ds: any) => {
+        const svc = ds.services;
+        // Comment: Custom entries show actual service name; others show the category label
+        let displayName: string;
+        if (svc.category === 'Custom') {
+          displayName = svc.name
+            ? svc.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim()
+            : '기타';
+        } else {
+          const rawCategory: string = svc.category || getServiceCategory(svc.name || '');
+          displayName = rawCategory === 'Other' ? 'Others' : rawCategory;
+        }
+        const durMins = ds.duration_minutes ?? svc.duration_minutes ?? 60;
+        const hours = Math.floor(durMins / 60);
+        const mins = durMins % 60;
+        const durationParts: string[] = [];
+        if (hours > 0) durationParts.push(`${hours}hr`);
+        if (mins > 0) durationParts.push(`${mins}min`);
+        return {
+          id: `ds_${ds.id}`,
+          name: displayName,
+          price: Number(ds.price),
+          priceLabel: '',
+          duration: durationParts.join(' ') || `${durMins}min`,
+          description: ds.notes ?? '',
+          image: '',
+          selected: selectedServices.some((s) => s.id === `ds_${ds.id}`),
+          _durationMinutes: durMins,
+        };
+      });
+  }, [designerServicesForDesigner, selectedServices]);
+
+  // Comment: Combined service list: designer-specific first, then shared booking_items
+  const displayServices: Service[] = useMemo(() => {
+    const sharedItems = bookingItemServices.map((s) => ({
+      ...s,
+      selected: selectedServices.some((sel) => sel.id === s.id),
+    }));
+    if (designerSpecificServices.length > 0) {
+      return [...designerSpecificServices, ...sharedItems];
+    }
+    // Comment: Fallback to services table if no designer_services configured
+    return sharedItems.length > 0
+      ? sharedItems
+      : services.map((s) => ({ ...s, selected: selectedServices.some((sel) => sel.id === s.id) }));
+  }, [designerSpecificServices, bookingItemServices, services, selectedServices]);
+
+  // Comment: Combined duration from all selected services
+  const selectedServiceDurationMinutes = useMemo(() => {
+    if (selectedServices.length === 0) return 60;
+    let total = 0;
+    for (const svc of selectedServices) {
+      const sid = svc.id;
+      if (sid.startsWith('ds_')) {
+        const dsId = Number(sid.replace('ds_', ''));
+        const dsRow = designerServicesForDesigner.find((ds: any) => ds.id === dsId);
+        const dur = dsRow?.duration_minutes ?? 60;
+        total += dur;
+      } else if (sid.startsWith('booking_item_')) {
+        const itemId = Number(sid.replace('booking_item_', ''));
+        const item = bookingItemsForShop.find((i: any) => i.id === itemId);
+        if (item) {
+          total += (item.duration_hours || 0) * 60 + (item.duration_minutes || 0);
+        } else {
+          total += 60;
+        }
+      } else {
+        const found = servicesForShop.find((s: any) => String(s.id) === sid);
+        const dm = found?.duration_minutes;
+        total += dm != null && Number(dm) > 0 ? Math.round(Number(dm)) : 60;
+      }
+    }
+    return total > 0 ? total : 60;
+  }, [selectedServices, designerServicesForDesigner, bookingItemsForShop, servicesForShop]);
+
+  // Comment: Derived single service for backward-compat with payment/booking API
+  const selectedService = useMemo<Service | null>(() => {
+    if (selectedServices.length === 0) return null;
+    const combinedName = selectedServices.map((s) => s.name).join(', ');
+    const combinedPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
+    const durationParts: string[] = [];
+    const totalMins = selectedServiceDurationMinutes;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0) durationParts.push(`${h}hr`);
+    if (m > 0) durationParts.push(`${m}min`);
+    return {
+      id: selectedServices.map((s) => s.id).join(','),
+      name: combinedName,
+      price: combinedPrice,
+      priceLabel: '',
+      duration: durationParts.join(' ') || `${totalMins}min`,
+      description: selectedServices.map((s) => s.description).filter(Boolean).join(' / '),
+      image: '',
+      selected: true,
+    };
+  }, [selectedServices, selectedServiceDurationMinutes]);
 
   // Generate dynamic time slots from business hours
   const dynamicTimeSlots = useMemo(() => {
@@ -514,12 +661,80 @@ export default function BookingPage() {
 
   const hasTimeSlots = dynamicTimeSlots.morning.length > 0 || dynamicTimeSlots.afternoon.length > 0 || dynamicTimeSlots.evening.length > 0;
 
+  const unavailableSlotLabels = useMemo(() => {
+    if (!availabilityData || !selectedService) return new Set<string>();
+    const dur = selectedServiceDurationMinutes;
+    const all = [
+      ...dynamicTimeSlots.morning,
+      ...dynamicTimeSlots.afternoon,
+      ...dynamicTimeSlots.evening,
+    ];
+    const bad = new Set<string>();
+    for (const label of all) {
+      const m = timeLabelToMinutes(label);
+      if (m == null) continue;
+      if (isStartSlotUnavailable(m, dur, availabilityData)) bad.add(label);
+    }
+    return bad;
+  }, [availabilityData, selectedService, selectedServiceDurationMinutes, dynamicTimeSlots]);
+
+  // Comment: Load existing bookings + booking_restrictions for selected designer/date/shop
+  useEffect(() => {
+    if (!selectedDate || !selectedShop || !selectedDesigner || !selectedService) {
+      setAvailabilityData(null);
+      return;
+    }
+    const shop = shopsDb.find((s) => String(s.id) === selectedShop);
+    const shopDbId = shop?.id as number | undefined;
+    const designerId = Number(selectedDesigner.id);
+    if (!shopDbId || !designerId) {
+      setAvailabilityData(null);
+      return;
+    }
+    const ac = new AbortController();
+    setAvailabilityLoading(true);
+    const q = new URLSearchParams({
+      designer_id: String(designerId),
+      shop_id: String(shopDbId),
+      date: selectedDate,
+    });
+    void fetch(`/api/booking-time-availability?${q.toString()}`, { signal: ac.signal })
+      .then((res) => res.json())
+      .then((json: unknown) => {
+        if (ac.signal.aborted) return;
+        if (
+          json &&
+          typeof json === 'object' &&
+          'fullDayBlocked' in json &&
+          typeof (json as DesignerAvailabilityIntervals).fullDayBlocked === 'boolean'
+        ) {
+          setAvailabilityData(json as DesignerAvailabilityIntervals);
+        } else {
+          setAvailabilityData(null);
+        }
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setAvailabilityData(null);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setAvailabilityLoading(false);
+      });
+    return () => ac.abort();
+  }, [selectedDate, selectedShop, selectedDesigner, selectedService, shopsDb]);
+
+  useEffect(() => {
+    if (!selectedTime) return;
+    if (unavailableSlotLabels.has(selectedTime)) {
+      setSelectedTime(null);
+    }
+  }, [selectedTime, unavailableSlotLabels]);
+
   const handleDateChange = (date: string) => {
     setSelectedDate(date);
     // Comment: When date changes, clear downstream selections
     setSelectedShop(null);
     setSelectedDesigner(null);
-    setSelectedService(null);
+    setSelectedServices([]);
     setSelectedTime(null);
   };
 
@@ -527,25 +742,32 @@ export default function BookingPage() {
     setSelectedShop(shopId);
     // Comment: When shop changes, clear downstream selections
     setSelectedDesigner(null);
-    setSelectedService(null);
+    setSelectedServices([]);
     setSelectedTime(null);
   };
 
   const handleDesignerSelect = (designer: Designer) => {
     setSelectedDesigner(designer);
     // Comment: When designer changes, clear downstream selections
-    setSelectedService(null);
+    setSelectedServices([]);
     setSelectedTime(null);
   };
 
-  const handleServiceSelect = (service: Service) => {
-    setSelectedService(service);
-    // Comment: When service changes, clear time selection
+  const handleServiceToggle = (service: Service) => {
     setSelectedTime(null);
-    // Close modal after selection
+    setSelectedServices((prev) => {
+      const alreadySelected = prev.some((s) => s.id === service.id);
+      if (alreadySelected) {
+        return prev.filter((s) => s.id !== service.id);
+      }
+      return [...prev, service];
+    });
     setIsServiceModalOpen(false);
     setSelectedCategory(null);
   };
+
+  // Comment: Alias kept for backward-compat with modal close
+  const handleServiceSelect = handleServiceToggle;
 
   const handleCategoryClick = (category: string) => {
     setSelectedCategory(category);
@@ -572,10 +794,10 @@ export default function BookingPage() {
   }, [selectedDesigner]);
 
   useEffect(() => {
-    if (selectedService) {
+    if (selectedServices.length > 0) {
       scrollToSection(timeSectionRef);
     }
-  }, [selectedService]);
+  }, [selectedServices]);
 
   useEffect(() => {
     if (selectedTime) {
@@ -609,7 +831,7 @@ export default function BookingPage() {
       return;
     }
     if (!stripePublishableKey) return;
-    if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
+    if (!selectedDate || !selectedTime || selectedServices.length === 0 || !selectedDesigner || !selectedShop) return;
     // Comment: Only fetch once per deposit visit (or when user clicks Try again)
     if (paymentIntentFetchedRef.current && lastFetchedCheckoutRetryRef.current === checkoutRetry) {
       return;
@@ -620,7 +842,13 @@ export default function BookingPage() {
     const currentShop = shopsDb.find((s) => String(s.id) === selectedShop) as { id: number; name?: string } | undefined;
     const shopDbId = currentShop?.id ?? null;
     const designerId = selectedDesigner ? Number(selectedDesigner.id) : null;
-    const serviceId = selectedService ? Number(selectedService.id) : null;
+    // Comment: Use first real service_id if single, null otherwise (multi-service)
+    const firstDsRow = selectedServices.find((s) => s.id.startsWith('ds_'));
+    const serviceId = firstDsRow
+      ? designerServicesForDesigner.find((ds: any) => `ds_${ds.id}` === firstDsRow.id)?.service_id ?? null
+      : null;
+    const combinedServiceName = selectedServices.map((s) => s.name).join(', ');
+    const combinedTotal = selectedServices.reduce((sum, s) => sum + s.price, 0);
     const day = selectedDate ? Number(selectedDate.split('-')[2]) : null;
     const formattedDateLabel = selectedDate
       ? new Date(selectedDate).toLocaleDateString('en-US', {
@@ -629,7 +857,7 @@ export default function BookingPage() {
           year: 'numeric',
         })
       : '';
-    const depositAmt = selectedService ? selectedService.price * 0.2 : 0;
+    const depositAmt = combinedTotal * 0.2;
 
     setCheckoutError(null);
     setCheckoutLoading(true);
@@ -644,16 +872,17 @@ export default function BookingPage() {
         serviceId,
         day,
         timeLabel: selectedTime,
-        totalAmount: selectedService?.price ?? null,
+        totalAmount: combinedTotal,
         depositAmount: depositAmt,
         fullDate: selectedDate,
         customerName,
         customerPhone,
         existingCustomerId,
-        serviceName: selectedService?.name ?? '',
+        serviceName: combinedServiceName,
         shopName: currentShop?.name ?? '',
         designerName: selectedDesigner?.name ?? '',
         formattedDateLabel,
+        durationMinutes: selectedServiceDurationMinutes,
       }),
     })
       .then((res) => res.json())
@@ -676,7 +905,7 @@ export default function BookingPage() {
       .finally(() => {
         setCheckoutLoading(false);
       });
-  }, [step, stripePublishableKey, selectedDate, selectedTime, selectedService, selectedDesigner, selectedShop, customerName, customerPhone, existingCustomerId, shopsDb, checkoutRetry]);
+  }, [step, stripePublishableKey, selectedDate, selectedTime, selectedServices, selectedServiceDurationMinutes, designerServicesForDesigner, selectedDesigner, selectedShop, customerName, customerPhone, existingCustomerId, shopsDb, checkoutRetry]);
 
   // Comment: Delay mounting Payment Element to avoid multiple Elements in React Strict Mode
   useEffect(() => {
@@ -698,7 +927,7 @@ export default function BookingPage() {
     if (
       !selectedDate ||
       !selectedTime ||
-      !selectedService ||
+      selectedServices.length === 0 ||
       !selectedDesigner ||
       !selectedShop ||
       !customerName.trim() ||
@@ -750,14 +979,19 @@ export default function BookingPage() {
   // Comment: Create Stripe Checkout session for deposit payment and create booking in DB
   const handlePayDeposit = async () => {
     if (isSubmitting) return;
-    if (!selectedDate || !selectedTime || !selectedService || !selectedDesigner || !selectedShop) return;
+    if (!selectedDate || !selectedTime || selectedServices.length === 0 || !selectedDesigner || !selectedShop) return;
 
     setIsSubmitting(true);
     try {
       const currentShop = shops.find((s) => s.id === selectedShop) as any;
       const shopDbId = currentShop?._dbId ?? null;
       const designerId = selectedDesigner ? Number(selectedDesigner.id) : null;
-      const serviceId = selectedService ? Number(selectedService.id) : null;
+      const firstDsRowForCheckout = selectedServices.find((s) => s.id.startsWith('ds_'));
+      const checkoutServiceId = firstDsRowForCheckout
+        ? designerServicesForDesigner.find((ds: any) => `ds_${ds.id}` === firstDsRowForCheckout.id)?.service_id ?? null
+        : null;
+      const combinedServiceName = selectedServices.map((s) => s.name).join(', ');
+      const combinedTotal = selectedServices.reduce((sum, s) => sum + s.price, 0);
       // Comment: Extract day from YYYY-MM-DD format
       const day = selectedDate ? Number(selectedDate.split('-')[2]) : null;
 
@@ -777,19 +1011,20 @@ export default function BookingPage() {
         body: JSON.stringify({
           shopId: shopDbId,
           designerId,
-          serviceId,
+          serviceId: checkoutServiceId,
           day,
           timeLabel: selectedTime,
-          totalAmount: selectedService?.price ?? null,
+          totalAmount: combinedTotal,
           depositAmount,
-          fullDate: selectedDate, // Comment: Pass full date in YYYY-MM-DD format
-          customerName, // Comment: Optional customer name field
-          customerPhone, // Comment: Optional customer phone field
-          existingCustomerId, // Comment: Optional existing customer ID if already resolved
-          serviceName: selectedService?.name ?? '',
+          fullDate: selectedDate,
+          customerName,
+          customerPhone,
+          existingCustomerId,
+          serviceName: combinedServiceName,
           shopName: currentShop?.name ?? '',
           designerName: selectedDesigner?.name ?? '',
           formattedDateLabel,
+          durationMinutes: selectedServiceDurationMinutes,
         }),
       });
 
@@ -828,14 +1063,14 @@ export default function BookingPage() {
     setSelectedDate(getSydneyToday());
     setSelectedShop(null);
     setSelectedDesigner(null);
-    setSelectedService(null);
-    setSelectedTime('2:00 PM');
+    setSelectedServices([]);
+    setSelectedTime(null);
     setCustomerName('');
     setCustomerPhone('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const totalPrice = selectedService ? selectedService.price : 0;
+  const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
   const depositAmount = totalPrice * 0.2; // 20% deposit
 
   // Step 4: Deposit Payment
@@ -968,12 +1203,14 @@ export default function BookingPage() {
               <div className="bg-[#F4F4F4]  p-6 border border-black">
                 <h4 className="text-lg font-bold text-slate-900 mb-4 uppercase">Booking Summary</h4>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-start pb-4 border-b border-black">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{selectedService?.name}</p>
-                      <p className="text-xs text-gray-500">With {selectedDesigner?.name}</p>
-                    </div>
-                    <p className="text-sm font-medium text-slate-900">${selectedService?.price.toFixed(2)}</p>
+                  <div className="pb-4 border-b border-black space-y-2">
+                    <p className="text-xs text-gray-500 mb-1">With {selectedDesigner?.name}</p>
+                    {selectedServices.map((svc) => (
+                      <div key={svc.id} className="flex justify-between items-start">
+                        <p className="text-sm font-medium text-slate-900 pr-2">{svc.name}</p>
+                        <p className="text-sm font-medium text-slate-900 shrink-0">${svc.price.toFixed(2)}</p>
+                      </div>
+                    ))}
                   </div>
                   <div className="flex justify-between pt-2">
                     <span className="text-sm text-gray-500">Date & Time</span>
@@ -1000,11 +1237,14 @@ export default function BookingPage() {
                   </div>
                 </div>
               </div>
-              <div className="bg-[#F4F4F4] p-4  flex gap-3 items-start border border-black">
-                <span className="material-symbols-outlined text-black mt-0.5 text-lg">info</span>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Your deposit is non-refundable but can be rescheduled up to 24 hours before your appointment.
-                </p>
+              <div className="bg-[#F4F4F4] p-4 flex gap-3 items-start border border-black">
+                <span className="material-symbols-outlined text-black mt-0.5 text-lg shrink-0">info</span>
+                <div className="text-xs text-gray-700 leading-relaxed space-y-1.5">
+                  <p className="font-bold text-black uppercase tracking-wide">Cancellation Policy</p>
+                  <p><span className="font-bold text-black">3+ days before</span> your appointment — <span className="font-bold text-black">100% refund</span></p>
+                  <p><span className="font-bold text-black">1–2 days before</span> your appointment — <span className="font-bold text-black">50% refund</span></p>
+                  <p className="text-gray-500 pt-0.5">Deposits are non-refundable for same-day cancellations. Rescheduling is available up to 24 hours before your appointment.</p>
+                </div>
               </div>
             </aside>
           </div>
@@ -1252,45 +1492,48 @@ export default function BookingPage() {
                 <span className="bg-black text-white text-sm font-bold px-2 py-1">04</span>
                 Select Service
               </h1>
+              {selectedServices.length > 0 && (
+                <p className="text-sm text-gray-500">
+                  {selectedServices.length}개 선택 · 중복 선택 가능
+                </p>
+              )}
             </div>
             {displayServices.length === 0 ? (
               <p className="text-gray-500 text-sm">
                 No services found. Please configure booking items in the admin panel.
               </p>
-            ) : bookingItemServices.length > 0 ? (
-              /* Booking items: flat list (no categories) */
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bookingItemServices.map((service) => {
-                  const isSelected = service.selected;
+                {displayServices.map((service) => {
+                  const isSelected = selectedServices.some((s) => s.id === service.id);
                   return (
                     <button
                       key={service.id}
                       type="button"
-                      onClick={() => handleServiceSelect(service)}
-                      className={`text-left border border-black p-4 flex flex-col justify-between gap-3 transition-all ${
-                        isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
+                      onClick={() => handleServiceToggle(service)}
+                      className={`text-left border p-4 flex flex-col justify-between gap-3 transition-all relative ${
+                        isSelected
+                          ? 'bg-black text-white border-black'
+                          : 'bg-[#F4F4F4] hover:bg-white border-black'
                       }`}
                     >
+                      {isSelected && (
+                        <span className="absolute top-3 right-3 material-symbols-outlined text-white text-base">
+                          check_circle
+                        </span>
+                      )}
                       <div>
-                        <h4
-                          className={`text-base font-bold mb-1 ${
-                            isSelected ? 'text-white' : 'text-black'
-                          }`}
-                        >
+                        <h4 className={`text-base font-bold mb-1 pr-6 ${isSelected ? 'text-white' : 'text-black'}`}>
                           {service.name}
                         </h4>
                         <p className={`text-xs ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
-                          Duration:{' '}
-                          <span className="font-medium">{service.duration}</span>
+                          Duration: <span className="font-medium">{service.duration}</span>
                         </p>
+                        <ServiceCardDescription text={service.description} selected={isSelected} />
                       </div>
                       {service.price > 0 && (
                         <div className="flex items-center justify-between mt-2">
-                          <span
-                            className={`text-sm font-semibold ${
-                              isSelected ? 'text-white' : 'text-gray-900'
-                            }`}
-                          >
+                          <span className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
                             From ${service.price.toFixed(0)}
                           </span>
                         </div>
@@ -1299,105 +1542,13 @@ export default function BookingPage() {
                   );
                 })}
               </div>
-            ) : (
-              /* Fallback: original categorized services */
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {categoryOrder.map((category) => {
-                  const categoryServices = servicesByCategory[category];
-                  if (!categoryServices || categoryServices.length === 0) return null;
-
-                  const isSelected =
-                    selectedService && getServiceCategory(selectedService.name) === category;
-
-                  return (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => handleCategoryClick(category)}
-                      className={`border border-black p-6 transition-all text-center ${
-                        isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
-                      }`}
-                    >
-                      <h4
-                        className={`text-lg font-bold mb-2 ${
-                          isSelected ? 'text-white' : 'text-black'
-                        }`}
-                      >
-                        {category}
-                      </h4>
-                      <p className={`text-sm ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
-                        {categoryServices.length} services
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
             )}
 
-            {/* Service Selection Modal (fallback for categorized services) */}
-            {isServiceModalOpen && selectedCategory && (
-              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsServiceModalOpen(false)}>
-                <div className="bg-[#F4F4F4]  max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-black" onClick={(e) => e.stopPropagation()}>
-                  <div className="sticky top-0 bg-[#F4F4F4] border-b border-black px-6 py-4 flex items-center justify-between">
-                    <h1 className="text-3xl font-normal text-black uppercase">{selectedCategory}</h1>
-                    <button
-                      type="button"
-                      onClick={() => setIsServiceModalOpen(false)}
-                      className="text-gray-500 hover:text-black transition-colors"
-                    >
-                      <span className="material-symbols-outlined">close</span>
-                    </button>
-                  </div>
-                    <div className="p-6">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {servicesByCategory[selectedCategory]?.map((service) => {
-                          const isSelected = service.selected;
-                          return (
-                            <button
-                              key={service.id}
-                              type="button"
-                              onClick={() => handleServiceSelect(service)}
-                              className={`text-left border border-black p-4 flex flex-col justify-between gap-3 transition-all ${
-                                isSelected ? 'bg-black text-white' : 'bg-[#F4F4F4] hover:bg-white'
-                              }`}
-                            >
-                              <div>
-                                <h4
-                                  className={`text-base font-bold mb-1 ${
-                                    isSelected ? 'text-white' : 'text-black'
-                                  }`}
-                                >
-                                  {service.name}
-                                </h4>
-                                <p className={`text-xs ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
-                                  Duration:{' '}
-                                  <span className="font-medium">
-                                    {service.duration}
-                                  </span>
-                                </p>
-                              </div>
-                              <div className="flex items-center justify-between mt-2">
-                                <span
-                                  className={`text-sm font-semibold ${
-                                    isSelected ? 'text-white' : 'text-gray-900'
-                                  }`}
-                                >
-                                  From ${service.price.toFixed(0)}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                </div>
-              </div>
-            )}
           </section>
         )}
 
         {/* 05. Time Selection + Continue (only after service is chosen) */}
-        {selectedDate && selectedShop && selectedDesigner && selectedService && (
+        {selectedDate && selectedShop && selectedDesigner && selectedServices.length > 0 && (
           <section ref={timeSectionRef} className="space-y-6">
             <div className="flex items-center justify-between gap-6 mb-2 border-b border-black pb-4">
               <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
@@ -1406,26 +1557,40 @@ export default function BookingPage() {
               </h1>
             </div>
                 <div className="space-y-4">
+                  {availabilityLoading && (
+                    <p className="text-xs text-gray-500">Checking availability…</p>
+                  )}
                   {!hasTimeSlots ? (
                     <p className="text-gray-500 text-sm">
                       No available time slots for this date. Please select a different date.
                     </p>
                   ) : (
                     <>
+                      <p className="text-xs text-gray-500">
+                        Times in grey are unavailable (already booked or unavailable for the time slot).
+                      </p>
                       {dynamicTimeSlots.morning.length > 0 && (
                         <div className="space-y-2">
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider pl-1">Morning</span>
                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                             {dynamicTimeSlots.morning.map((time) => {
                               const isSelected = time === selectedTime;
+                              const isUnavailable =
+                                availabilityLoading || unavailableSlotLabels.has(time);
                               return (
                                 <button
                                   key={time}
-                                  onClick={() => setSelectedTime(time)}
+                                  type="button"
+                                  disabled={isUnavailable}
+                                  onClick={() => {
+                                    if (!isUnavailable) setSelectedTime(time);
+                                  }}
                                   className={`py-2 px-2 border text-xs md:text-sm transition-all ${
-                                    isSelected
-                                      ? 'bg-black text-white font-normal uppercase border border-black'
-                                      : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
+                                    isUnavailable
+                                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through'
+                                      : isSelected
+                                        ? 'bg-black text-white font-normal uppercase border border-black'
+                                        : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
                                   }`}
                                 >
                                   {time}
@@ -1442,14 +1607,22 @@ export default function BookingPage() {
                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                             {dynamicTimeSlots.afternoon.map((time) => {
                               const isSelected = time === selectedTime;
+                              const isUnavailable =
+                                availabilityLoading || unavailableSlotLabels.has(time);
                               return (
                                 <button
                                   key={time}
-                                  onClick={() => setSelectedTime(time)}
+                                  type="button"
+                                  disabled={isUnavailable}
+                                  onClick={() => {
+                                    if (!isUnavailable) setSelectedTime(time);
+                                  }}
                                   className={`py-2 px-2 border text-xs md:text-sm transition-all ${
-                                    isSelected
-                                      ? 'bg-black text-white font-normal uppercase border border-black'
-                                      : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
+                                    isUnavailable
+                                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through'
+                                      : isSelected
+                                        ? 'bg-black text-white font-normal uppercase border border-black'
+                                        : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
                                   }`}
                                 >
                                   {time}
@@ -1466,14 +1639,22 @@ export default function BookingPage() {
                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                             {dynamicTimeSlots.evening.map((time) => {
                               const isSelected = time === selectedTime;
+                              const isUnavailable =
+                                availabilityLoading || unavailableSlotLabels.has(time);
                               return (
                                 <button
                                   key={time}
-                                  onClick={() => setSelectedTime(time)}
+                                  type="button"
+                                  disabled={isUnavailable}
+                                  onClick={() => {
+                                    if (!isUnavailable) setSelectedTime(time);
+                                  }}
                                   className={`py-2 px-2 border text-xs md:text-sm transition-all ${
-                                    isSelected
-                                      ? 'bg-black text-white font-normal uppercase border border-black'
-                                      : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
+                                    isUnavailable
+                                      ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed line-through'
+                                      : isSelected
+                                        ? 'bg-black text-white font-normal uppercase border border-black'
+                                        : 'border-black text-black hover:bg-white bg-[#F4F4F4]'
                                   }`}
                                 >
                                   {time}
@@ -1490,7 +1671,7 @@ export default function BookingPage() {
             )}
 
         {/* 06. Customer Details (only after time is chosen) */}
-        {selectedDate && selectedShop && selectedDesigner && selectedService && selectedTime && (
+        {selectedDate && selectedShop && selectedDesigner && selectedServices.length > 0 && selectedTime && (
           <section ref={contactSectionRef} className="space-y-6">
             <div className="flex items-center justify-between gap-6 mb-2 border-b border-black pb-4">
               <h1 className="text-3xl md:text-4xl font-normal text-black mb-2 tracking-tight uppercase flex items-center gap-2">
@@ -1532,14 +1713,14 @@ export default function BookingPage() {
                 onClick={resolveCustomerAndGoToDeposit}
                 className="bg-black hover:bg-gray-800 text-white font-normal uppercase tracking-widest px-8 py-3 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={
-                  !selectedDate ||
-                  !selectedTime ||
-                  !selectedService ||
-                  !selectedDesigner ||
-                  !selectedShop ||
-                  !customerName.trim() ||
-                  !customerPhone.trim() ||
-                  loadingCustomer
+        !selectedDate ||
+        !selectedTime ||
+        selectedServices.length === 0 ||
+        !selectedDesigner ||
+        !selectedShop ||
+        !customerName.trim() ||
+        !customerPhone.trim() ||
+        loadingCustomer
                 }
               >
                 <span>{loadingCustomer ? 'Checking customer...' : 'Continue to Payment'}</span>

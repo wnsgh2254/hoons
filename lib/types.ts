@@ -26,6 +26,8 @@ export interface Service {
   name: string;
   price: number;
   duration_minutes: number;
+  /** Short description for customer booking UI */
+  description?: string | null;
   is_active: boolean;
   category: string | null;
   visible_to: 'customer' | 'admin' | 'both';
@@ -125,6 +127,8 @@ export interface BookingItemEntry {
   duration_minutes: number;
   /** AUD; used for public booking deposit when item is chosen */
   starting_price?: number;
+  /** Shown on public booking flow (admin reservation > 예약 항목) */
+  memo?: string | null;
   is_active: boolean;
   sort_order: number;
   created_at: string;

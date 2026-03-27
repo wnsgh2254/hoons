@@ -200,11 +200,19 @@ export default function AppointmentsManagementPage() {
     handleDeleteRecentSearch,
   } = useScheduleSearch();
 
-  // Comment: Designer IDs filtered by shop (for booking filtering)
+  // Comment: Designer IDs filtered by shop (Directors appear in every shop)
   const shopFilteredDesignerIds = useMemo(() => {
     if (selectedShopFilter === '전체') return [];
     const shopId = Number(selectedShopFilter);
-    return allDesigners.filter((d) => d.shop_id === shopId).map((d) => d.id);
+    return allDesigners
+      .filter(
+        (d) =>
+          d.shop_id === shopId ||
+          String(d.role || '')
+            .toLowerCase()
+            .includes('director'),
+      )
+      .map((d) => d.id);
   }, [allDesigners, selectedShopFilter]);
 
   // Bookings data (extracted to hook)
@@ -1277,7 +1285,13 @@ export default function AppointmentsManagementPage() {
 
       if (selectedShopFilter !== '전체') {
         const shopId = Number(selectedShopFilter);
-        filtered = filtered.filter((d) => d.shop_id === shopId);
+        filtered = filtered.filter(
+          (d) =>
+            d.shop_id === shopId ||
+            String(d.role || '')
+              .toLowerCase()
+              .includes('director'),
+        );
       }
 
       // Comment: Then filter by selectedDesignerFilter
@@ -1317,11 +1331,17 @@ export default function AppointmentsManagementPage() {
     return [];
   }, [allDesigners, selectedShopFilter, selectedDesignerFilter, availableDesignerIds]);
 
-  // Comment: Designers filtered by shop for the designer select dropdown
+  // Comment: Designers filtered by shop for the designer select dropdown (Directors in every shop)
   const shopFilteredDesigners = useMemo(() => {
     if (selectedShopFilter === '전체') return allDesigners;
     const shopId = Number(selectedShopFilter);
-    return allDesigners.filter((d) => d.shop_id === shopId);
+    return allDesigners.filter(
+      (d) =>
+        d.shop_id === shopId ||
+        String(d.role || '')
+          .toLowerCase()
+          .includes('director'),
+    );
   }, [allDesigners, selectedShopFilter]);
 
   // Comment: Stable color assignment per designer

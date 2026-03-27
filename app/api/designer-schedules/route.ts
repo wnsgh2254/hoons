@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { resolveShopIdForDesigner, upsertDesignerScheduleRow } from '@/lib/designer-schedule-server';
 
 // Comment: GET - Return designer_ids that are available (have a schedule) on a given date/weekday
 // Or return full schedule for a specific designer
@@ -84,6 +85,69 @@ export async function GET(request: NextRequest) {
       new Set((scheduleData || []).map((row: any) => row.designer_id).filter(Boolean))
     );
 
+    // Comment: designers.shop_id matches selected shop but schedule rows still use another shop_id (legacy) — include if they work this weekday anywhere
+    let designerIdsFromHomeShop: number[] = [];
+    if (shopId) {
+      const shopIdNum = Number(shopId);
+      const { data: homeStaff } = await supabase
+        .from('designers')
+        .select('id')
+        .eq('is_active', true)
+        .eq('shop_id', shopIdNum);
+
+      const homeIds = (homeStaff || [])
+        .map((r: { id: number }) => Number(r.id))
+        .filter((n: number) => Number.isFinite(n));
+      if (homeIds.length > 0) {
+        const { data: anyShopSched, error: homeErr } = await supabase
+          .from('designer_schedules')
+          .select('designer_id')
+          .eq('weekday', weekday)
+          .in('designer_id', homeIds)
+          .lte('effective_from', date)
+          .or(`effective_to.is.null,effective_to.gte.${date}`);
+
+        if (homeErr) {
+          console.error('Error fetching home-shop weekday schedules:', homeErr);
+        } else {
+          designerIdsFromHomeShop = Array.from(
+            new Set((anyShopSched || []).map((row: { designer_id: number }) => row.designer_id).filter(Boolean)),
+          );
+        }
+      }
+    }
+
+    // Comment: Directors are bookable at every shop — include if they have this weekday on any schedule row
+    let designerIdsDirectorWeekday: number[] = [];
+    if (shopId) {
+      const { data: dirRows } = await supabase
+        .from('designers')
+        .select('id')
+        .eq('is_active', true)
+        .ilike('role', '%Director%');
+
+      const dirIds = (dirRows || [])
+        .map((r: { id: number }) => Number(r.id))
+        .filter((n: number) => Number.isFinite(n));
+      if (dirIds.length > 0) {
+        const { data: dirSched, error: dirErr } = await supabase
+          .from('designer_schedules')
+          .select('designer_id')
+          .eq('weekday', weekday)
+          .in('designer_id', dirIds)
+          .lte('effective_from', date)
+          .or(`effective_to.is.null,effective_to.gte.${date}`);
+
+        if (dirErr) {
+          console.error('Error fetching director weekday schedules:', dirErr);
+        } else {
+          designerIdsDirectorWeekday = Array.from(
+            new Set((dirSched || []).map((row: { designer_id: number }) => row.designer_id).filter(Boolean)),
+          );
+        }
+      }
+    }
+
     // Comment: Get designers with special work day (특별 근무일) on this date
     // Special work days override regular holidays - check this FIRST
     let timeOffQuery = supabase
@@ -112,7 +176,12 @@ export async function GET(request: NextRequest) {
     // Comment: Special work days have priority - combine both sets
     // If a designer has special work day, they should appear even if they don't have regular schedule
     const allDesignerIds = Array.from(
-      new Set([...designerIdsFromSchedule, ...designerIdsFromSpecialWork])
+      new Set([
+        ...designerIdsFromSchedule,
+        ...designerIdsFromHomeShop,
+        ...designerIdsDirectorWeekday,
+        ...designerIdsFromSpecialWork,
+      ]),
     );
 
     // Comment: Log for debugging
@@ -143,6 +212,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const resolvedShopId = await resolveShopIdForDesigner(Number(designer_id), shop_id);
+    if (!resolvedShopId) {
+      return NextResponse.json(
+        {
+          error:
+            '스케줄에 연결할 매장이 없습니다. 예약 자원에서 매장을 지정한 뒤 다시 시도하세요.',
+        },
+        { status: 400 }
+      );
+    }
+
     // Comment: Validate weekday (0-6)
     if (weekday < 0 || weekday > 6) {
       return NextResponse.json(
@@ -151,65 +231,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Comment: Check if schedule already exists for this designer and weekday
-    const { data: existing } = await supabase
-      .from('designer_schedules')
-      .select('id')
-      .eq('designer_id', Number(designer_id))
-      .eq('weekday', Number(weekday))
-      .is('effective_to', null)
-      .single();
+    const { schedule: result, error: upsertErr } = await upsertDesignerScheduleRow({
+      designer_id: Number(designer_id),
+      resolvedShopId,
+      weekday: Number(weekday),
+      start_time,
+      end_time,
+      effective_from,
+      effective_to,
+    });
 
-    let result;
-    if (existing) {
-      // Comment: Update existing schedule
-      const { data, error } = await supabase
-        .from('designer_schedules')
-        .update({
-          shop_id: shop_id ? Number(shop_id) : null,
-          start_time,
-          end_time,
-          effective_from: effective_from || new Date().toISOString().split('T')[0],
-          effective_to: effective_to || null,
-        })
-        .eq('id', existing.id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error updating schedule:', error);
-        return NextResponse.json(
-          { error: '스케줄 업데이트에 실패했습니다.' },
-          { status: 500 }
-        );
-      }
-
-      result = data;
-    } else {
-      // Comment: Create new schedule
-      const { data, error } = await supabase
-        .from('designer_schedules')
-        .insert({
-          designer_id: Number(designer_id),
-          shop_id: shop_id ? Number(shop_id) : null,
-          weekday: Number(weekday),
-          start_time,
-          end_time,
-          effective_from: effective_from || new Date().toISOString().split('T')[0],
-          effective_to: effective_to || null,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating schedule:', error);
-        return NextResponse.json(
-          { error: '스케줄 생성에 실패했습니다.' },
-          { status: 500 }
-        );
-      }
-
-      result = data;
+    if (upsertErr) {
+      return NextResponse.json({ error: '스케줄 저장에 실패했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ schedule: result }, { status: 200 });

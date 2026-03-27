@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, price, duration_minutes, shop_id, is_active, category, visible_to } = body;
+    const { name, price, duration_minutes, shop_id, is_active, category, visible_to, description } =
+      body;
 
     if (!name || price === undefined || !duration_minutes) {
       return NextResponse.json(
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
         name,
         price,
         duration_minutes,
+        description:
+          typeof description === 'string' && description.trim() ? description.trim() : null,
         shop_id: shop_id || null,
         is_active: is_active !== undefined ? is_active : true,
         category: category || null,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   AdminPageLayout,
   PageHeader,
@@ -46,6 +46,8 @@ interface BookingItem {
   durationHours: number;
   durationMinutes: number;
   startingPrice: number;
+  /** Shown on customer booking page */
+  memo: string;
   isActive: boolean;
 }
 
@@ -214,15 +216,13 @@ function BusinessHourModal({
 
 function BusinessHoursTab({ shops }: { shops: ShopOption[] }) {
   const { hours: apiHours, loading: apiLoading, refetch } = useBusinessHours({});
-  const [hours, setHours] = useState<BusinessHour[]>([]);
   const [editingHour, setEditingHour] = useState<BusinessHour | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
   const shopNameMap = Object.fromEntries((shops || []).map((s) => [s.id, s.name]));
 
-  // Sync API data to local state
-  useEffect(() => {
-    setHours(
+  const hours = useMemo(
+    () =>
       apiHours.map((h) => ({
         id: h.id,
         shopId: h.shop_id,
@@ -230,8 +230,8 @@ function BusinessHoursTab({ shops }: { shops: ShopOption[] }) {
         endTime: h.end_time,
         days: h.days,
       })),
-    );
-  }, [apiHours]);
+    [apiHours],
+  );
 
   const handleAdd = async (data: Omit<BusinessHour, 'id'>) => {
     try {
@@ -678,37 +678,37 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
         }
       }
 
-      // Delete schedules that no longer exist
-      const activeCurrentIds = currentSchedules
-        .filter((cs) => !cs.effective_to)
-        .map((cs) => cs.id);
+      const activeCurrent = currentSchedules.filter((cs) => !cs.effective_to);
 
-      for (const cs of currentSchedules.filter((cs) => !cs.effective_to)) {
+      const deleteIds: number[] = [];
+      for (const cs of activeCurrent) {
         const match = newEntries.find(
-          (ne) => ne.weekday === cs.weekday && ne.start_time === cs.start_time && ne.end_time === cs.end_time,
+          (ne) =>
+            ne.weekday === cs.weekday && ne.start_time === cs.start_time && ne.end_time === cs.end_time,
         );
-        if (!match) {
-          await fetch(`/api/designer-schedules?id=${cs.id}`, { method: 'DELETE' });
-        }
+        if (!match) deleteIds.push(cs.id);
       }
 
-      // Add new schedules that don't exist yet
+      const entriesToAdd: typeof newEntries = [];
       for (const ne of newEntries) {
-        const match = currentSchedules.find(
-          (cs) => !cs.effective_to && cs.weekday === ne.weekday && cs.start_time === ne.start_time && cs.end_time === ne.end_time,
+        const match = activeCurrent.find(
+          (cs) =>
+            cs.weekday === ne.weekday && cs.start_time === ne.start_time && cs.end_time === ne.end_time,
         );
-        if (!match) {
-          await fetch('/api/designer-schedules', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              designer_id: editingResource.id,
-              weekday: ne.weekday,
-              start_time: ne.start_time,
-              end_time: ne.end_time,
-            }),
-          });
-        }
+        if (!match) entriesToAdd.push(ne);
+      }
+
+      if (deleteIds.length > 0 || entriesToAdd.length > 0) {
+        await fetch('/api/designer-schedules/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            designer_id: editingResource.id,
+            shop_id: data.shopId ?? undefined,
+            delete_ids: deleteIds,
+            entries: entriesToAdd,
+          }),
+        });
       }
 
       // Refetch all resources
@@ -845,8 +845,14 @@ function BookingItemModal({
   const [durationHours, setDurationHours] = useState(initial?.durationHours ?? 1);
   const [durationMinutes, setDurationMinutes] = useState(initial?.durationMinutes ?? 0);
   const [startingPriceInput, setStartingPriceInput] = useState('');
+  const [memo, setMemo] = useState(initial?.memo ?? '');
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
+
+  // Comment: Avoid depending on `initial` object identity (prevents reset loops when parent re-renders)
+  const initialSnapshot = initial
+    ? `${initial.id}|${initial.name}|${initial.startingPrice}|${initial.durationHours}|${initial.durationMinutes}|${initial.memo ?? ''}|${initial.isActive}`
+    : '';
 
   useEffect(() => {
     if (!isOpen) return;
@@ -855,9 +861,10 @@ function BookingItemModal({
     setDurationMinutes(initial?.durationMinutes ?? 0);
     const p = initial != null ? Number(initial.startingPrice) : NaN;
     setStartingPriceInput(Number.isFinite(p) && p > 0 ? String(p) : '');
+    setMemo(initial?.memo ?? '');
     setIsActive(initial?.isActive ?? true);
     setError(null);
-  }, [isOpen, initial]);
+  }, [isOpen, initialSnapshot]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -870,7 +877,14 @@ function BookingItemModal({
       setError('시작 금액을 올바르게 입력해주세요.');
       return;
     }
-    onSave({ name, durationHours, durationMinutes, startingPrice: price, isActive });
+    onSave({
+      name,
+      durationHours,
+      durationMinutes,
+      startingPrice: price,
+      memo: memo.trim(),
+      isActive,
+    });
   };
 
   return (
@@ -943,6 +957,22 @@ function BookingItemModal({
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            메모 (고객 예약 화면에 표시, 선택)
+          </label>
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            placeholder="예: 포함 내용, 준비물, 안내 문구 등"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            손님이 예약 시 서비스 카드 아래에 짧게 보입니다.
+          </p>
+        </div>
+
+        <div>
           <p className="block text-sm font-medium text-gray-700 mb-2">상태</p>
           <Toggle checked={isActive} onChange={setIsActive} label="사용" />
         </div>
@@ -957,9 +987,23 @@ function BookingItemsTab() {
   const [showInactive, setShowInactive] = useState(false);
   const [editingItem, setEditingItem] = useState<BookingItem | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const prevApiItemsSigRef = useRef<string | null>(null);
 
-  // Sync API data to local state
+  // Sync API data to local state only when payload meaningfully changes (avoids setState loops)
   useEffect(() => {
+    const sig = JSON.stringify(
+      apiItems.map((i) => ({
+        id: i.id,
+        name: i.name,
+        duration_hours: i.duration_hours,
+        duration_minutes: i.duration_minutes,
+        starting_price: i.starting_price,
+        memo: i.memo,
+        is_active: i.is_active,
+      })),
+    );
+    if (sig === prevApiItemsSigRef.current) return;
+    prevApiItemsSigRef.current = sig;
     setItems(
       apiItems.map((item) => ({
         id: item.id,
@@ -967,6 +1011,7 @@ function BookingItemsTab() {
         durationHours: item.duration_hours,
         durationMinutes: item.duration_minutes,
         startingPrice: Number(item.starting_price ?? 0),
+        memo: typeof item.memo === 'string' ? item.memo : '',
         isActive: item.is_active,
       })),
     );
@@ -984,6 +1029,7 @@ function BookingItemsTab() {
           duration_hours: data.durationHours,
           duration_minutes: data.durationMinutes,
           starting_price: data.startingPrice,
+          memo: data.memo.trim() || null,
           is_active: data.isActive,
           sort_order: items.length,
         }),
@@ -1010,6 +1056,7 @@ function BookingItemsTab() {
           duration_hours: data.durationHours,
           duration_minutes: data.durationMinutes,
           starting_price: data.startingPrice,
+          memo: data.memo.trim() || null,
           is_active: data.isActive,
         }),
       });
@@ -1059,6 +1106,19 @@ function BookingItemsTab() {
       header: '소요시간',
       align: 'center' as const,
       render: (item: BookingItem) => formatDuration(item.durationHours, item.durationMinutes),
+    },
+    {
+      key: 'memo',
+      header: '메모',
+      align: 'center' as const,
+      render: (item: BookingItem) => (
+        <span
+          className={`max-w-[200px] truncate inline-block ${!item.isActive ? 'text-gray-400' : 'text-gray-700'}`}
+          title={item.memo || undefined}
+        >
+          {item.memo?.trim() ? item.memo.trim() : '—'}
+        </span>
+      ),
     },
     {
       key: 'actions',

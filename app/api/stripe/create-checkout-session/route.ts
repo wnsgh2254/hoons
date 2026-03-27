@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
 import { createPublicBooking, buildPhoneVariants } from "@/lib/data";
+import {
+  assertPublicBookingSlotAvailable,
+  resolveBookingDurationMinutes,
+} from "@/lib/server-booking-availability";
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +28,7 @@ export async function POST(request: NextRequest) {
       designerName,
       formattedDateLabel,
       embedded,
+      durationMinutes: durationMinutesBody,
     } = body;
 
     const useEmbedded = embedded === true;
@@ -33,6 +38,31 @@ export async function POST(request: NextRequest) {
         { error: "Missing required fields for Stripe checkout session." },
         { status: 400 },
       );
+    }
+
+    const dateStr = typeof fullDate === "string" ? fullDate : null;
+    if (!dateStr) {
+      return NextResponse.json(
+        { error: "Missing appointment date." },
+        { status: 400 },
+      );
+    }
+
+    const durationMinutes = await resolveBookingDurationMinutes(supabase, {
+      durationMinutes:
+        typeof durationMinutesBody === "number" ? durationMinutesBody : null,
+      serviceId: serviceId != null ? Number(serviceId) : null,
+    });
+
+    const slotCheck = await assertPublicBookingSlotAvailable(supabase, {
+      designerId: designerId != null ? Number(designerId) : null,
+      shopId: Number(shopId),
+      date: dateStr,
+      timeLabel: String(timeLabel),
+      durationMinutes,
+    });
+    if (!slotCheck.ok) {
+      return NextResponse.json({ error: slotCheck.message }, { status: 409 });
     }
 
     if (!process.env.STRIPE_SECRET_KEY) {

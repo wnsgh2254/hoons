@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, duration_hours, duration_minutes, starting_price, is_active, sort_order } = body;
+    const { name, duration_hours, duration_minutes, starting_price, is_active, sort_order, memo } =
+      body;
 
     if (!name) {
       return NextResponse.json({ error: 'name은 필수입니다.' }, { status: 400 });
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
         starting_price: priceNum,
         is_active: is_active ?? true,
         sort_order: sort_order ?? 0,
+        memo: typeof memo === 'string' && memo.trim() ? memo.trim() : null,
       })
       .select()
       .single();
@@ -78,7 +80,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, duration_hours, duration_minutes, starting_price, is_active, sort_order } = body;
+    const { id, name, duration_hours, duration_minutes, starting_price, is_active, sort_order, memo } =
+      body;
 
     if (!id) {
       return NextResponse.json({ error: 'id는 필수입니다.' }, { status: 400 });
@@ -97,6 +100,9 @@ export async function PATCH(request: NextRequest) {
     }
     if (is_active !== undefined) updateData.is_active = is_active;
     if (sort_order !== undefined) updateData.sort_order = sort_order;
+    if (memo !== undefined) {
+      updateData.memo = typeof memo === 'string' && memo.trim() ? memo.trim() : null;
+    }
 
     const { data, error } = await supabase
       .from('booking_items')

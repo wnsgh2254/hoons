@@ -1,6 +1,6 @@
 // Authentication utility functions
 
-export type UserRole = 'director' | 'manager' | 'stylist';
+export type UserRole = 'director' | 'manager' | 'designer' | 'stylist';
 
 export interface User {
   username: string;
@@ -19,52 +19,47 @@ const USERS: Record<string, { password: string; role: UserRole }> = {
   },
   haeyoom_stylist: {
     password: 'stylist123',
-    role: 'stylist',
+    role: 'designer',
   },
 };
 
 // Comment: Validate user credentials
 export function validateCredentials(username: string, password: string): User | null {
-  // Comment: Trim and normalize input
   const normalizedUsername = username.trim();
   const normalizedPassword = password.trim();
-  
+
   const user = USERS[normalizedUsername];
-  if (!user) {
-    console.log(`User not found: ${normalizedUsername}`);
-    return null;
-  }
-  
-  if (user.password !== normalizedPassword) {
-    console.log(`Password mismatch for user: ${normalizedUsername}`);
-    return null;
-  }
-  
+  if (!user) return null;
+  if (user.password !== normalizedPassword) return null;
+
   return { username: normalizedUsername, role: user.role };
 }
 
+// Comment: Normalize legacy 'stylist' role to 'designer' for consistent checks
+function normalizeRole(role: UserRole): 'director' | 'manager' | 'designer' {
+  if (role === 'stylist') return 'designer';
+  return role as 'director' | 'manager' | 'designer';
+}
+
 // Comment: Check if a role has access to a specific admin route
+// director  → full access
+// manager   → all except /admin/wages
+// designer  → only /admin/appointments and /admin/sales
 export function hasAccess(role: UserRole, path: string): boolean {
-  // Director has access to everything
-  if (role === 'director') {
-    return true;
+  const r = normalizeRole(role);
+
+  if (r === 'director') return true;
+
+  if (r === 'manager') {
+    return !path.startsWith('/admin/wages');
   }
 
-  // Manager: no access to sales and wages, but has access to customers
-  if (role === 'manager') {
-    if (path.startsWith('/admin/sales') || path.startsWith('/admin/wages')) {
-      return false;
-    }
-    // Comment: Customers is accessible to manager
-    return true;
-  }
-
-  // Stylist: only access to appointments (no access to customers)
-  if (role === 'stylist') {
-    if (path.startsWith('/admin/customers')) {
-      return false;
-    }
-    return path.startsWith('/admin/appointments');
+  // designer: only appointments and sales
+  if (r === 'designer') {
+    return (
+      path.startsWith('/admin/appointments') ||
+      path.startsWith('/admin/sales')
+    );
   }
 
   return false;
@@ -74,15 +69,15 @@ export function hasAccess(role: UserRole, path: string): boolean {
 export function getAllowedRoutes(role: UserRole): string[] {
   const allRoutes = [
     '/admin/appointments',
+    '/admin/sales',
+    '/admin/customers',
+    '/admin/prepaid',
+    '/admin/service-history',
     '/admin/staff',
     '/admin/inventory',
-    '/admin/prepaid',
-    '/admin/customers',
-    '/admin/service-history',
     '/admin/settings',
     '/admin/settings/reservation',
     '/admin/settings/services',
-    '/admin/sales',
     '/admin/wages',
   ];
 

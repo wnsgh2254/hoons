@@ -14,7 +14,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, price, duration_minutes, is_active, visible_to, category } = body;
+    const { name, price, duration_minutes, is_active, visible_to, category, description } = body;
 
     const updates: any = {};
     if (name !== undefined) updates.name = name;
@@ -23,6 +23,10 @@ export async function PATCH(
     if (is_active !== undefined) updates.is_active = is_active;
     if (visible_to !== undefined) updates.visible_to = visible_to;
     if (category !== undefined) updates.category = category;
+    if (description !== undefined) {
+      updates.description =
+        typeof description === 'string' && description.trim() ? description.trim() : null;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

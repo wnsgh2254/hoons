@@ -28,6 +28,7 @@ interface ServiceItem {
   name: string;
   price: number;
   duration_minutes: number;
+  description?: string | null;
   is_active: boolean;
   shop_id: number | null;
   category: string | null;
@@ -41,6 +42,7 @@ interface ServiceItem {
 
 const PAGE_TABS = [
   { key: 'services', label: '서비스' },
+  { key: 'designerServices', label: '직원별 서비스' },
   { key: 'prepaid', label: '정액권' },
   { key: 'products', label: '제품' },
   { key: 'productCategories', label: '제품분류' },
@@ -205,6 +207,7 @@ function ServiceItemModal({
   const [durationHours, setDurationHours] = useState(initial ? Math.floor(initial.duration_minutes / 60) : 0);
   const [durationMins, setDurationMins] = useState(initial ? initial.duration_minutes % 60 : 0);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
+  const [description, setDescription] = useState(initial?.description ?? '');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -233,6 +236,7 @@ function ServiceItemModal({
             is_active: isActive,
             visible_to: visibleTo,
             category,
+            description: description.trim() || null,
           }),
         });
         const data = await res.json();
@@ -250,6 +254,7 @@ function ServiceItemModal({
             is_active: isActive,
             category,
             visible_to: visibleTo,
+            description: description.trim() || null,
           }),
         });
         const data = await res.json();
@@ -327,6 +332,18 @@ function ServiceItemModal({
             <Select value={durationMins} onChange={(e) => setDurationMins(Number(e.target.value))} options={MINUTE_OPTIONS} wrapperClassName="w-24" />
             <span className="text-sm text-gray-600">분</span>
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            설명 (고객 예약 페이지, 선택)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            placeholder="짧은 시술 설명"
+          />
         </div>
         <div>
           <p className="block text-sm font-medium text-gray-700 mb-2">상태</p>
@@ -589,6 +606,538 @@ function ServicesTab() {
           title="서비스 수정"
           defaultCategory={selectedCategory}
           categoryOptions={categories}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Tab 2: 직원별 서비스 ──────────────────────────────────────────────────────
+
+interface DesignerServiceRow {
+  id: number;
+  designer_id: number;
+  service_id: number;
+  price: number;
+  duration_minutes: number | null;
+  is_active: boolean;
+  notes: string | null;
+  services: { id: number; name: string; category: string | null; description: string | null } | null;
+}
+
+interface StaffMember {
+  id: number;
+  name: string;
+  english_name: string | null;
+  role: string;
+  is_active: boolean;
+}
+
+const CUSTOM_CATEGORY_VALUE = '__custom__';
+
+// Comment: Derive a normalized category label from a designer_service row
+// Returns the actual service name for custom entries (category === 'Custom')
+function getRowCategoryLabel(row: DesignerServiceRow): string {
+  const cat = row.services?.category ?? '';
+  if (cat === 'Custom') {
+    // Comment: Custom entries display their actual service name
+    return row.services?.name
+      ? row.services.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim()
+      : '직접 입력';
+  }
+  if (cat) return cat === 'Other' ? 'Others' : cat;
+  if (row.services?.name) {
+    const derived = getServiceCategory(row.services.name);
+    return derived === 'Other' ? 'Others' : derived;
+  }
+  return '-';
+}
+
+// Comment: Returns true if the row is a custom (직접 입력) entry
+function isCustomRow(row: DesignerServiceRow): boolean {
+  return row.services?.category === 'Custom';
+}
+
+function DesignerServiceModal({
+  isOpen,
+  onClose,
+  onSaved,
+  onDelete,
+  initial,
+  title,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  onDelete?: () => void;
+  initial?: DesignerServiceRow;
+  title: string;
+}) {
+  // Comment: Use string so the field starts empty (placeholder "0") instead of pre-filled 0
+  const [price, setPrice] = useState<string>(initial?.price ? String(initial.price) : '');
+  const [durationHours, setDurationHours] = useState<number>(
+    initial?.duration_minutes != null ? Math.floor(initial.duration_minutes / 60) : 0
+  );
+  const [durationMins, setDurationMins] = useState<number>(
+    initial?.duration_minutes != null ? initial.duration_minutes % 60 : 0
+  );
+  const [isActive, setIsActive] = useState<boolean>(initial?.is_active ?? true);
+  const [notes, setNotes] = useState<string>(initial?.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const categoryLabel = initial ? getRowCategoryLabel(initial) : '';
+  const isCustom = initial ? isCustomRow(initial) : false;
+  const [customName, setCustomName] = useState<string>(isCustom ? categoryLabel : '');
+
+  const handleSave = async () => {
+    const priceNum = Number(price);
+    if (!price || priceNum <= 0) { setError('금액을 입력해주세요.'); return; }
+    const durationTotal = durationHours * 60 + durationMins;
+    if (durationTotal <= 0) { setError('소요시간을 입력해주세요.'); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      if (initial) {
+        // Comment: For custom entries, also update the service name if changed
+        if (isCustom && customName.trim() && customName.trim() !== categoryLabel) {
+          await fetch(`/api/services/${initial.service_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: customName.trim() }),
+          });
+        }
+        const res = await fetch('/api/designer-services', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: initial.id, price: priceNum, duration_minutes: durationTotal, is_active: isActive, notes: notes.trim() || null }),
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || '수정 실패'); }
+      }
+      onSaved();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title} zIndex={Z.MODAL_PICKER} scrollable
+      footer={
+        <>
+          <Button onClick={handleSave} loading={loading} className="flex-1">저장</Button>
+          {onDelete && <Button variant="danger" onClick={onDelete} className="flex-1">삭제</Button>}
+          <Button variant="outline" onClick={onClose} className="flex-1">취소</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        {isCustom ? (
+          <Input
+            label="항목명"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            required
+          />
+        ) : categoryLabel && (
+          <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">
+            <span className="font-medium">{categoryLabel}</span>
+          </div>
+        )}
+        <Input label="금액 (AUD) *" type="number" min={0} step={0.01}
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="0"
+        />
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">소요시간 <span className="text-red-500">*</span></p>
+          <div className="flex items-center gap-2">
+            <Input type="number" min={0} max={23} value={durationHours}
+              onChange={(e) => setDurationHours(Number(e.target.value))} wrapperClassName="w-20" />
+            <span className="text-sm text-gray-600">시간</span>
+            <Select value={durationMins} onChange={(e) => setDurationMins(Number(e.target.value))}
+              options={MINUTE_OPTIONS} wrapperClassName="w-24" />
+            <span className="text-sm text-gray-600">분</span>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">메모</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="예약 화면에서 손님에게 표시되는 짧은 설명"
+            className="w-full border border-gray-300 px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+          />
+        </div>
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">상태</p>
+          <Toggle checked={isActive} onChange={setIsActive} label="사용" />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AddDesignerServiceModal({
+  isOpen,
+  onClose,
+  onSaved,
+  designerId,
+  existingRows,
+  serviceOptions,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  designerId: number;
+  existingRows: DesignerServiceRow[];
+  serviceOptions: ServiceItem[];
+}) {
+  // Comment: Only show categories not already registered for this designer
+  const existingCategories = existingRows.map((r) => getRowCategoryLabel(r));
+  const availableCategories = CATEGORY_ORDER.filter((cat) => !existingCategories.includes(cat));
+
+  // Comment: Include '직접 입력' at the end of the options list
+  const selectOptions = [
+    ...availableCategories.map((cat) => ({ value: cat, label: cat })),
+    { value: CUSTOM_CATEGORY_VALUE, label: '✏️ 직접 입력' },
+  ];
+
+  const [selectedCategory, setSelectedCategory] = useState<string>(availableCategories[0] ?? CUSTOM_CATEGORY_VALUE);
+  const [customName, setCustomName] = useState<string>('');
+  // Comment: Use string so the field starts empty (placeholder "0") instead of pre-filled 0
+  const [price, setPrice] = useState<string>('');
+  const [durationHours, setDurationHours] = useState<number>(0);
+  const [durationMins, setDurationMins] = useState<number>(0);
+  const [notes, setNotes] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const isCustom = selectedCategory === CUSTOM_CATEGORY_VALUE;
+
+  const handleSave = async () => {
+    if (isCustom && !customName.trim()) { setError('항목명을 입력해주세요.'); return; }
+    if (!isCustom && !selectedCategory) { setError('서비스 분류를 선택해주세요.'); return; }
+    const priceNum = Number(price);
+    if (!price || priceNum <= 0) { setError('금액을 입력해주세요.'); return; }
+    const durationTotal = durationHours * 60 + durationMins;
+    if (durationTotal <= 0) { setError('소요시간을 입력해주세요.'); return; }
+    setLoading(true);
+    setError(null);
+
+    try {
+      let serviceId: number;
+
+      if (isCustom) {
+        // Comment: Create a new service entry for the custom name (visible_to: admin only)
+        const svcRes = await fetch('/api/services', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: customName.trim(),
+            price: 0,
+            duration_minutes: durationTotal,
+            is_active: true,
+            category: 'Custom',
+            visible_to: 'admin',
+          }),
+        });
+        const svcData = await svcRes.json();
+        if (!svcRes.ok) throw new Error(svcData.error || '서비스 생성 실패');
+        serviceId = svcData.service?.id ?? svcData.id;
+      } else {
+        // Comment: Find a representative service for the selected category
+        const normalizedCategory = selectedCategory === 'Others' ? 'Other' : selectedCategory;
+        const rep = serviceOptions.find((s) => {
+          if (!s.is_active) return false;
+          const svcCat = s.category || getServiceCategory(s.name);
+          const norm = svcCat === 'Other' ? 'Others' : svcCat;
+          return norm === selectedCategory || svcCat === normalizedCategory;
+        });
+        if (!rep) {
+          setError(`'${selectedCategory}' 분류에 등록된 서비스가 없습니다. 서비스 탭에서 먼저 등록해 주세요.`);
+          setLoading(false);
+          return;
+        }
+        serviceId = rep.id;
+      }
+
+      const res = await fetch('/api/designer-services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          designer_id: designerId,
+          service_id: serviceId,
+          price: priceNum,
+          duration_minutes: durationTotal,
+          is_active: true,
+          notes: notes.trim() || null,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || '등록 실패');
+      onSaved();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="서비스 등록" zIndex={Z.MODAL_PICKER} scrollable
+      footer={
+        <>
+          <Button onClick={handleSave} loading={loading} className="flex-1">저장</Button>
+          <Button variant="outline" onClick={onClose} className="flex-1">취소</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <FormAlert message={error} variant="error" />}
+        <Select
+          label="서비스 분류"
+          value={selectedCategory}
+          onChange={(e) => { setSelectedCategory(e.target.value); setCustomName(''); }}
+          options={selectOptions}
+          required
+        />
+        {isCustom && (
+          <Input
+            label="항목명"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder="예: 드라이 프리미엄, 두피 클리닉 등"
+            required
+          />
+        )}
+        <Input label="금액 (AUD) *" type="number" min={0} step={0.01}
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="0"
+        />
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">소요시간 <span className="text-red-500">*</span></p>
+          <div className="flex items-center gap-2">
+            <Input type="number" min={0} max={23} value={durationHours}
+              onChange={(e) => setDurationHours(Number(e.target.value))} wrapperClassName="w-20" />
+            <span className="text-sm text-gray-600">시간</span>
+            <Select value={durationMins} onChange={(e) => setDurationMins(Number(e.target.value))}
+              options={MINUTE_OPTIONS} wrapperClassName="w-24" />
+            <span className="text-sm text-gray-600">분</span>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">메모</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="예약 화면에서 손님에게 표시되는 짧은 설명"
+            className="w-full border border-gray-300 px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DesignerServicesTab() {
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [designerServices, setDesignerServices] = useState<DesignerServiceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDesignerId, setSelectedDesignerId] = useState<number | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingRow, setEditingRow] = useState<DesignerServiceRow | null>(null);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [staffRes, servicesRes, dsRes] = await Promise.all([
+        fetch('/api/staff'),
+        fetch('/api/services'),
+        fetch('/api/designer-services'),
+      ]);
+      const staffData = await staffRes.json();
+      const servicesData = await servicesRes.json();
+      const dsData = await dsRes.json();
+      const staffList: StaffMember[] = (staffData.staff || []);
+      setStaff(staffList);
+      setServices(servicesData.services || []);
+      setDesignerServices(dsData.designerServices || []);
+      if (staffList.length > 0 && selectedDesignerId === null) {
+        setSelectedDesignerId(staffList[0].id);
+      }
+    } catch (err) {
+      console.error('Error fetching designer services data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDesignerId]);
+
+  useEffect(() => { fetchAll(); }, []);
+
+  const selectedDesigner = staff.find((s) => s.id === selectedDesignerId) ?? null;
+  const rowsForDesigner = designerServices.filter((ds) => ds.designer_id === selectedDesignerId);
+  const filteredRows = showInactive ? rowsForDesigner : rowsForDesigner.filter((r) => r.is_active);
+
+  const handleDelete = async (row: DesignerServiceRow) => {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return;
+    try {
+      const res = await fetch(`/api/designer-services?id=${row.id}`, { method: 'DELETE' });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setDesignerServices((prev) => prev.filter((r) => r.id !== row.id));
+      setEditingRow(null);
+    } catch (err: any) {
+      alert(err.message || '삭제에 실패했습니다.');
+    }
+  };
+
+  const columns = [
+    {
+      key: 'name',
+      header: '항목명',
+      render: (item: DesignerServiceRow) => (
+        <div className="flex items-center gap-2">
+          <span className={!item.is_active ? 'text-gray-400' : 'font-medium text-black'}>
+            {getRowCategoryLabel(item)}
+          </span>
+          {!item.is_active && <Badge variant="default">미사용</Badge>}
+        </div>
+      ),
+    },
+    {
+      key: 'price',
+      header: '시작 금액',
+      align: 'center' as const,
+      render: (item: DesignerServiceRow) => formatPrice(item.price),
+    },
+    {
+      key: 'duration',
+      header: '소요시간',
+      align: 'center' as const,
+      render: (item: DesignerServiceRow) =>
+        item.duration_minutes != null ? formatDuration(item.duration_minutes) : '-',
+    },
+    {
+      key: 'notes',
+      header: '메모',
+      align: 'center' as const,
+      render: (item: DesignerServiceRow) => item.notes ?? '-',
+    },
+    {
+      key: 'actions',
+      header: '수정',
+      align: 'center' as const,
+      render: (item: DesignerServiceRow) => (
+        <Button variant="outline" size="sm" onClick={() => setEditingRow(item)}>수정</Button>
+      ),
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="text-center py-11.5">
+        <div className="inline-block w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin" />
+        <p className="text-gray-500 text-sm mt-4">로딩 중...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-6">
+      {/* Left: Staff list */}
+      <div className="w-1/3 shrink-0">
+        <div className="px-2 pb-4">
+          <h3 className="text-lg font-bold text-black">직원 목록</h3>
+        </div>
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          {staff.map((member) => {
+            const count = designerServices.filter((ds) => ds.designer_id === member.id && ds.is_active).length;
+            const isSelected = selectedDesignerId === member.id;
+            return (
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => setSelectedDesignerId(member.id)}
+                className={`w-full flex items-center justify-between px-4 py-3 text-left border-b border-gray-100 last:border-b-0 transition-colors ${
+                  isSelected ? 'bg-black text-white' : 'hover:bg-gray-50'
+                }`}
+              >
+                <div>
+                  <p className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-black'}`}>
+                    {member.name}
+                    {member.english_name && (
+                      <span className={`ml-1.5 text-xs font-normal ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
+                        {member.english_name}
+                      </span>
+                    )}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${isSelected ? 'text-gray-300' : 'text-gray-500'}`}>{member.role}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${isSelected ? 'bg-white text-black' : 'bg-gray-100 text-gray-600'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right: Services for selected designer */}
+      <div className="flex-1 min-w-0">
+        <div className="px-2 pb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-bold text-black">
+              {selectedDesigner ? `${selectedDesigner.name} 서비스` : '직원을 선택하세요'}
+            </h3>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)} className="rounded border-gray-300" />
+              <span className="text-xs text-gray-600">미사용보기</span>
+            </label>
+          </div>
+          {selectedDesigner && (
+            <Button icon="add" size="sm" onClick={() => setIsAdding(true)}>항목 등록</Button>
+          )}
+        </div>
+
+        {selectedDesigner ? (
+          <DataTable
+            columns={columns}
+            data={filteredRows}
+            keyExtractor={(r) => r.id}
+            emptyMessage="등록된 서비스가 없습니다. 항목 등록을 눌러 추가하세요."
+          />
+        ) : (
+          <p className="text-sm text-gray-400 text-center py-11.5">왼쪽에서 직원을 선택하세요.</p>
+        )}
+      </div>
+
+      {/* Modals */}
+      {isAdding && selectedDesignerId && (
+        <AddDesignerServiceModal
+          isOpen
+          onClose={() => setIsAdding(false)}
+          onSaved={() => { setIsAdding(false); fetchAll(); }}
+          designerId={selectedDesignerId}
+          existingRows={rowsForDesigner}
+          serviceOptions={services}
+        />
+      )}
+      {editingRow && (
+        <DesignerServiceModal
+          isOpen
+          onClose={() => setEditingRow(null)}
+          onSaved={() => { setEditingRow(null); fetchAll(); }}
+          onDelete={() => handleDelete(editingRow)}
+          initial={editingRow}
+          title="서비스 수정"
         />
       )}
     </div>
@@ -1206,6 +1755,7 @@ export default function ServicesAndProductsPage() {
       <Tabs tabs={PAGE_TABS} activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="mt-1">
         {activeTab === 'services' && <ServicesTab />}
+        {activeTab === 'designerServices' && <DesignerServicesTab />}
         {activeTab === 'prepaid' && <PrepaidTab />}
         {activeTab === 'products' && <ProductsTab items={items} brands={brands} loading={inventoryLoading} refetch={inventoryRefetch} />}
         {activeTab === 'productCategories' && <ProductCategoriesTab brands={brands} loading={inventoryLoading} refetch={inventoryRefetch} />}

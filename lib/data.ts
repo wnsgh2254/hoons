@@ -294,15 +294,15 @@ export async function getStaffStats(shopId?: number) {
   };
 }
 
-// Comment: Update a designer/staff member
+// Comment: Update a designer/staff member (partial PATCH supported: merge with existing row)
 export async function updateDesigner(
   id: number,
   updates: {
-    name: string;
+    name?: string;
     english_name?: string | null;
-    role: string;
+    role?: string;
     shop_id?: number | null;
-    wage_type: string;
+    wage_type?: string;
     percent_rate?: number | null;
     hourly_rate?: number | null;
     product_sale_pct?: number | null;
@@ -316,22 +316,45 @@ export async function updateDesigner(
     throw new Error('유효하지 않은 ID입니다.');
   }
 
+  const existing = await getDesignerById(id);
+  const wageType = updates.wage_type !== undefined ? updates.wage_type : existing.wage_type;
+
   const updateData: any = {
-    name: updates.name.trim(),
+    name: updates.name !== undefined ? updates.name.trim() : existing.name,
     english_name:
       updates.english_name !== undefined
         ? updates.english_name?.trim() || null
-        : undefined,
-    role: updates.role.trim(),
-    shop_id: updates.shop_id || null,
-    wage_type: updates.wage_type,
-    percent_rate: updates.wage_type === 'percent' ? updates.percent_rate : null,
-    hourly_rate: updates.wage_type === 'hourly' ? updates.hourly_rate : null,
-    product_sale_pct: updates.product_sale_pct != null ? Number(updates.product_sale_pct) : 10,
-    product_deduction_pct: updates.product_deduction_pct != null ? Number(updates.product_deduction_pct) : 10,
+        : existing.english_name,
+    role: updates.role !== undefined ? updates.role.trim() : existing.role,
+    shop_id: updates.shop_id !== undefined ? updates.shop_id : existing.shop_id,
+    wage_type: wageType,
+    percent_rate:
+      wageType === 'percent'
+        ? updates.percent_rate !== undefined
+          ? updates.percent_rate
+          : existing.percent_rate
+        : null,
+    hourly_rate:
+      wageType === 'hourly'
+        ? updates.hourly_rate !== undefined
+          ? updates.hourly_rate
+          : existing.hourly_rate
+        : null,
+    product_sale_pct:
+      updates.product_sale_pct !== undefined
+        ? Number(updates.product_sale_pct) || 10
+        : existing.product_sale_pct != null
+          ? Number(existing.product_sale_pct)
+          : 10,
+    product_deduction_pct:
+      updates.product_deduction_pct !== undefined
+        ? Number(updates.product_deduction_pct) || 10
+        : existing.product_deduction_pct != null
+          ? Number(existing.product_deduction_pct)
+          : 10,
     instagramLink:
-      updates.instagramLink !== undefined ? updates.instagramLink || null : undefined,
-    is_active: updates.is_active !== undefined ? updates.is_active : true,
+      updates.instagramLink !== undefined ? updates.instagramLink || null : existing.instagramLink,
+    is_active: updates.is_active !== undefined ? updates.is_active : existing.is_active,
   };
 
   // Include weekly_deduction if provided

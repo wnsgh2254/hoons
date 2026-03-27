@@ -82,6 +82,32 @@ function formatDisplayDateTime(bookingDate: string, bookingTime: string | null):
   }
 }
 
+// Comment: Send booking confirmation SMS immediately after a booking is created and deposit is paid
+export async function sendBookingConfirmation(params: {
+  phone: string;
+  bookingDate: string;
+  bookingTime: string;
+  shopName: string;
+  shopLocation: string;
+  shopPhone: string | null;
+}): Promise<{ success: boolean; messageSid?: string; error?: string }> {
+  const { phone, bookingDate, bookingTime, shopName, shopLocation, shopPhone } = params;
+
+  const displayText = formatDisplayDateTime(bookingDate, bookingTime);
+  const contactLine = shopPhone ? `\n📞 ${shopPhone}` : '';
+
+  const message =
+    `Hello, this is Haeyoom 😊\n` +
+    `Your appointment is booked for ${displayText}.\n\n` +
+    `If you need to change or cancel your booking, please contact the salon.\n\n` +
+    `📍 Haeyoom ${shopName}\n` +
+    `${shopLocation}` +
+    `${contactLine}\n\n` +
+    `Thank you!`;
+
+  return sendSMS(phone, message);
+}
+
 // Comment: Send booking reminder SMS matching Edge Function template
 export async function sendBookingReminder(
   phoneNumber: string,

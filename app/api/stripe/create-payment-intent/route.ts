@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
 import { createPublicBooking, getCustomerIdByPhone } from "@/lib/data";
+import {
+  assertPublicBookingSlotAvailable,
+  resolveBookingDurationMinutes,
+} from "@/lib/server-booking-availability";
 
 // Comment: Create PaymentIntent for in-page Payment Element (Salon de Jessie style)
 export async function POST(request: NextRequest) {
@@ -24,6 +28,7 @@ export async function POST(request: NextRequest) {
       shopName,
       designerName,
       formattedDateLabel,
+      durationMinutes: durationMinutesBody,
     } = body;
 
     if (!shopId || !day || !timeLabel || !depositAmount || !serviceName) {
@@ -31,6 +36,31 @@ export async function POST(request: NextRequest) {
         { error: "Missing required fields for payment intent." },
         { status: 400 },
       );
+    }
+
+    const dateStr = typeof fullDate === "string" ? fullDate : null;
+    if (!dateStr) {
+      return NextResponse.json(
+        { error: "Missing appointment date." },
+        { status: 400 },
+      );
+    }
+
+    const durationMinutes = await resolveBookingDurationMinutes(supabase, {
+      durationMinutes:
+        typeof durationMinutesBody === "number" ? durationMinutesBody : null,
+      serviceId: serviceId != null ? Number(serviceId) : null,
+    });
+
+    const slotCheck = await assertPublicBookingSlotAvailable(supabase, {
+      designerId: designerId != null ? Number(designerId) : null,
+      shopId: Number(shopId),
+      date: dateStr,
+      timeLabel: String(timeLabel),
+      durationMinutes,
+    });
+    if (!slotCheck.ok) {
+      return NextResponse.json({ error: slotCheck.message }, { status: 409 });
     }
 
     if (!process.env.STRIPE_SECRET_KEY) {

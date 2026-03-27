@@ -21,6 +21,7 @@ interface Service {
   name: string;
   price: number;
   duration_minutes: number;
+  description?: string | null;
   is_active: boolean;
   shop_id: number | null;
   category: string | null;
@@ -410,6 +411,7 @@ function AddServiceModal({
   onSuccess: () => void;
 }) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [price, setPrice] = useState<string>('');
   const [duration, setDuration] = useState<string>('');
   const [serviceType, setServiceType] = useState<'card' | 'cash'>('card');
@@ -439,6 +441,7 @@ function AddServiceModal({
           name: serviceName,
           price: Number(price),
           duration_minutes: Number(duration),
+          description: description.trim() || null,
           shop_id: null,
           is_active: true,
           category: category || null,
@@ -553,6 +556,18 @@ function AddServiceModal({
           min={1}
           required
         />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            설명 (고객 예약 페이지, 선택)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            placeholder="짧은 시술 설명"
+          />
+        </div>
       </form>
     </Modal>
   );
@@ -569,6 +584,7 @@ function EditServiceModal({
   onSuccess: () => void;
 }) {
   const [name, setName] = useState(service.name);
+  const [description, setDescription] = useState(service.description ?? '');
   const [price, setPrice] = useState<string>(String(service.price));
   const [duration, setDuration] = useState<string>(String(service.duration_minutes));
   const [loading, setLoading] = useState(false);
@@ -591,6 +607,7 @@ function EditServiceModal({
           name: name.trim(),
           price: Number(price),
           duration_minutes: Number(duration),
+          description: description.trim() || null,
         }),
       });
 
@@ -657,6 +674,18 @@ function EditServiceModal({
           min={1}
           required
         />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            설명 (고객 예약 페이지, 선택)
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            placeholder="짧은 시술 설명"
+          />
+        </div>
       </form>
     </Modal>
   );
