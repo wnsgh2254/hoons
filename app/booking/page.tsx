@@ -163,6 +163,8 @@ export default function BookingPage() {
   const [showPaymentForm, setShowPaymentForm] = useState<boolean>(false); // Comment: Delay mount to avoid multiple Elements in React Strict Mode
   const [availabilityData, setAvailabilityData] = useState<DesignerAvailabilityIntervals | null>(null);
   const [availabilityLoading, setAvailabilityLoading] = useState<boolean>(false);
+  // Comment: Preloaded designer lists per shopId (populated as soon as a date is selected)
+  const preloadedDesignersRef = useRef<Map<string, any[]>>(new Map());
 
   const paymentIntentFetchedRef = useRef(false); // Comment: Only fetch payment intent once per deposit visit (or on retry)
   const lastFetchedCheckoutRetryRef = useRef<number>(0);
@@ -235,7 +237,31 @@ export default function BookingPage() {
     }
   }, [selectedShop, shopsDb]);
 
-  // Comment: Load available designers when date and shop are selected (abort stale requests on shop/date change)
+  // Comment: Preload designers for ALL shops as soon as date+shops are known (before shop is clicked)
+  useEffect(() => {
+    if (!selectedDate || shopsDb.length === 0) return;
+    preloadedDesignersRef.current = new Map();
+    const ac = new AbortController();
+    const fetchOpts = { cache: 'no-store' as const, signal: ac.signal };
+
+    shopsDb.forEach((shop) => {
+      const key = String(shop.id);
+      fetch(
+        `/api/available-designers?date=${encodeURIComponent(selectedDate)}&shopId=${shop.id}`,
+        fetchOpts,
+      )
+        .then((r) => r.json())
+        .then((json) => {
+          if (ac.signal.aborted) return;
+          preloadedDesignersRef.current.set(key, json.designers || []);
+        })
+        .catch(() => {});
+    });
+
+    return () => ac.abort();
+  }, [selectedDate, shopsDb]);
+
+  // Comment: When a shop is selected, use preloaded data instantly (or fetch if not ready yet)
   useEffect(() => {
     if (!selectedDate || !selectedShop || shopsDb.length === 0) {
       setDesignersForShop([]);
@@ -250,72 +276,53 @@ export default function BookingPage() {
       setLoadingDesigners(false);
       return;
     }
+
+    const cached = preloadedDesignersRef.current.get(String(currentShop.id));
+    if (cached) {
+      // Comment: Instant — preloaded while user was reading the venue list
+      setDesignersForShop(cached);
+      setAvailableDesignerIds(cached.map((d: any) => Number(d.id)));
+      setLoadingDesigners(false);
+      return;
+    }
+
+    // Comment: Fallback — cache miss (very fast date change): fetch directly
     const ac = new AbortController();
     void loadAvailableDesigners(selectedDate, currentShop.id, ac.signal);
     return () => ac.abort();
   }, [selectedDate, selectedShop, shopsDb]);
 
-  // Comment: Load available designers for a given date and shop
+  // Comment: Fetch available designers (combined single API call: IDs + details in one round-trip)
   const loadAvailableDesigners = async (date: string, shopIdDb: number | null, signal?: AbortSignal) => {
     if (!date || !shopIdDb) {
       setDesignersForShop([]);
       setAvailableDesignerIds([]);
       return;
     }
-
     try {
       setLoadingDesigners(true);
-      const fetchOpts = { cache: 'no-store' as const, signal };
-      // Comment: First, get available designer IDs for this date and shop
-      const availabilityRes = await fetch(
-        `/api/designer-schedules?date=${encodeURIComponent(date)}&shopId=${shopIdDb}`,
-        fetchOpts,
+      const res = await fetch(
+        `/api/available-designers?date=${encodeURIComponent(date)}&shopId=${shopIdDb}`,
+        { cache: 'no-store', signal },
       );
-      const availabilityData = await availabilityRes.json();
-
+      const json = await res.json();
       if (signal?.aborted) return;
-
-      if (!availabilityRes.ok) {
-        console.error('Error fetching designer availability:', availabilityData.error);
+      if (!res.ok) {
+        console.error('Error fetching available designers:', json.error);
         setDesignersForShop([]);
         setAvailableDesignerIds([]);
         return;
       }
-
-      const availableIds = availabilityData.designerIds || [];
-      setAvailableDesignerIds(availableIds);
-
-      // Comment: Load designer rows for IDs from designer-schedules (shop + home-shop + Director logic on server)
-      if (availableIds.length === 0) {
-        setDesignersForShop([]);
-        return;
-      }
-
-      const designersRes = await fetch(
-        `/api/designers?ids=${availableIds.map((id: number) => encodeURIComponent(String(id))).join(',')}`,
-        fetchOpts,
-      );
-      const designersData = await designersRes.json();
-
-      if (signal?.aborted) return;
-
-      if (!designersRes.ok) {
-        console.error('Error fetching designers:', designersData.error);
-        setDesignersForShop([]);
-        return;
-      }
-
-      const allDesigners = designersData.designers || [];
-      setDesignersForShop(allDesigners);
+      const designers = json.designers || [];
+      setDesignersForShop(designers);
+      setAvailableDesignerIds(designers.map((d: any) => Number(d.id)));
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') return;
       console.error('Unexpected error fetching available designers:', error);
       setDesignersForShop([]);
       setAvailableDesignerIds([]);
     } finally {
-      if (!signal?.aborted) {
-        setLoadingDesigners(false);
-      }
+      if (!signal?.aborted) setLoadingDesigners(false);
     }
   };
 
