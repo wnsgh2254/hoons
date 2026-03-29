@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { resolveShopIdForDesigner, upsertDesignerScheduleRow } from '@/lib/designer-schedule-server';
+import {
+  resolvePerShopTimeOffOutcomes,
+  type VenueTimeOffRow,
+} from '@/lib/designer-venue-time-off';
+import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
+import { filterDesignerIdsByDefaultVenueRule } from '@/lib/multi-venue-default-shop';
+
+export const dynamic = 'force-dynamic';
 
 // Comment: GET - Return designer_ids that are available (have a schedule) on a given date/weekday
 // Or return full schedule for a specific designer
@@ -58,7 +66,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'date 파라미터는 필수입니다.' }, { status: 400 });
     }
 
-    const weekday = new Date(date).getDay(); // 0 (Sun) - 6 (Sat)
+    // Comment: Match Sydney civil weekday (same YYYY-MM-DD as admin + booking pages)
+    const weekday = salonCalendarWeekdayIndex(date);
 
     // Comment: Get designers with regular schedule for this weekday
     let query = supabase
@@ -148,41 +157,110 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Comment: Get designers with special work day (특별 근무일) on this date
-    // Special work days override regular holidays - check this FIRST
-    let timeOffQuery = supabase
-      .from('designer_time_off')
-      .select('designer_id, shop_id')
-      .eq('reason', '특별 근무일')
-      .lte('start_date', date)
-      .gte('end_date', date);
-
-    // Comment: If shopId is provided, include both matching shop_id and null shop_id (for all shops)
+    // Comment: designer_shops link — same weekday schedule rule as home shop (multi-venue staff)
+    let designerIdsFromLinkedShops: number[] = [];
     if (shopId) {
-      timeOffQuery = timeOffQuery.or(`shop_id.eq.${shopId},shop_id.is.null`);
+      const shopIdNum = Number(shopId);
+      const { data: linkRows, error: linkFetchErr } = await supabase
+        .from('designer_shops')
+        .select('designer_id')
+        .eq('shop_id', shopIdNum)
+        .eq('is_active', true);
+
+      if (linkFetchErr) {
+        console.error('Error fetching designer_shops:', linkFetchErr);
+      } else {
+        const linkedIds = Array.from(
+          new Set(
+            (linkRows || [])
+              .map((r: { designer_id: number }) => Number(r.designer_id))
+              .filter((n: number) => Number.isFinite(n)),
+          ),
+        );
+        if (linkedIds.length > 0) {
+          const { data: linkSched, error: linkSchedErr } = await supabase
+            .from('designer_schedules')
+            .select('designer_id')
+            .eq('weekday', weekday)
+            .in('designer_id', linkedIds)
+            .lte('effective_from', date)
+            .or(`effective_to.is.null,effective_to.gte.${date}`);
+
+          if (linkSchedErr) {
+            console.error('Error fetching linked-shop weekday schedules:', linkSchedErr);
+          } else {
+            designerIdsFromLinkedShops = Array.from(
+              new Set(
+                (linkSched || []).map((row: { designer_id: number }) => row.designer_id).filter(Boolean),
+              ),
+            );
+          }
+        }
+      }
     }
 
-    const { data: timeOffData, error: timeOffError } = await timeOffQuery;
+    // Comment: 임의 휴일 vs 특별 근무일 — same designer+venue+date: newest row wins (created_at, then id)
+    let designerIdsFromSpecialWork: number[] = [];
+    let arbitraryExcludeIds = new Set<number>();
 
-    if (timeOffError) {
-      console.error('Error fetching special work days:', timeOffError);
-      // Comment: Continue even if time off query fails, but log the error
+    if (shopId) {
+      const sid = Number(shopId);
+      const { data: venueTimeOffRows, error: venueToErr } = await supabase
+        .from('designer_time_off')
+        .select('id, designer_id, shop_id, reason, created_at')
+        .in('reason', ['임의 휴일', '특별 근무일'])
+        .lte('start_date', date)
+        .gte('end_date', date);
+
+      if (venueToErr) {
+        console.error('Error fetching venue time off:', venueToErr);
+      } else {
+        const { specialWorkDesignerIds, arbitraryHolidayDesignerIds } = resolvePerShopTimeOffOutcomes(
+          (venueTimeOffRows || []) as VenueTimeOffRow[],
+          sid,
+        );
+        designerIdsFromSpecialWork = Array.from(specialWorkDesignerIds);
+        arbitraryExcludeIds = arbitraryHolidayDesignerIds;
+      }
+    } else {
+      // Comment: No shop — keep legacy: any 특별 근무일 row adds designer; no per-venue 임의 휴일 exclusion
+      const { data: timeOffData, error: timeOffError } = await supabase
+        .from('designer_time_off')
+        .select('designer_id, shop_id')
+        .eq('reason', '특별 근무일')
+        .lte('start_date', date)
+        .gte('end_date', date);
+
+      if (timeOffError) {
+        console.error('Error fetching special work days:', timeOffError);
+      }
+      designerIdsFromSpecialWork = Array.from(
+        new Set((timeOffData || []).map((row: any) => row.designer_id).filter(Boolean)),
+      );
     }
-
-    const designerIdsFromSpecialWork = Array.from(
-      new Set((timeOffData || []).map((row: any) => row.designer_id).filter(Boolean))
-    );
 
     // Comment: Special work days have priority - combine both sets
     // If a designer has special work day, they should appear even if they don't have regular schedule
-    const allDesignerIds = Array.from(
+    let allDesignerIds = Array.from(
       new Set([
         ...designerIdsFromSchedule,
         ...designerIdsFromHomeShop,
+        ...designerIdsFromLinkedShops,
         ...designerIdsDirectorWeekday,
         ...designerIdsFromSpecialWork,
       ]),
     );
+
+    if (shopId) {
+      allDesignerIds = allDesignerIds.filter((id) => !arbitraryExcludeIds.has(Number(id)));
+      const specialWorkSet = new Set(designerIdsFromSpecialWork.map(Number));
+      allDesignerIds = await filterDesignerIdsByDefaultVenueRule(supabase, {
+        shopId: Number(shopId),
+        weekday,
+        designerIds: allDesignerIds.map((id) => Number(id)),
+        specialWorkDesignerIds: specialWorkSet,
+      });
+    }
 
     // Comment: Log for debugging
     if (designerIdsFromSpecialWork.length > 0) {

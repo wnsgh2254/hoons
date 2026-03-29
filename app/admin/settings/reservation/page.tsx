@@ -17,7 +17,6 @@ import {
 import { Z } from '@/lib/constants';
 import { useBusinessHours, invalidateBusinessHoursCache } from '@/hooks/useBusinessHours';
 import { useBookingItems, invalidateBookingItemsCache } from '@/hooks/useBookingItems';
-
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface BusinessHour {
@@ -76,6 +75,7 @@ const TABS = [
   { key: 'resources', label: '예약 자원' },
   { key: 'items', label: '예약 항목' },
 ];
+
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
 
@@ -398,6 +398,15 @@ function ResourceModal({
     { key: 'endTime', header: '종료시간', align: 'center' as const, render: (item: BusinessHour) => item.endTime },
     { key: 'days', header: '요일', align: 'center' as const, render: (item: BusinessHour) => item.days.join(', ') },
     {
+      key: 'shop',
+      header: '지점',
+      align: 'center' as const,
+      render: (item: BusinessHour) =>
+        shops.length > 0
+          ? (shops.find((s) => s.id === item.shopId)?.name ?? '—')
+          : '—',
+    },
+    {
       key: 'actions',
       header: '',
       align: 'center' as const,
@@ -528,6 +537,9 @@ function ResourceModal({
             setIsAddingSchedule(false);
           }}
           title="시간 추가"
+          shops={shops}
+          showShopSelector={shops.length > 0}
+          initial={{ id: 0, shopId: shopId, startTime: '10:00', endTime: '19:00', days: [] }}
         />
       )}
       {editingSchedule && (
@@ -546,6 +558,8 @@ function ResourceModal({
           }}
           initial={editingSchedule}
           title="시간 수정"
+          shops={shops}
+          showShopSelector={shops.length > 0}
         />
       )}
     </Modal>
@@ -563,23 +577,33 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
   const shopNameMap = Object.fromEntries((shops || []).map((s) => [s.id, s.name]));
   const filteredResources = showInactive ? resources : resources.filter((r) => r.isActive);
 
-  // Fetch staff + schedules from API
+  // Comment: Fetch staff, their schedules, and weekday venue defaults together
   const fetchResources = async () => {
     setLoading(true);
     try {
-      const [staffRes, schedulesRes] = await Promise.all([
+      const [staffRes, schedulesRes, defaultsRes] = await Promise.all([
         fetch('/api/staff'),
         fetch('/api/designer-schedules?all=true'),
+        fetch('/api/designer-weekday-defaults'),
       ]);
       const staffData = await staffRes.json();
       const schedulesData = await schedulesRes.json();
+      const defaultsData = await defaultsRes.json();
 
       const staff: any[] = staffData.staff || [];
       const allSchedules: any[] = schedulesData.schedules || [];
+      const allDefaults: { designer_id: number; weekday: number; shop_id: number }[] =
+        defaultsData.defaults || [];
 
       setStaffList(staff.map((s: any) => ({ id: s.id, name: s.name })));
 
-      // Group schedules by designer_id, then by (start_time, end_time)
+      // Comment: Build lookup: "designerId:weekday" → default shop_id
+      const defaultsMap = new Map<string, number>();
+      for (const d of allDefaults) {
+        defaultsMap.set(`${Number(d.designer_id)}:${Number(d.weekday)}`, Number(d.shop_id));
+      }
+
+      // Group schedules by designer_id
       const schedulesByDesigner = new Map<number, any[]>();
       for (const s of allSchedules) {
         const list = schedulesByDesigner.get(s.designer_id) || [];
@@ -590,12 +614,19 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       const mapped: BookingResource[] = staff.map((member: any) => {
         const rawSchedules = schedulesByDesigner.get(member.id) || [];
 
-        // Group by (start_time, end_time) to create schedule entries with days arrays
-        const timeGroups = new Map<string, { id: number; startTime: string; endTime: string; days: string[] }>();
+        // Comment: Group by (start_time, end_time, resolved_shop_id) so multi-venue blocks split by venue
+        const timeGroups = new Map<
+          string,
+          { id: number; shopId: number | null; startTime: string; endTime: string; days: string[] }
+        >();
         for (const s of rawSchedules) {
-          const st = s.start_time?.slice(0, 5) || '00:00'; // "10:00:00" → "10:00"
+          const st = s.start_time?.slice(0, 5) || '00:00';
           const et = s.end_time?.slice(0, 5) || '00:00';
-          const key = `${st}-${et}`;
+          // Comment: Prefer weekday default venue; fall back to schedule's own shop_id
+          const shopId =
+            defaultsMap.get(`${member.id}:${s.weekday}`) ??
+            (s.shop_id != null ? Number(s.shop_id) : null);
+          const key = `${st}-${et}-${shopId ?? 'null'}`;
           const existing = timeGroups.get(key);
           const dayName = WEEKDAY_TO_KOREAN[s.weekday] || '';
           if (existing) {
@@ -603,14 +634,13 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
               existing.days.push(dayName);
             }
           } else {
-            timeGroups.set(key, { id: s.id, startTime: st, endTime: et, days: dayName ? [dayName] : [] });
+            timeGroups.set(key, { id: s.id, shopId, startTime: st, endTime: et, days: dayName ? [dayName] : [] });
           }
         }
 
-        // Sort days in Korean weekday order
         const sortedSchedules: BusinessHour[] = Array.from(timeGroups.values()).map((g) => ({
           id: g.id,
-          shopId: null,
+          shopId: g.shopId,
           startTime: g.startTime,
           endTime: g.endTime,
           days: g.days.sort((a, b) => (KOREAN_TO_WEEKDAY[a] ?? 99) - (KOREAN_TO_WEEKDAY[b] ?? 99)),
@@ -709,6 +739,26 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
             entries: entriesToAdd,
           }),
         });
+      }
+
+      // Comment: Save weekday venue defaults derived from each schedule block's shopId
+      const weekdayDefaultRows: { weekday: number; shop_id: number }[] = [];
+      for (const sched of data.schedules) {
+        if (sched.shopId == null) continue;
+        for (const day of sched.days) {
+          const weekday = KOREAN_TO_WEEKDAY[day];
+          if (weekday !== undefined) {
+            weekdayDefaultRows.push({ weekday, shop_id: sched.shopId });
+          }
+        }
+      }
+      if (weekdayDefaultRows.length > 0) {
+        // Comment: Silently ignore errors for single-venue designers (API returns {skipped:true})
+        await fetch('/api/designer-weekday-defaults', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ designer_id: editingResource.id, rows: weekdayDefaultRows }),
+        }).catch((e) => console.warn('weekday defaults save skipped:', e));
       }
 
       // Refetch all resources

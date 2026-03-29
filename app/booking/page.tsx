@@ -7,6 +7,8 @@ import {
   timeLabelToMinutes,
 } from '@/lib/booking-time-math';
 import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
+import { getSydneyToday } from '@/lib/utils/appointment-utils';
+import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
@@ -46,17 +48,6 @@ function ServiceCardDescription({ text, selected }: { text: string; selected: bo
       {t}
     </p>
   );
-}
-
-// Comment: Get today's date string in Sydney timezone (YYYY-MM-DD)
-function getSydneyToday(): string {
-  const sydney = new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
-  );
-  const year = sydney.getFullYear();
-  const month = String(sydney.getMonth() + 1).padStart(2, '0');
-  const day = String(sydney.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 // Comment: In-page payment form with Payment Element (Salon de Jessie style) – must be inside Elements
@@ -244,21 +235,28 @@ export default function BookingPage() {
     }
   }, [selectedShop, shopsDb]);
 
-  // Comment: Load available designers when date and shop are selected
+  // Comment: Load available designers when date and shop are selected (abort stale requests on shop/date change)
   useEffect(() => {
-    if (selectedDate && selectedShop && shopsDb.length > 0) {
-      const currentShop = shopsDb.find((s) => String(s.id) === selectedShop);
-      if (currentShop && currentShop.id) {
-        void loadAvailableDesigners(selectedDate, currentShop.id);
-      }
-    } else {
+    if (!selectedDate || !selectedShop || shopsDb.length === 0) {
       setDesignersForShop([]);
       setAvailableDesignerIds([]);
+      setLoadingDesigners(false);
+      return;
     }
+    const currentShop = shopsDb.find((s) => String(s.id) === selectedShop);
+    if (!currentShop?.id) {
+      setDesignersForShop([]);
+      setAvailableDesignerIds([]);
+      setLoadingDesigners(false);
+      return;
+    }
+    const ac = new AbortController();
+    void loadAvailableDesigners(selectedDate, currentShop.id, ac.signal);
+    return () => ac.abort();
   }, [selectedDate, selectedShop, shopsDb]);
 
   // Comment: Load available designers for a given date and shop
-  const loadAvailableDesigners = async (date: string, shopIdDb: number | null) => {
+  const loadAvailableDesigners = async (date: string, shopIdDb: number | null, signal?: AbortSignal) => {
     if (!date || !shopIdDb) {
       setDesignersForShop([]);
       setAvailableDesignerIds([]);
@@ -267,10 +265,16 @@ export default function BookingPage() {
 
     try {
       setLoadingDesigners(true);
+      const fetchOpts = { cache: 'no-store' as const, signal };
       // Comment: First, get available designer IDs for this date and shop
-      const availabilityRes = await fetch(`/api/designer-schedules?date=${encodeURIComponent(date)}&shopId=${shopIdDb}`);
+      const availabilityRes = await fetch(
+        `/api/designer-schedules?date=${encodeURIComponent(date)}&shopId=${shopIdDb}`,
+        fetchOpts,
+      );
       const availabilityData = await availabilityRes.json();
-      
+
+      if (signal?.aborted) return;
+
       if (!availabilityRes.ok) {
         console.error('Error fetching designer availability:', availabilityData.error);
         setDesignersForShop([]);
@@ -289,9 +293,12 @@ export default function BookingPage() {
 
       const designersRes = await fetch(
         `/api/designers?ids=${availableIds.map((id: number) => encodeURIComponent(String(id))).join(',')}`,
+        fetchOpts,
       );
       const designersData = await designersRes.json();
-      
+
+      if (signal?.aborted) return;
+
       if (!designersRes.ok) {
         console.error('Error fetching designers:', designersData.error);
         setDesignersForShop([]);
@@ -300,12 +307,15 @@ export default function BookingPage() {
 
       const allDesigners = designersData.designers || [];
       setDesignersForShop(allDesigners);
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error('Unexpected error fetching available designers:', error);
       setDesignersForShop([]);
       setAvailableDesignerIds([]);
     } finally {
-      setLoadingDesigners(false);
+      if (!signal?.aborted) {
+        setLoadingDesigners(false);
+      }
     }
   };
 
@@ -611,9 +621,9 @@ export default function BookingPage() {
       return { morning: [] as string[], afternoon: [] as string[], evening: [] as string[] };
     }
 
-    // Convert JS day (0=Sun) to Korean day
+    // Comment: Korean weekday label — use Sydney civil weekday (same as designer-schedules API)
     const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayOfWeek = DAYS_KO[new Date(selectedDate).getDay()];
+    const dayOfWeek = DAYS_KO[salonCalendarWeekdayIndex(selectedDate)];
 
     // Find matching business hours for this day
     const matchingHours = businessHoursForShop.filter((h: any) =>

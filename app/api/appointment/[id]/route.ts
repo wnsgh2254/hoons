@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { refundStripeDepositForBooking } from '@/lib/refund-stripe-deposit';
 
 // Comment: Update a single booking (date/time/status etc.)
 export async function PATCH(
@@ -106,6 +107,75 @@ export async function PATCH(
     if (typeof body.color_label === 'string' || body.color_label === null) {
       updates.color_label = body.color_label;
     }
+    if (body.shop_id !== undefined) {
+      if (body.shop_id === null) {
+        updates.shop_id = null;
+      } else if (typeof body.shop_id === 'number' || typeof body.shop_id === 'string') {
+        updates.shop_id = Number(body.shop_id);
+      }
+    }
+
+    // Comment: Optional Stripe refund when admin cancels a booking with a paid card deposit
+    const refundStripeDeposit =
+      body.refund_stripe_deposit === true || body.refund_stripe_deposit === 'true';
+    const statusRaw = typeof body.status === 'string' ? body.status.trim() : '';
+    const isCancelling = /^(cancelled|canceled)$/i.test(statusRaw);
+
+    if (refundStripeDeposit && isCancelling) {
+      // Comment: Use * so missing optional columns (before SQL migration) does not break the query.
+      // Selecting unknown column names makes PostgREST return an error we were wrongly mapping to 404.
+      const { data: refundRow, error: refundFetchErr } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (refundFetchErr) {
+        console.error('Refund prefetch failed:', refundFetchErr);
+        return NextResponse.json(
+          { error: refundFetchErr.message || '예약을 불러오지 못했습니다.' },
+          { status: 500 },
+        );
+      }
+      if (!refundRow) {
+        return NextResponse.json({ error: '예약을 찾을 수 없습니다.' }, { status: 404 });
+      }
+
+      const depositPaid = Math.max(0, Number((refundRow as any).deposit_paid) || 0);
+      const alreadyRefundedDb = (refundRow as any).deposit_refunded_at != null;
+
+      if (!alreadyRefundedDb && depositPaid > 0) {
+        const result = await refundStripeDepositForBooking({
+          bookingId: Number(id),
+          stripePaymentIntentId: (refundRow as any).stripe_payment_intent_id,
+          depositPaidAud: depositPaid,
+        });
+
+        if (!result.ok) {
+          return NextResponse.json(
+            {
+              error:
+                result.error ||
+                'Stripe 환불에 실패했습니다. 예약은 취소되지 않았습니다.',
+            },
+            { status: 502 },
+          );
+        }
+
+        if ('skipped' in result && result.skipped) {
+          if (
+            result.reason.includes('fully refunded') ||
+            result.reason.includes('Already refunded')
+          ) {
+            updates.deposit_refunded_at = new Date().toISOString();
+          }
+        } else if ('refundId' in result) {
+          updates.deposit_refunded_at = new Date().toISOString();
+          updates.stripe_refund_id = result.refundId;
+        }
+      }
+    }
+
     // Comment: cancellation_reason 필드는 선택적 (컬럼이 없을 수도 있음)
     let cancellationReason: string | null | undefined = undefined;
     if (body.cancellation_reason !== undefined) {

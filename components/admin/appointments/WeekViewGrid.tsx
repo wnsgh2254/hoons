@@ -18,6 +18,7 @@ import BookingCard from './BookingCard';
 interface EmptySlotIdentifier {
   date: string;
   designerId: number;
+  columnShopId: number;
   time: string;
 }
 
@@ -83,7 +84,12 @@ interface WeekViewGridProps {
   setNewBookingDate?: (date: string) => void;
   setNewBookingTimeSlots?: (slots: any[]) => void;
   setIsNewBookingOpen?: (open: boolean) => void;
-  onSelectMoveTarget: (target: { date: string; designerId: number; time: string }) => void;
+  onSelectMoveTarget: (target: {
+    date: string;
+    designerId: number;
+    columnShopId: number;
+    time: string;
+  }) => void;
 }
 
 export default function WeekViewGrid({
@@ -368,6 +374,7 @@ export default function WeekViewGrid({
                       setEmptySlotMenuOpen({
                         date: dateStr,
                         designerId: weekViewDesignerId,
+                        columnShopId: 0,
                         time: slotTime,
                       });
                     }}
@@ -419,10 +426,12 @@ export default function WeekViewGrid({
               const isHovered =
                 hoveredEmptySlot?.date === dateStr &&
                 hoveredEmptySlot?.designerId === weekViewDesignerId &&
+                hoveredEmptySlot?.columnShopId === 0 &&
                 hoveredEmptySlot?.time === slotTime;
               const isMenuOpen =
                 emptySlotMenuOpen?.date === dateStr &&
                 emptySlotMenuOpen?.designerId === weekViewDesignerId &&
+                emptySlotMenuOpen?.columnShopId === 0 &&
                 emptySlotMenuOpen?.time === slotTime;
 
               // Debug log
@@ -470,6 +479,7 @@ export default function WeekViewGrid({
                         onSelectMoveTarget({
                           date: dateStr,
                           designerId: weekViewDesignerId,
+                          columnShopId: Number(movingBooking?.shop_id) || 0,
                           time: slotTime,
                         });
                         setHoveredEmptySlot(null);
@@ -505,7 +515,12 @@ export default function WeekViewGrid({
                     }
                     // 예약 금지 셀은 호버하지 않음 (restriction 블록이 처리)
                     if (!isRestricted) {
-                      setHoveredEmptySlot({ date: dateStr, designerId: weekViewDesignerId, time: slotTime });
+                      setHoveredEmptySlot({
+                        date: dateStr,
+                        designerId: weekViewDesignerId,
+                        columnShopId: 0,
+                        time: slotTime,
+                      });
                     }
                   }}
                   onMouseLeave={() => {
@@ -533,6 +548,7 @@ export default function WeekViewGrid({
                             const menuData = {
                               date: dateStr,
                               designerId: weekViewDesignerId,
+                              columnShopId: 0,
                               time: slotTime,
                             };
                             console.log('Setting emptySlotMenuOpen (week view):', menuData);

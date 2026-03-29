@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { loadDesignerShopsMap, mergeDesignerShopIds } from '@/lib/designer-multi-venue';
 
 const DESIGNER_SELECT = 'id, name, english_name, role, shop_id, instagramLink';
 
-// Comment: GET — active designers. ids=comma-separated (booking: after designer-schedules). shopId=primary shop OR Director (every location)
+function enrichDesigners(
+  rows: any[] | null,
+  shopMap: Map<number, number[]>,
+): Array<any & { shop_ids_at: number[] }> {
+  return (rows || []).map((d) => ({
+    ...d,
+    shop_ids_at: mergeDesignerShopIds(d.shop_id, shopMap.get(d.id)),
+  }));
+}
+
+// Comment: GET — active designers. ids=comma-separated (booking). shopId = primary OR designer_shops OR Director
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const idsParam = searchParams.get('ids');
     const shopIdParam = searchParams.get('shopId');
+
+    const shopMap = await loadDesignerShopsMap();
 
     if (idsParam != null && idsParam.trim() !== '') {
       const ids = idsParam
@@ -34,25 +47,14 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ designers: data || [] }, { status: 200 });
+      return NextResponse.json({ designers: enrichDesigners(data, shopMap) }, { status: 200 });
     }
 
-    let query = supabase
+    const { data, error } = await supabase
       .from('designers')
       .select(DESIGNER_SELECT)
       .eq('is_active', true)
       .order('name', { ascending: true });
-
-    if (shopIdParam != null && shopIdParam !== '') {
-      const shopId = Number(shopIdParam);
-      if (Number.isNaN(shopId)) {
-        return NextResponse.json({ error: 'shopId 가 올바르지 않습니다.' }, { status: 400 });
-      }
-      // Comment: Staff at this shop, or Director (no fixed branch — shown everywhere)
-      query = query.or(`shop_id.eq.${shopId},role.ilike.%Director%`);
-    }
-
-    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching designers:', error);
@@ -62,7 +64,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ designers: data || [] }, { status: 200 });
+    let rows = enrichDesigners(data, shopMap);
+
+    if (shopIdParam != null && shopIdParam !== '') {
+      const shopId = Number(shopIdParam);
+      if (Number.isNaN(shopId)) {
+        return NextResponse.json({ error: 'shopId 가 올바르지 않습니다.' }, { status: 400 });
+      }
+      rows = rows.filter(
+        (d) =>
+          d.shop_ids_at.includes(shopId) ||
+          String(d.role || '')
+            .toLowerCase()
+            .includes('director'),
+      );
+    }
+
+    return NextResponse.json({ designers: rows }, { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error in designers GET route:', error);

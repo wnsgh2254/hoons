@@ -83,7 +83,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await updateBookingAfterDepositPaid(bookingId, depositPaidDollars, customerId);
+    await updateBookingAfterDepositPaid(
+      bookingId,
+      depositPaidDollars,
+      customerId,
+      paymentIntent.id,
+    );
   } catch (updateErr) {
     console.error("Stripe webhook: update booking failed", updateErr);
     return NextResponse.json({ error: "Failed to update booking." }, { status: 500 });

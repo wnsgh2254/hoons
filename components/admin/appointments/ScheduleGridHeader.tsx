@@ -1,23 +1,32 @@
 'use client';
 
+export type ScheduleColumnHeader = {
+  columnKey: string;
+  designerId: number;
+  name: string;
+  columnShopId: number;
+};
+
 interface ScheduleGridHeaderProps {
   isWeekViewMode: boolean;
   weekViewDesignerId: number | null;
   weekDates: string[];
-  visibleDesigners: string[];
-  allDesigners: Array<{ id: number; name: string; shop_id?: number }>;
+  /** One entry per grid column (same designer may appear once per venue) */
+  scheduleColumns: ScheduleColumnHeader[];
+  allDesigners: Array<{ id: number; name: string; shop_id?: number; shop_ids_at?: number[] }>;
   allShops: Array<{ id: number; name: string }>;
   selectedDesignerFilter: string;
   weekViewStartDate: string;
-  openDesignerDropdown: number | null;
-  onDesignerDropdownToggle: (designerId: number | null) => void;
+  openColumnKey: string | null;
+  onDesignerDropdownToggle: (columnKey: string | null) => void;
   onOpenWeekView: (designerId: number, designerName: string) => void;
   onCloseWeekView: () => void;
   onOpenRestriction: (designerId: number, designerName: string) => void;
   onOpenHolidayModal: (designerId: number, designerName: string) => void;
   onOpenAttendanceModal: (designerId: number, designerName: string) => void;
   canUseAttendanceManagement?: boolean;
-  availableDesignerIds?: number[];
+  /** Precomputed grey-out (휴무) per grid column — includes multi-venue per-shop 임의 휴일 */
+  columnDesignerOffMap?: Record<string, boolean>;
   weekViewAvailableDates?: Set<string>;
 }
 
@@ -25,12 +34,12 @@ export default function ScheduleGridHeader({
   isWeekViewMode,
   weekViewDesignerId,
   weekDates,
-  visibleDesigners,
+  scheduleColumns,
   allDesigners,
   allShops,
   selectedDesignerFilter,
   weekViewStartDate,
-  openDesignerDropdown,
+  openColumnKey,
   onDesignerDropdownToggle,
   onOpenWeekView,
   onCloseWeekView,
@@ -38,7 +47,7 @@ export default function ScheduleGridHeader({
   onOpenHolidayModal,
   onOpenAttendanceModal,
   canUseAttendanceManagement = false,
-  availableDesignerIds = [],
+  columnDesignerOffMap = {},
   weekViewAvailableDates = new Set(),
 }: ScheduleGridHeaderProps) {
   if (!isWeekViewMode) {
@@ -76,32 +85,39 @@ export default function ScheduleGridHeader({
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             return (
-              <div key={dateStr} className="border-r border-[#e2e8f0] bg-[#f8f9fc] flex-1" style={{ minWidth: `${visibleDesigners.length * 150}px` }}>
+              <div key={dateStr} className="border-r border-[#e2e8f0] bg-[#f8f9fc] flex-1" style={{ minWidth: `${scheduleColumns.length * 150}px` }}>
                 {/* Shop grouping + Designer headers - hide only when a specific designer is selected */}
                 {(selectedDesignerFilter === '전체' ||
                   selectedDesignerFilter === '전체(휴무 제외)') && (() => {
-                  // Compute shop groups from visible designers
-                  const shopGroups: Array<{ shopId: number | null; shopName: string; count: number }> = [];
-                  visibleDesigners.forEach((name) => {
-                    const designer = allDesigners.find((d) => d.name === name);
-                    const shopId = designer?.shop_id || null;
-                    const shop = shopId ? allShops.find((s) => s.id === shopId) : null;
-                    const shopName = shop?.name || '미지정';
+                  const shopGroups: Array<{ shopId: number; shopName: string; count: number }> = [];
+                  scheduleColumns.forEach((col) => {
+                    const shopName =
+                      col.columnShopId === 0
+                        ? '미지정'
+                        : allShops.find((s) => s.id === col.columnShopId)?.name || `매장 ${col.columnShopId}`;
                     const lastGroup = shopGroups[shopGroups.length - 1];
-                    if (lastGroup && lastGroup.shopId === shopId) {
+                    if (lastGroup && lastGroup.shopId === col.columnShopId) {
                       lastGroup.count++;
                     } else {
-                      shopGroups.push({ shopId, shopName, count: 1 });
+                      shopGroups.push({ shopId: col.columnShopId, shopName, count: 1 });
                     }
                   });
-                  const showShopRow = shopGroups.length > 1 || (shopGroups.length === 1 && shopGroups[0].shopName !== '미지정');
+                  const showShopRow =
+                    shopGroups.length > 1 || (shopGroups.length === 1 && shopGroups[0].shopName !== '미지정');
                   return (
                     <>
                       {showShopRow && (
-                        <div className="grid border-b border-[#e2e8f0]" style={{ gridTemplateColumns: shopGroups.map((g) => `repeat(${g.count}, minmax(150px, 1fr))`).join(' ') }}>
+                        <div
+                          className="grid border-b border-[#e2e8f0]"
+                          style={{
+                            gridTemplateColumns: shopGroups
+                              .map((g) => `repeat(${g.count}, minmax(150px, 1fr))`)
+                              .join(' '),
+                          }}
+                        >
                           {shopGroups.map((group, idx) => (
                             <div
-                              key={`shop-${idx}`}
+                              key={`shop-${group.shopId}-${idx}`}
                               className="px-2 py-1.5 bg-gray-50 text-center border-r-[3px] border-[#64748b] last:border-r-0"
                               style={{ gridColumn: `span ${group.count}` }}
                             >
@@ -110,21 +126,17 @@ export default function ScheduleGridHeader({
                           ))}
                         </div>
                       )}
-                      <div className="grid" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
-                    {visibleDesigners.map((name, idx) => {
-                      const designer = allDesigners.find((d) => d.name === name);
+                      <div className="grid" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(150px, 1fr))` }}>
+                    {scheduleColumns.map((col, idx) => {
+                      const designer = allDesigners.find((d) => d.id === col.designerId);
                       const designerId = designer?.id;
-                      const isOff = designerId ? !availableDesignerIds.includes(designerId) : false;
-                      const nextName = visibleDesigners[idx + 1];
-                      const nextDesigner = nextName
-                        ? allDesigners.find((d) => d.name === nextName)
-                        : null;
-                      const isShopBoundary =
-                        !!nextDesigner &&
-                        (designer?.shop_id ?? null) !== (nextDesigner?.shop_id ?? null);
+                      const isOff = columnDesignerOffMap[col.columnKey] ?? false;
+                      const nextCol = scheduleColumns[idx + 1];
+                      const isShopBoundary = !!nextCol && nextCol.columnShopId !== col.columnShopId;
+                      const name = col.name;
                       return (
                         <div
-                          key={`${dateStr}-${name}`}
+                          key={`${dateStr}-${col.columnKey}`}
                           className={`relative backdrop-blur-sm border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'} last:border-r-0 flex items-center justify-center ${isOff ? 'bg-gray-200' : 'bg-white/50'}`}
                           style={{ minHeight: '40px' }}
                         >
@@ -133,7 +145,7 @@ export default function ScheduleGridHeader({
                             onClick={(e) => {
                               e.stopPropagation();
                               onDesignerDropdownToggle(
-                                openDesignerDropdown === designerId ? null : designerId || null,
+                                openColumnKey === col.columnKey ? null : col.columnKey,
                               );
                             }}
                             className="w-full h-full px-2 py-2 text-center hover:bg-gray-100 transition-colors"
@@ -141,7 +153,7 @@ export default function ScheduleGridHeader({
                             <p className={`text-xs font-bold truncate ${isOff ? 'text-gray-400' : 'text-[#0d121b]'}`}>{name}</p>
                           </button>
                           {designerId &&
-                            openDesignerDropdown === designerId && (
+                            openColumnKey === col.columnKey && (
                               <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px]">
                                 <button
                                   type="button"

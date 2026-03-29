@@ -24,7 +24,12 @@ interface ScheduleDayViewBookingCardProps {
   height: number;
   widthPercent: number;
   leftPercent: number;
-  emptySlotMenuOpen: { date: string; designerId: number; time: string } | null;
+  emptySlotMenuOpen: {
+    date: string;
+    designerId: number;
+    columnShopId: number;
+    time: string;
+  } | null;
   isMenuOpen: boolean;
   isHovered: boolean;
   isNewBookingOpen: boolean;

@@ -60,6 +60,57 @@ import {
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
 
+// Comment: designer_shops + designers.shop_id — venue filter for schedule grid
+function designerBelongsToShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null }, shopId: number): boolean {
+  if (String(d.role || '').toLowerCase().includes('director')) return true;
+  const ids =
+    d.shop_ids_at && d.shop_ids_at.length > 0 ? d.shop_ids_at : d.shop_id != null ? [d.shop_id] : [];
+  return ids.includes(shopId);
+}
+
+function sortKeyPrimaryShop(d: { shop_id?: number | null; shop_ids_at?: number[] }): number {
+  const ids =
+    d.shop_ids_at && d.shop_ids_at.length > 0 ? d.shop_ids_at : d.shop_id != null ? [d.shop_id] : [];
+  return ids.length ? Math.min(...ids) : 0;
+}
+
+type ScheduleColumn = {
+  columnKey: string;
+  designerId: number;
+  name: string;
+  columnShopId: number;
+};
+
+// Comment: Group bookings per grid column (designer + venue)
+function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): string {
+  const name = b.designer?.name || 'Unassigned';
+  const designerId = b.designer?.id;
+  const designer = designerId ? allDesigners.find((d) => d.id === designerId) : undefined;
+  let sid = b.shop_id ?? null;
+  if (sid == null && designer) {
+    const ids =
+      designer.shop_ids_at && designer.shop_ids_at.length > 0
+        ? designer.shop_ids_at
+        : designer.shop_id != null
+          ? [designer.shop_id]
+          : [];
+    sid = ids[0] ?? null;
+  }
+  return `${name}::${sid === null ? 'null' : String(sid)}`;
+}
+
+function columnKeyForBookingsLookup(
+  col: ScheduleColumn,
+  designer: { shop_ids_at?: number[]; shop_id?: number | null } | undefined,
+): string {
+  const sid =
+    col.columnShopId === 0
+      ? sortKeyPrimaryShop(designer as { shop_id?: number | null; shop_ids_at?: number[] }) || null
+      : col.columnShopId;
+  return `${col.name}::${sid === null ? 'null' : String(sid)}`;
+}
+
+
 export default function AppointmentsManagementPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
   const [dayCounts, setDayCounts] = useState<Record<number, number>>({});
@@ -90,8 +141,20 @@ export default function AppointmentsManagementPage() {
   ]);
   const [newBookingSubmitting, setNewBookingSubmitting] = useState(false);
   const [newBookingLoadingOptions, setNewBookingLoadingOptions] = useState(false);
-  const [availableDesignerIds, setAvailableDesignerIds] = useState<number[]>([]);
+  const [availableDesignerIdsByShop, setAvailableDesignerIdsByShop] = useState<Record<number, number[]>>(
+    {},
+  );
   const [loadingDesignerAvailability, setLoadingDesignerAvailability] = useState(false);
+  // Comment: Incrementing this key re-triggers the availability fetch (e.g. after holiday modal save)
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0);
+
+  const availableDesignerIds = useMemo(() => {
+    const ids = new Set<number>();
+    Object.values(availableDesignerIdsByShop).forEach((arr) => {
+      arr.forEach((id) => ids.add(id));
+    });
+    return Array.from(ids);
+  }, [availableDesignerIdsByShop]);
 
   // Comment: Editing existing booking from Upcoming list
   const [editingBooking, setEditingBooking] = useState<BookingWithRelations | null>(null);
@@ -132,7 +195,7 @@ export default function AppointmentsManagementPage() {
   const [dateRangeEnd, setDateRangeEnd] = useState<string>('');
 
   // Comment: Designer dropdown menu state
-  const [openDesignerDropdown, setOpenDesignerDropdown] = useState<number | null>(null);
+  const [openDesignerDropdown, setOpenDesignerDropdown] = useState<string | null>(null);
   const [allDesigners, setAllDesigners] = useState<any[]>([]);
   const [allShops, setAllShops] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedShopFilter, setSelectedShopFilter] = useState<string>('전체');
@@ -204,15 +267,7 @@ export default function AppointmentsManagementPage() {
   const shopFilteredDesignerIds = useMemo(() => {
     if (selectedShopFilter === '전체') return [];
     const shopId = Number(selectedShopFilter);
-    return allDesigners
-      .filter(
-        (d) =>
-          d.shop_id === shopId ||
-          String(d.role || '')
-            .toLowerCase()
-            .includes('director'),
-      )
-      .map((d) => d.id);
+    return allDesigners.filter((d) => designerBelongsToShop(d, shopId)).map((d) => d.id);
   }, [allDesigners, selectedShopFilter]);
 
   // Bookings data (extracted to hook)
@@ -297,11 +352,13 @@ export default function AppointmentsManagementPage() {
   const [hoveredEmptySlot, setHoveredEmptySlot] = useState<{
     date: string;
     designerId: number;
+    columnShopId: number;
     time: string;
   } | null>(null);
   const [emptySlotMenuOpen, setEmptySlotMenuOpen] = useState<{
     date: string;
     designerId: number;
+    columnShopId: number;
     time: string;
   } | null>(null);
   const [emptySlotMenuPosition, setEmptySlotMenuPosition] = useState<{
@@ -317,6 +374,7 @@ export default function AppointmentsManagementPage() {
   const [moveTargetSlot, setMoveTargetSlot] = useState<{
     date: string;
     designerId: number;
+    columnShopId: number;
     time: string;
   } | null>(null);
   const [isMoveConfirmOpen, setIsMoveConfirmOpen] = useState(false);
@@ -900,44 +958,67 @@ export default function AppointmentsManagementPage() {
   }, [editingBooking?.id]);
 
 
-  // Comment: Load designer availability for the selected date (per weekday)
-  // This includes designers with regular schedule OR special work day (특별 근무일)
+  // Comment: Load shops + designer availability together in one pass to avoid render waterfall.
+  // Shops are fetched once on first run; subsequent runs (date change, refresh) reuse cached allShops.
+  // availabilityRefreshKey is incremented after holiday/special-day saves to force a re-fetch.
   useEffect(() => {
     let isMounted = true;
-    const fetchAvailability = async () => {
+    const fetchShopsAndAvailability = async () => {
       setLoadingDesignerAvailability(true);
       try {
-        const res = await fetch(
-          `/api/designer-schedules?date=${encodeURIComponent(selectedDate)}`
-        );
-        const data = await res.json();
-        if (isMounted) {
-          if (!res.ok) {
-            console.error('Failed to load designer availability:', data.error);
-            setAvailableDesignerIds([]);
-          } else {
-            // Comment: Special work days have priority - designers with special work day are included
-            // even if they don't have regular schedule for that weekday
-            setAvailableDesignerIds(data.designerIds || []);
+        // Comment: Fetch shops inline on first load so availability can follow immediately
+        let shops = allShops;
+        if (shops.length === 0) {
+          const shopsRes = await fetch('/api/shops');
+          const shopsData = await shopsRes.json();
+          shops = shopsData.shops || [];
+          if (isMounted && shops.length > 0) setAllShops(shops);
+        }
+
+        if (shops.length === 0) {
+          // Comment: No shops configured — fall back to global (non-per-shop) query
+          const res = await fetch(
+            `/api/designer-schedules?date=${encodeURIComponent(selectedDate)}`,
+          );
+          const data = await res.json();
+          if (isMounted) {
+            setAvailableDesignerIdsByShop(res.ok ? { 0: data.designerIds || [] } : {});
+          }
+        } else {
+          // Comment: Fetch all shops' availability in parallel
+          const results = await Promise.all(
+            shops.map(async (shop) => {
+              const res = await fetch(
+                `/api/designer-schedules?date=${encodeURIComponent(selectedDate)}&shopId=${shop.id}`,
+              );
+              const data = await res.json();
+              return [shop.id, res.ok ? (data.designerIds || []) : []] as const;
+            }),
+          );
+          if (isMounted) {
+            const byShop: Record<number, number[]> = {};
+            results.forEach(([id, ids]) => {
+              byShop[id] = ids;
+            });
+            setAvailableDesignerIdsByShop(byShop);
           }
         }
       } catch (err) {
         if (isMounted) {
-          console.error('Error loading designer availability:', err);
-          setAvailableDesignerIds([]);
+          console.error('Error loading shops/availability:', err);
+          setAvailableDesignerIdsByShop({});
         }
       } finally {
-        if (isMounted) {
-          setLoadingDesignerAvailability(false);
-        }
+        if (isMounted) setLoadingDesignerAvailability(false);
       }
     };
 
-    fetchAvailability();
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedDate]);
+    fetchShopsAndAvailability();
+    return () => { isMounted = false; };
+    // Comment: allShops intentionally omitted — it is loaded inline above on first run
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, availabilityRefreshKey]);
+
 
   // Comment: Load per-day designer availability for week view (7 days)
   useEffect(() => {
@@ -994,7 +1075,7 @@ export default function AppointmentsManagementPage() {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [focusedBookingId]);
 
-  // Comment: Load options for New Booking modal when it opens
+  // Comment: Load options for New Booking modal when it opens (designers use shop-scoped schedules + per-venue holidays)
   useEffect(() => {
     if (!isNewBookingOpen) return;
 
@@ -1002,46 +1083,70 @@ export default function AppointmentsManagementPage() {
 
     const targetDate = newBookingDate || selectedDate;
 
-    const loadShops = async () => {
-      const res = await fetch('/api/shops');
-      const json = await res.json();
-      if (res.ok) {
-        const shops = json.shops || [];
-        setNewBookingShops(shops);
-        if (shops.length > 0) {
-          setNewBookingShopId((prev) => prev ?? shops[0].id);
+    (async () => {
+      try {
+        const [shopsRes, servicesRes] = await Promise.all([
+          fetch('/api/shops'),
+          fetch('/api/services'),
+        ]);
+        const shopsJson = await shopsRes.json();
+        const servicesJson = await servicesRes.json();
+
+        if (shopsRes.ok) {
+          const shops = shopsJson.shops || [];
+          setNewBookingShops(shops);
+          if (shops.length > 0) {
+            setNewBookingShopId((prev) => prev ?? shops[0].id);
+          }
+        } else {
+          console.error('Failed to load shops for new booking:', shopsJson.error);
         }
-      } else {
-        console.error('Failed to load shops for new booking:', json.error);
-      }
-    };
 
-    const loadDesigners = async () => {
-      const res = await fetch(
-        `/api/working-designers?date=${encodeURIComponent(targetDate)}`
-      );
-      const json = await res.json();
-      if (res.ok) {
-        setNewBookingDesigners(json.designers || []);
-      } else {
-        console.error('Failed to load designers for new booking:', json.error);
-      }
-    };
+        if (servicesRes.ok) {
+          setNewBookingServices(servicesJson.services || []);
+        } else {
+          console.error('Failed to load services for new booking:', servicesJson.error);
+        }
 
-    const loadServices = async () => {
-      const res = await fetch('/api/services');
-      const json = await res.json();
-      if (res.ok) {
-        setNewBookingServices(json.services || []);
-      } else {
-        console.error('Failed to load services for new booking:', json.error);
-      }
-    };
+        const shopsList = shopsJson.shops || [];
+        const shopIdForSched =
+          newBookingShopId ??
+          (selectedShopFilter !== '전체' ? Number(selectedShopFilter) : null) ??
+          shopsList[0]?.id ??
+          null;
 
-    Promise.all([loadShops(), loadDesigners(), loadServices()]).finally(() => {
-      setNewBookingLoadingOptions(false);
-    });
-  }, [isNewBookingOpen, newBookingDate, selectedDate]);
+        if (shopIdForSched != null) {
+          const schedRes = await fetch(
+            `/api/designer-schedules?date=${encodeURIComponent(targetDate)}&shopId=${shopIdForSched}`,
+          );
+          const schedJson = await schedRes.json();
+          if (schedRes.ok) {
+            const ids: number[] = schedJson.designerIds || [];
+            if (ids.length === 0) {
+              setNewBookingDesigners([]);
+            } else {
+              const q = ids.map((id) => encodeURIComponent(String(id))).join(',');
+              const desRes = await fetch(`/api/designers?ids=${q}`);
+              const desJson = await desRes.json();
+              if (desRes.ok) {
+                setNewBookingDesigners(desJson.designers || []);
+              } else {
+                setNewBookingDesigners([]);
+              }
+            }
+          } else {
+            setNewBookingDesigners([]);
+          }
+        } else {
+          setNewBookingDesigners([]);
+        }
+      } catch (e) {
+        console.error('New booking options load error:', e);
+      } finally {
+        setNewBookingLoadingOptions(false);
+      }
+    })();
+  }, [isNewBookingOpen, newBookingDate, selectedDate, newBookingShopId, selectedShopFilter]);
 
   // Comment: Load designers and time off records when Time Off modal opens
   useEffect(() => {
@@ -1103,21 +1208,7 @@ export default function AppointmentsManagementPage() {
     };
   }, []);
 
-  // Comment: Load all shops for the shop filter dropdown
-  useEffect(() => {
-    const loadShops = async () => {
-      try {
-        const res = await fetch('/api/shops');
-        const data = await res.json();
-        if (res.ok && data.shops) {
-          setAllShops(data.shops);
-        }
-      } catch (err) {
-        console.error('Error loading shops:', err);
-      }
-    };
-    loadShops();
-  }, []);
+  // Comment: Shops are now loaded inside the combined shops+availability effect above
 
   // Comment: Close dropdown when clicking outside
   useEffect(() => {
@@ -1263,98 +1354,137 @@ export default function AppointmentsManagementPage() {
       if (CANCELLED_STATUSES.has(status)) continue;
       const dateStr = b.booking_date;
       if (!dateStr || !weekDates.includes(dateStr)) continue;
-      const name = b.designer?.name || 'Unassigned';
-      if (!map[dateStr][name]) map[dateStr][name] = [];
-      map[dateStr][name].push(b);
+      const key = bookingColumnKeyForGrid(b, allDesigners);
+      if (!map[dateStr][key]) map[dateStr][key] = [];
+      map[dateStr][key].push(b);
     }
     return map;
-  }, [filteredBookings, weekDates]);
+  }, [filteredBookings, weekDates, allDesigners]);
 
-  // Comment: Designers visible in the grid - filtered by selectedDesignerFilter
-  // Cells without bookings will be shown in gray
-  const visibleDesigners = useMemo(() => {
-    if (allDesigners.length > 0) {
-      const roleOrder: Record<string, number> = {
-        'Director': 1,
-        'Senior Designer': 2,
-        'Designer': 3,
-      };
-      
-      // Comment: Filter designers based on selectedShopFilter first
-      let filtered = [...allDesigners];
+  // Comment: One grid column per (designer, venue); multi-venue designers get one column per shop when "전체"
+  const scheduleColumns = useMemo((): ScheduleColumn[] => {
+    if (allDesigners.length === 0) return [];
 
-      if (selectedShopFilter !== '전체') {
-        const shopId = Number(selectedShopFilter);
-        filtered = filtered.filter(
-          (d) =>
-            d.shop_id === shopId ||
-            String(d.role || '')
-              .toLowerCase()
-              .includes('director'),
-        );
-      }
+    const roleOrder: Record<string, number> = {
+      Director: 1,
+      'Senior Designer': 2,
+      Designer: 3,
+    };
 
-      // Comment: Then filter by selectedDesignerFilter
-      if (selectedDesignerFilter === '전체') {
-        // Show all designers (already filtered by shop)
-      } else if (selectedDesignerFilter === '전체(휴무 제외)') {
-        // Comment: Show only designers who are working on selectedDate (based on /designer-schedules)
-        filtered = filtered.filter((d) => availableDesignerIds.includes(d.id));
-      } else {
-        // Show only selected designer
-        filtered = filtered.filter((d) => d.name === selectedDesignerFilter);
-      }
-      
-      // Comment: Sort by shop_id first, then role, then name
-      const sorted = filtered.sort((a, b) => {
-        const shopA = a.shop_id || 0;
-        const shopB = b.shop_id || 0;
-        if (shopA !== shopB) return shopA - shopB;
+    const sortDesigners = (a: (typeof allDesigners)[0], b: (typeof allDesigners)[0]) => {
+      const shopA = sortKeyPrimaryShop(a);
+      const shopB = sortKeyPrimaryShop(b);
+      if (shopA !== shopB) return shopA - shopB;
+      const roleA = (a.role || '').trim();
+      const roleB = (b.role || '').trim();
+      const orderA = roleOrder[roleA] || 999;
+      const orderB = roleOrder[roleB] || 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    };
 
-        const roleA = (a.role || '').trim();
-        const roleB = (b.role || '').trim();
-        const orderA = roleOrder[roleA] || 999;
-        const orderB = roleOrder[roleB] || 999;
+    const sortWithinShop = (a: (typeof allDesigners)[0], b: (typeof allDesigners)[0]) => {
+      const roleA = (a.role || '').trim();
+      const roleB = (b.role || '').trim();
+      const orderA = roleOrder[roleA] || 999;
+      const orderB = roleOrder[roleB] || 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    };
 
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
+    let filtered = [...allDesigners];
 
-        // Comment: If same role, sort by name
-        return (a.name || '').localeCompare(b.name || '');
-      });
-      
-      return sorted.map((d) => d.name).filter(Boolean);
+    if (selectedShopFilter !== '전체') {
+      const shopId = Number(selectedShopFilter);
+      filtered = filtered.filter((d) => designerBelongsToShop(d, shopId));
     }
-    
-    // Fallback: if designers not loaded yet, return empty array (will show once loaded)
-    return [];
-  }, [allDesigners, selectedShopFilter, selectedDesignerFilter, availableDesignerIds]);
+
+    if (selectedDesignerFilter === '전체') {
+      // no extra filter
+    } else if (selectedDesignerFilter === '전체(휴무 제외)') {
+      filtered = filtered.filter((d) => availableDesignerIds.includes(d.id));
+    } else {
+      filtered = filtered.filter((d) => d.name === selectedDesignerFilter);
+    }
+
+    const sorted = filtered.sort(sortDesigners);
+
+    if (selectedShopFilter === '전체') {
+      if (allShops.length === 0) {
+        return sorted.map((d) => ({
+          columnKey: `${d.id}-0`,
+          designerId: d.id,
+          name: d.name,
+          columnShopId: 0,
+        }));
+      }
+      const shopsOrdered = [...allShops].sort((a, b) => a.id - b.id);
+      const columns: ScheduleColumn[] = [];
+      for (const shop of shopsOrdered) {
+        const inShop = sorted.filter((d) => designerBelongsToShop(d, shop.id)).sort(sortWithinShop);
+        for (const d of inShop) {
+          columns.push({
+            columnKey: `${d.id}-${shop.id}`,
+            designerId: d.id,
+            name: d.name,
+            columnShopId: shop.id,
+          });
+        }
+      }
+      return columns;
+    }
+
+    const shopId = Number(selectedShopFilter);
+    return sorted.map((d) => ({
+      columnKey: `${d.id}-${shopId}`,
+      designerId: d.id,
+      name: d.name,
+      columnShopId: shopId,
+    }));
+  }, [
+    allDesigners,
+    allShops,
+    selectedShopFilter,
+    selectedDesignerFilter,
+    availableDesignerIds,
+  ]);
 
   // Comment: Designers filtered by shop for the designer select dropdown (Directors in every shop)
   const shopFilteredDesigners = useMemo(() => {
     if (selectedShopFilter === '전체') return allDesigners;
     const shopId = Number(selectedShopFilter);
-    return allDesigners.filter(
-      (d) =>
-        d.shop_id === shopId ||
-        String(d.role || '')
-          .toLowerCase()
-          .includes('director'),
-    );
+    return allDesigners.filter((d) => designerBelongsToShop(d, shopId));
   }, [allDesigners, selectedShopFilter]);
 
-  // Comment: Stable color assignment per designer
+  // Comment: Stable color assignment per grid column
   const designerColorMap = useMemo(() => {
-    const entries = visibleDesigners.map((name, index) => {
+    const entries = scheduleColumns.map((col, index) => {
       const color = DESIGNER_COLORS[index % DESIGNER_COLORS.length];
-      return [name, color] as const;
+      return [col.columnKey, color] as const;
     });
     return Object.fromEntries(entries) as Record<
       string,
       { bg: string; text: string; border: string }
     >;
-  }, [visibleDesigners]);
+  }, [scheduleColumns]);
+
+  // Comment: Grey-out per column — use per-shop availability directly.
+  // The designer-schedules API already excludes designers with 임의 휴일 for that specific shop,
+  // so availableDesignerIdsByShop[shopId] is the single source of truth per venue.
+  const columnDesignerOffMap = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    for (const col of scheduleColumns) {
+      const designerId = col.designerId;
+      if (!designerId) { m[col.columnKey] = false; continue; }
+      if (col.columnShopId === 0) {
+        m[col.columnKey] = !availableDesignerIds.includes(designerId);
+      } else {
+        const ids = availableDesignerIdsByShop[col.columnShopId];
+        m[col.columnKey] = ids != null ? !ids.includes(designerId) : !availableDesignerIds.includes(designerId);
+      }
+    }
+    return m;
+  }, [scheduleColumns, availableDesignerIds, availableDesignerIdsByShop]);
 
   // Comment: Sort bookings by time for upcoming list (all bookings for the day)
   const sortedBookings = useMemo(
@@ -1988,7 +2118,7 @@ export default function AppointmentsManagementPage() {
                     {/* Note: These dividers are rendered here (lines 921-939) to ensure they extend the full scrollable height.
                          They are positioned absolutely relative to the scroll container, not the grid, so they remain visible
                          even when scrolling horizontally. This fixes the issue where dividers were cut off after certain columns. */}
-                    {!isWeekViewMode && visibleDesigners.length > 0 && (
+                    {!isWeekViewMode && scheduleColumns.length > 0 && (
                       <div 
                         className="absolute pointer-events-none z-0" 
                         style={{ 
@@ -1998,19 +2128,14 @@ export default function AppointmentsManagementPage() {
                           height: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
                         }}
                       >
-                        {visibleDesigners.map((designerName, colIndex) => {
-                          const currentDesigner = allDesigners.find((d) => d.name === designerName);
-                          const nextDesignerName = visibleDesigners[colIndex + 1];
-                          const nextDesigner = nextDesignerName
-                            ? allDesigners.find((d) => d.name === nextDesignerName)
-                            : null;
+                        {scheduleColumns.map((col, colIndex) => {
+                          const nextCol = scheduleColumns[colIndex + 1];
                           const isShopBoundary =
-                            !!nextDesigner &&
-                            (currentDesigner?.shop_id ?? null) !== (nextDesigner?.shop_id ?? null);
-                          const columnWidth = 100 / visibleDesigners.length;
+                            !!nextCol && nextCol.columnShopId !== col.columnShopId;
+                          const columnWidth = 100 / scheduleColumns.length;
                           return (
                             <div
-                              key={`full-divider-${colIndex}`}
+                              key={`full-divider-${col.columnKey}`}
                               className={`absolute border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'}`}
                               style={{
                                 left: `${(colIndex + 1) * columnWidth}%`,
@@ -2029,12 +2154,12 @@ export default function AppointmentsManagementPage() {
                       isWeekViewMode={isWeekViewMode}
                       weekViewDesignerId={weekViewDesignerId}
                       weekDates={weekDates}
-                      visibleDesigners={visibleDesigners}
+                      scheduleColumns={scheduleColumns}
                       allDesigners={allDesigners}
                       allShops={allShops}
                       selectedDesignerFilter={selectedDesignerFilter}
                       weekViewStartDate={weekViewStartDate}
-                      openDesignerDropdown={openDesignerDropdown}
+                      openColumnKey={openDesignerDropdown}
                       onDesignerDropdownToggle={setOpenDesignerDropdown}
                       onOpenWeekView={handleOpenWeekView}
                       onCloseWeekView={handleCloseWeekView}
@@ -2042,7 +2167,7 @@ export default function AppointmentsManagementPage() {
                       onOpenHolidayModal={handleOpenHolidayModal}
                       onOpenAttendanceModal={handleOpenAttendanceModal}
                       canUseAttendanceManagement={canUseAttendanceManagement}
-                      availableDesignerIds={availableDesignerIds}
+                      columnDesignerOffMap={columnDesignerOffMap}
                       weekViewAvailableDates={weekViewAvailableDates}
                     />
 
@@ -2217,20 +2342,16 @@ export default function AppointmentsManagementPage() {
                           {/* Show week dates with designers */}
                           {weekDates.map((dateStr, dateIndex) => {
                             return (
-                              <div key={dateStr} className="border-r border-[#e2e8f0] flex-1 relative" style={{ minWidth: `${visibleDesigners.length * 150}px`, minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}>
-                                <div className="grid relative" style={{ gridTemplateColumns: `repeat(${visibleDesigners.length}, minmax(150px, 1fr))` }}>
-                                {visibleDesigners.map((designerName, designerIndex) => {
-                          const designer = allDesigners.find((d) => d.name === designerName);
+                              <div key={dateStr} className="border-r border-[#e2e8f0] flex-1 relative" style={{ minWidth: `${scheduleColumns.length * 150}px`, minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}>
+                                <div className="grid relative" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(150px, 1fr))` }}>
+                                {scheduleColumns.map((col, designerIndex) => {
+                          const designer = allDesigners.find((d) => d.id === col.designerId);
                           const designerId = designer?.id;
-                          const nextDesignerName = visibleDesigners[designerIndex + 1];
-                          const nextDesigner = nextDesignerName
-                            ? allDesigners.find((d) => d.name === nextDesignerName)
-                            : null;
-                          const isShopBoundary =
-                            !!nextDesigner &&
-                            (designer?.shop_id ?? null) !== (nextDesigner?.shop_id ?? null);
-                                  const designerBookings = bookingsByDateAndDesigner[dateStr]?.[designerName] || [];
-                          const color = designerColorMap[designerName] ??
+                          const nextCol = scheduleColumns[designerIndex + 1];
+                          const isShopBoundary = !!nextCol && nextCol.columnShopId !== col.columnShopId;
+                          const bookingLookupKey = columnKeyForBookingsLookup(col, designer);
+                                  const designerBookings = bookingsByDateAndDesigner[dateStr]?.[bookingLookupKey] || [];
+                          const color = designerColorMap[col.columnKey] ??
                                     DESIGNER_COLORS[designerIndex % DESIGNER_COLORS.length];
                           
                                   // Comment: Get restrictions for this designer on this date
@@ -2238,12 +2359,13 @@ export default function AppointmentsManagementPage() {
                                     (r) => r.designer_id === designerId && r.restriction_date === dateStr
                           );
 
-                          // Check if this designer is on holiday (not in availableDesignerIds)
-                          const isDesignerOff = designerId ? !availableDesignerIds.includes(designerId) : false;
+                          const isDesignerOff = designerId
+                            ? (columnDesignerOffMap[col.columnKey] ?? false)
+                            : false;
 
                           return (
                             <div
-                                      key={`${dateStr}-${designerName}`}
+                                      key={`${dateStr}-${col.columnKey}`}
                                       className={`relative h-full overflow-hidden border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'} last:border-r-0 ${isDesignerOff ? 'bg-gray-100/50' : ''}`}
                                       style={{
                                         minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
@@ -2319,8 +2441,9 @@ export default function AppointmentsManagementPage() {
                                         });
                                         setEmptySlotMenuOpen({ 
                                           date: dateStr, 
-                                          designerId: designerId || 0, 
-                                          time: slotTime 
+                                          designerId: designerId || 0,
+                                          columnShopId: col.columnShopId,
+                                          time: slotTime,
                                         });
                                       }}
                                     />
@@ -2364,12 +2487,14 @@ export default function AppointmentsManagementPage() {
                                 
                                 if (hasBooking || !designerId || isDesignerOff) return null;
                                 
-                                const slotKey = `${dateStr}-${designerId}-${slotTime}`;
+                                const slotKey = `${dateStr}-${col.columnKey}-${slotTime}`;
                                 const isHovered = hoveredEmptySlot?.date === dateStr && 
                                                   hoveredEmptySlot?.designerId === designerId && 
+                                                  hoveredEmptySlot?.columnShopId === col.columnShopId &&
                                                   hoveredEmptySlot?.time === slotTime;
                                 const isMenuOpen = emptySlotMenuOpen?.date === dateStr && 
                                                    emptySlotMenuOpen?.designerId === (designerId || 0) && 
+                                                   emptySlotMenuOpen?.columnShopId === col.columnShopId &&
                                                    emptySlotMenuOpen?.time === slotTime;
                                 
                                 // Debug log
@@ -2402,12 +2527,16 @@ export default function AppointmentsManagementPage() {
                                           setMoveTargetSlot({
                                             date: dateStr,
                                             designerId,
+                                            columnShopId: col.columnShopId,
                                             time: slotTime,
                                           });
                                           setIsMoveConfirmOpen(true);
                                           setHoveredEmptySlot(null);
                                         } else {
                                           setNewBookingDate(dateStr);
+                                          if (col.columnShopId !== 0) {
+                                            setNewBookingShopId(col.columnShopId);
+                                          }
                                           const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
                                           setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
                                           setIsNewBookingOpen(true);
@@ -2422,7 +2551,12 @@ export default function AppointmentsManagementPage() {
                                       }
                                       // 예약 금지 셀은 호버하지 않음 (restriction 블록이 처리)
                                       if (!isRestricted) {
-                                        setHoveredEmptySlot({ date: dateStr, designerId: designerId || 0, time: slotTime });
+                                        setHoveredEmptySlot({
+                                          date: dateStr,
+                                          designerId: designerId || 0,
+                                          columnShopId: col.columnShopId,
+                                          time: slotTime,
+                                        });
                                       }
                                     }}
                                     onMouseLeave={(e) => {
@@ -2451,7 +2585,12 @@ export default function AppointmentsManagementPage() {
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               e.preventDefault();
-                                              const menuData = { date: dateStr, designerId: designerId || 0, time: slotTime };
+                                              const menuData = {
+                                                date: dateStr,
+                                                designerId: designerId || 0,
+                                                columnShopId: col.columnShopId,
+                                                time: slotTime,
+                                              };
                                               // 현재 메뉴가 이미 열려있으면 닫고, 아니면 열기
                                               if (isMenuOpen) {
                                                 setEmptySlotMenuOpen(null);
@@ -2692,6 +2831,9 @@ export default function AppointmentsManagementPage() {
                                                 const [menuSlotHour1, menuSlotMin1] = menuSlotTime.split(':').map(Number);
                                                 const timeStr1 = `${menuSlotHour1 >= 12 ? menuSlotHour1 - 12 : menuSlotHour1}:${String(menuSlotMin1).padStart(2, '0')} ${menuSlotHour1 >= 12 ? 'PM' : 'AM'}`;
                                                 setNewBookingDate(emptySlotMenuOpen.date);
+                                                if (emptySlotMenuOpen.columnShopId !== 0) {
+                                                  setNewBookingShopId(emptySlotMenuOpen.columnShopId);
+                                                }
                                                 setNewBookingTimeSlots([{ designerId: emptySlotMenuOpen.designerId, time: timeStr1, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
                                                 setNewBookingDirectVisit(false);
                                                 setIsNewBookingOpen(true);
@@ -2711,6 +2853,9 @@ export default function AppointmentsManagementPage() {
                                                 const [menuSlotHour2, menuSlotMin2] = menuSlotTime.split(':').map(Number);
                                                 const timeStr2 = `${menuSlotHour2 >= 12 ? menuSlotHour2 - 12 : menuSlotHour2}:${String(menuSlotMin2).padStart(2, '0')} ${menuSlotHour2 >= 12 ? 'PM' : 'AM'}`;
                                                 setNewBookingDate(emptySlotMenuOpen.date);
+                                                if (emptySlotMenuOpen.columnShopId !== 0) {
+                                                  setNewBookingShopId(emptySlotMenuOpen.columnShopId);
+                                                }
                                                 setNewBookingTimeSlots([{ designerId: emptySlotMenuOpen.designerId, time: timeStr2, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
                                                 setNewBookingDirectVisit(true);
                                                 setIsNewBookingOpen(true);
@@ -2781,7 +2926,7 @@ export default function AppointmentsManagementPage() {
                               })}
                               
                               {/* Empty slot context menu - Portal로 렌더링 (빈 셀 슬롯 루프 외부, 예약금지 셀 클릭 시) */}
-                              {!isNewBookingOpen && emptySlotMenuPosition && emptySlotMenuOpen && emptySlotMenuOpen.date === dateStr && emptySlotMenuOpen.designerId === (designerId || 0) && typeof window !== 'undefined' && (() => {
+                              {!isNewBookingOpen && emptySlotMenuPosition && emptySlotMenuOpen && emptySlotMenuOpen.date === dateStr && emptySlotMenuOpen.designerId === (designerId || 0) && emptySlotMenuOpen.columnShopId === col.columnShopId && typeof window !== 'undefined' && (() => {
                                 // emptySlotMenuOpen 상태를 기반으로 해당 슬롯의 restriction 정보 찾기
                                 const menuSlotTime = emptySlotMenuOpen.time;
                                 // emptySlotMenuOpen의 designerId와 date에 맞는 restrictions만 필터링
@@ -3201,6 +3346,10 @@ export default function AppointmentsManagementPage() {
                   if (!movingBooking?.id || !moveTargetSlot) return;
                   try {
                     const dbTime = `${moveTargetSlot.time}:00`; // Comment: Convert "HH:MM" to "HH:MM:00" for DB
+                    const targetShopId =
+                      moveTargetSlot.columnShopId !== 0
+                        ? moveTargetSlot.columnShopId
+                        : movingBooking.shop_id ?? null;
                     const res = await fetch(`/api/appointment/${movingBooking.id}`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
@@ -3208,6 +3357,7 @@ export default function AppointmentsManagementPage() {
                         booking_date: moveTargetSlot.date,
                         booking_time: dbTime,
                         designer_id: moveTargetSlot.designerId,
+                        ...(targetShopId != null ? { shop_id: targetShopId } : {}),
                       }),
                     });
                     if (!res.ok) {
@@ -3322,37 +3472,9 @@ export default function AppointmentsManagementPage() {
             setEditTime(`${displayHour}:${minute} ${ampm}`);
           }
         }}
-        onCancelBooking={async (booking) => {
-          if (!confirm('예약을 취소하시겠습니까?')) {
-            return;
-          }
-          try {
-            const res = await fetch(`/api/appointment/${booking.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'CANCELLED' }),
-            });
-            if (!res.ok) {
-              const data = await res.json();
-              throw new Error(data.error || '예약 취소에 실패했습니다.');
-            }
-            alert('예약이 취소되었습니다.');
-            // 예약 내역 모달은 닫지 않고 데이터만 새로고침
-            setReservationHistoryRefreshTrigger((prev) => prev + 1);
-            // Refresh bookings
-            const weekStart = getWeekStart(selectedDate);
-            const weekEnd = getWeekEnd(selectedDate);
-            const refreshRes = await fetch(
-              `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
-            );
-            const refreshData = await refreshRes.json();
-            if (refreshRes.ok) {
-              setBookings(refreshData.bookings || []);
-              setFilteredBookings(refreshData.bookings || []);
-            }
-          } catch (error: any) {
-            alert(error.message || '예약 취소에 실패했습니다.');
-          }
+        onCancelBooking={(booking) => {
+          setBookingToCancel(booking);
+          setIsCancelBookingModalOpen(true);
         }}
         onViewBooking={(booking) => {
           if (booking.booking_date) {
@@ -3370,14 +3492,14 @@ export default function AppointmentsManagementPage() {
                 const startMinutes = (hourNum - GRID_START_HOUR) * 60 + minutes;
                 const top = (startMinutes / 30) * GRID_30MIN_HEIGHT + 8;
                 
-                // Find the designer in visibleDesigners (which is an array of names)
-                const designer = allDesigners.find((d) => d.id === booking.designer?.id);
-                const designerIndex = designer 
-                  ? visibleDesigners.findIndex((name) => name === designer.name)
-                  : -1;
-                
+                const bookingKey = bookingColumnKeyForGrid(booking as BookingWithRelations, allDesigners);
+                const designerIndex = scheduleColumns.findIndex((col) => {
+                  const d = allDesigners.find((x) => x.id === col.designerId);
+                  return columnKeyForBookingsLookup(col, d) === bookingKey;
+                });
+
                 if (designerIndex >= 0) {
-                  const columnWidth = scrollContainer.scrollWidth / visibleDesigners.length;
+                  const columnWidth = scrollContainer.scrollWidth / scheduleColumns.length;
                   const scrollLeft = columnWidth * designerIndex;
                   
                   scrollContainer.scrollTo({
@@ -3427,6 +3549,10 @@ export default function AppointmentsManagementPage() {
         initialDesignerId={holidayDesignerId}
         initialDesignerName={holidayDesignerName}
         allDesigners={allDesigners}
+        shops={allShops}
+        defaultTargetShopId={
+          selectedShopFilter !== '전체' ? Number(selectedShopFilter) : allShops[0]?.id ?? null
+        }
         selectedDate={selectedDate}
         onClose={() => {
           setIsHolidayModalOpen(false);
@@ -3434,7 +3560,10 @@ export default function AppointmentsManagementPage() {
           setHolidayDesignerName('전체');
           setHolidayCalendarRefreshKey((k) => k + 1);
         }}
-        onAvailableDesignerIdsChange={(ids) => setAvailableDesignerIds(ids)}
+        onAvailableDesignerIdsChange={() => {
+          // Comment: Re-fetch ALL shops' availability after any holiday/special-day change
+          setAvailabilityRefreshKey((k) => k + 1);
+        }}
       />
 
       {/* Attendance (clock-in/out) Modal - only for manager/director */}
@@ -3727,6 +3856,7 @@ export default function AppointmentsManagementPage() {
           setIsCancelBookingModalOpen(false);
           setBookingToCancel(null);
           refreshBookings();
+          setReservationHistoryRefreshTrigger((prev) => prev + 1);
         }}
       />
 

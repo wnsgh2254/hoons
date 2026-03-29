@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { loadDesignerAvailabilityForPublicBooking } from '@/lib/server-booking-availability';
 
+export const dynamic = 'force-dynamic';
+
 // Comment: Public GET — designer date occupancy + restrictions for /booking time grid
 export async function GET(request: NextRequest) {
   try {

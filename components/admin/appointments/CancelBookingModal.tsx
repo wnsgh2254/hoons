@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { BookingWithRelations } from '@/lib/types';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -31,6 +31,21 @@ export default function CancelBookingModal({
 }: CancelBookingModalProps) {
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refundStripeDeposit, setRefundStripeDeposit] = useState(false);
+
+  const depositPaid = booking
+    ? Math.max(0, Number(booking.deposit_paid ?? (booking as any).depositPaid ?? 0) || 0)
+    : 0;
+  const alreadyRefunded = Boolean(booking?.deposit_refunded_at);
+  const canOfferRefund = depositPaid > 0 && !alreadyRefunded;
+
+  useEffect(() => {
+    if (!isOpen || !booking) return;
+    const paid = Math.max(0, Number(booking.deposit_paid ?? (booking as any).depositPaid ?? 0) || 0);
+    const refunded = Boolean(booking.deposit_refunded_at);
+    setRefundStripeDeposit(paid > 0 && !refunded);
+    setSelectedReason('');
+  }, [isOpen, booking?.id]);
 
   if (!isOpen || !booking) return null;
 
@@ -48,6 +63,7 @@ export default function CancelBookingModal({
         body: JSON.stringify({
           status: 'CANCELLED',
           cancellation_reason: selectedReason || null,
+          refund_stripe_deposit: canOfferRefund && refundStripeDeposit,
         }),
       });
 
@@ -56,7 +72,13 @@ export default function CancelBookingModal({
         throw new Error(data.error || '예약 취소에 실패했습니다.');
       }
 
-      alert('예약이 취소되었습니다.');
+      if (canOfferRefund && refundStripeDeposit) {
+        alert(
+          '예약이 취소되었습니다. 카드 예약금 환불을 Stripe에 요청했으며, 고객 카드사 반영은 며칠 걸릴 수 있습니다.',
+        );
+      } else {
+        alert('예약이 취소되었습니다.');
+      }
       setSelectedReason('');
       onClose();
       onSuccess();
@@ -97,6 +119,28 @@ export default function CancelBookingModal({
         <p className="text-sm text-gray-900">
           {customerName} 고객님의 {bookingDate} 예약이 취소됩니다.
         </p>
+        {alreadyRefunded && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+            이 예약의 카드 예약금은 이미 환불 처리된 기록이 있습니다.
+          </p>
+        )}
+        {canOfferRefund && (
+          <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-800">
+            <input
+              type="checkbox"
+              className="mt-0.5 rounded border-gray-300"
+              checked={refundStripeDeposit}
+              onChange={(e) => setRefundStripeDeposit(e.target.checked)}
+            />
+            <span>
+              카드로 결제된 예약금{' '}
+              <span className="font-semibold tabular-nums">
+                {depositPaid.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' })}
+              </span>
+              을 Stripe로 환불합니다
+            </span>
+          </label>
+        )}
       </div>
     </Modal>
   );

@@ -157,13 +157,22 @@ export async function updateBookingAfterDepositPaid(
   bookingId: number,
   depositPaidAmount: number,
   customerId?: number | null,
+  stripePaymentIntentId?: string | null,
 ) {
-  const updatePayload: { status: string; deposit_paid: number; customer_id?: number | null } = {
+  const updatePayload: {
+    status: string;
+    deposit_paid: number;
+    customer_id?: number | null;
+    stripe_payment_intent_id?: string | null;
+  } = {
     status: 'confirmed',
     deposit_paid: depositPaidAmount,
   };
   if (customerId !== undefined) {
     updatePayload.customer_id = customerId;
+  }
+  if (stripePaymentIntentId) {
+    updatePayload.stripe_payment_intent_id = stripePaymentIntentId;
   }
   const { data, error } = await supabase
     .from('bookings')

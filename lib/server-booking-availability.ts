@@ -5,6 +5,9 @@ import {
   timeLabelToMinutes,
 } from '@/lib/booking-time-math';
 import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
+import { resolvePerShopTimeOffOutcomes, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
+import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
+import { assertMultiVenueDefaultShopAllowsBooking } from '@/lib/multi-venue-default-shop';
 
 // Comment: DB stores mixed case (e.g. cancelled, CANCELLED) — match Supabase live data
 function isCancelledStatus(status: string | null | undefined): boolean {
@@ -130,6 +133,38 @@ export async function assertPublicBookingSlotAvailable(
   if (slotMin == null) {
     return { ok: false, message: 'Invalid time format.' };
   }
+
+  // Comment: Same rule as designer-schedules: newest 임의 휴일/특별 근무일 row wins per venue.
+  const { data: venueRows, error: venueErr } = await supabase
+    .from('designer_time_off')
+    .select('id, designer_id, shop_id, reason, created_at')
+    .eq('designer_id', params.designerId)
+    .in('reason', ['임의 휴일', '특별 근무일'])
+    .lte('start_date', params.date)
+    .gte('end_date', params.date);
+
+  let specialWorkDesignerIds = new Set<number>();
+  if (!venueErr && venueRows?.length) {
+    const resolved = resolvePerShopTimeOffOutcomes(venueRows as VenueTimeOffRow[], params.shopId);
+    specialWorkDesignerIds = resolved.specialWorkDesignerIds;
+    if (resolved.arbitraryHolidayDesignerIds.has(Number(params.designerId))) {
+      return {
+        ok: false,
+        message: 'This designer is not available at this location on the selected date.',
+      };
+    }
+  }
+
+  const defaultVenueCheck = await assertMultiVenueDefaultShopAllowsBooking(supabase, {
+    designerId: Number(params.designerId),
+    shopId: params.shopId,
+    weekday: salonCalendarWeekdayIndex(params.date),
+    specialWorkDesignerIds,
+  });
+  if (!defaultVenueCheck.ok) {
+    return defaultVenueCheck;
+  }
+
   const data = await loadDesignerAvailabilityForPublicBooking(supabase, {
     designerId: params.designerId,
     shopId: params.shopId,

@@ -57,7 +57,14 @@ export interface Booking {
   booking_time: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'noshow';
   deposit_amount: number;
+  /** AUD actually charged for deposit (Stripe webhook) */
+  deposit_paid?: number | null;
   total_amount: number | null;
+  /** Stripe PaymentIntent id for online deposit refunds */
+  stripe_payment_intent_id?: string | null;
+  /** Set when admin refunded the card deposit */
+  deposit_refunded_at?: string | null;
+  stripe_refund_id?: string | null;
   /** 0 | 1 — set when admin completes sale registration for this visit */
   sale_completed?: number;
   memo?: string | null;

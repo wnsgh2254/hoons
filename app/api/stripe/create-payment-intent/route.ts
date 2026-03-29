@@ -145,6 +145,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Comment: Persist PI id for admin cancel refunds (webhook also sets this on success)
+    const { error: piUpdateError } = await supabase
+      .from("bookings")
+      .update({ stripe_payment_intent_id: paymentIntent.id })
+      .eq("id", booking.id);
+    if (piUpdateError) {
+      console.warn("Could not save stripe_payment_intent_id on booking:", piUpdateError.message);
+    }
+
     return NextResponse.json(
       {
         client_secret: paymentIntent.client_secret,

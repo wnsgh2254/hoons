@@ -16,7 +16,11 @@ export async function resolveShopIdForDesigner(
     if (designerErr) {
       console.error('Error resolving designer shop_id:', designerErr);
     }
-    resolvedShopId = designerRow?.shop_id ?? null;
+    const raw = designerRow?.shop_id;
+    resolvedShopId = raw != null && raw !== '' ? Number(raw) : null;
+    if (resolvedShopId != null && Number.isNaN(resolvedShopId)) {
+      resolvedShopId = null;
+    }
   }
   return resolvedShopId;
 }
