@@ -532,9 +532,9 @@ function ServicesTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-6">
+      <div className="flex flex-col sm:flex-row gap-6">
         {/* Left panel: Categories */}
-        <div className="w-1/3">
+        <div className="w-full sm:w-1/3">
           <div className="px-2 pb-4 flex items-center justify-between">
             <h3 className="text-lg font-bold text-black">서비스 분류</h3>
             <Button icon="add" size="sm" onClick={() => setIsAddingCategory(true)}>분류 등록</Button>
@@ -553,7 +553,7 @@ function ServicesTab() {
         </div>
 
         {/* Right panel: Services */}
-        <div className="w-2/3">
+        <div className="w-full sm:w-2/3">
           <div className="px-2 pb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-bold text-black">&gt; {selectedCategory}</h3>
@@ -1050,9 +1050,9 @@ function DesignerServicesTab() {
   }
 
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col sm:flex-row gap-6">
       {/* Left: Staff list */}
-      <div className="w-1/3 shrink-0">
+      <div className="w-full sm:w-1/3 shrink-0">
         <div className="px-2 pb-4">
           <h3 className="text-lg font-bold text-black">직원 목록</h3>
         </div>

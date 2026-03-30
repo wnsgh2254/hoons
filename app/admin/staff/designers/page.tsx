@@ -5,6 +5,8 @@ import { useState } from 'react';
 
 export default function DesignerManagementPage() {
   const [selectedDesigner, setSelectedDesigner] = useState('sarah');
+  // Controls which panel is visible on mobile: 'list' shows the designer list, 'detail' shows the edit panel
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'detail'>('list');
   const [services, setServices] = useState([
     { id: 1, name: "Women's Haircut", price: 80, active: true, description: 'Includes wash & styling' },
     { id: 2, name: "Men's Haircut", price: 50, active: true, description: 'Standard cut' },
@@ -65,7 +67,8 @@ export default function DesignerManagementPage() {
 
   return (
     <div className="bg-white text-text-primary font-display overflow-hidden h-screen flex selection:bg-black selection:text-white">
-      <nav className="w-20 lg:w-64 shrink-0 flex flex-col justify-between border-r border-border-light bg-[#121212] z-20 transition-all duration-300">
+      {/* Sidebar nav — hidden on mobile, always visible on sm+ */}
+      <nav className={`w-20 lg:w-64 shrink-0 flex-col justify-between border-r border-border-light bg-[#121212] z-20 transition-all duration-300 hidden sm:flex`}>
         <div className="flex flex-col">
           <div className="h-20 flex items-center px-5.5 border-b border-white/10">
             <div className="flex items-center gap-3">
@@ -127,7 +130,8 @@ export default function DesignerManagementPage() {
           </div>
         </div>
       </nav>
-      <aside className="w-80 shrink-0 border-r border-border-light bg-gray-50 flex flex-col z-10">
+      {/* Designer list panel — full screen on mobile when mobilePanel==='list', always visible on sm+ */}
+      <aside className={`shrink-0 border-r border-border-light bg-gray-50 flex-col z-10 w-full sm:w-80 ${mobilePanel === 'list' ? 'flex' : 'hidden sm:flex'}`}>
         <div className="p-5.5 flex flex-col gap-4 border-b border-border-light">
           <h2 className="text-xl font-medium text-text-primary">Designers</h2>
           <div className="relative w-full">
@@ -158,7 +162,10 @@ export default function DesignerManagementPage() {
               return (
                 <div
                   key={designer.id}
-                  onClick={() => setSelectedDesigner(designer.id)}
+                  onClick={() => {
+                    setSelectedDesigner(designer.id);
+                    setMobilePanel('detail');
+                  }}
                   className={`flex items-center gap-4 px-5.5 py-4 border-l-4 cursor-pointer transition-colors ${
                     isSelected
                       ? 'border-black bg-gray-50'
@@ -191,23 +198,36 @@ export default function DesignerManagementPage() {
           </div>
         </div>
       </aside>
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-white relative">
-        <header className="h-20 flex items-center justify-between px-7.5 border-b border-border-light bg-white/90 backdrop-blur-md z-10 sticky top-0">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 text-text-secondary text-sm">
-              <span>Staff</span>
-              <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-              <span>Designers</span>
-            </div>
-            <h1 className="text-xl font-semibold text-text-primary">Edit Profile</h1>
-          </div>
+      {/* Detail/edit panel — full screen on mobile when mobilePanel==='detail', always visible on sm+ */}
+      <main className={`flex-col h-full overflow-hidden bg-white relative flex-1 ${mobilePanel === 'detail' ? 'flex' : 'hidden sm:flex'}`}>
+        <header className="flex items-center justify-between px-4 sm:px-7.5 border-b border-border-light bg-white/90 backdrop-blur-md z-10 sticky top-0 min-h-[64px] sm:h-20">
           <div className="flex items-center gap-3">
-            <button className="px-4 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
+            {/* Back button — mobile only */}
+            <button
+              type="button"
+              onClick={() => setMobilePanel('list')}
+              className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+              aria-label="목록으로"
+            >
+              <span className="material-symbols-outlined text-xl">arrow_back</span>
+            </button>
+            <div className="flex flex-col">
+              <div className="hidden sm:flex items-center gap-2 text-text-secondary text-sm">
+                <span>Staff</span>
+                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                <span>Designers</span>
+              </div>
+              <h1 className="text-base sm:text-xl font-semibold text-text-primary">Edit Profile</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button className="px-3 sm:px-4 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 transition-colors">
               Delete
             </button>
-            <button className="px-5.5 py-2 rounded-lg text-sm font-bold text-white bg-linear-to-br from-[#121212] to-[#333333] hover:opacity-90 shadow-md transition-all flex items-center gap-2">
+            <button className="px-3 sm:px-5.5 py-2 rounded-lg text-sm font-bold text-white bg-linear-to-br from-[#121212] to-[#333333] hover:opacity-90 shadow-md transition-all flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px]">save</span>
-              Save Changes
+              <span className="hidden sm:inline">Save Changes</span>
+              <span className="sm:hidden">저장</span>
             </button>
           </div>
         </header>

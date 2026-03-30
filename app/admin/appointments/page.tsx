@@ -237,8 +237,11 @@ export default function AppointmentsManagementPage() {
   // Comment: Calendar view mode - always show booking count instead of green dot
   const [showBookingCount] = useState(true);
 
-  // Comment: REQ_SCH_001_01 - Left panel toggle state
+  // Comment: REQ_SCH_001_01 - Left panel toggle state; default to hidden on mobile (< lg)
   const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(true);
+  useEffect(() => {
+    if (window.innerWidth < 1024) setIsLeftPanelVisible(false);
+  }, []);
 
   // Comment: REQ_SCH_001_02 - Designer filter state
   const [selectedDesignerFilter, setSelectedDesignerFilter] = useState<string>('전체');
