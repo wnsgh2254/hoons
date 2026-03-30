@@ -103,14 +103,22 @@ export default function ScheduleHeaderControls({
       <div className="max-w-full mx-auto px-3 md:px-9.5">
         {/* Row 1 (always visible on all screens): date nav + MENU */}
         <div className="flex items-center gap-2 py-2">
-          {/* Left panel toggle button */}
+          {/* Calendar toggle — icon button on mobile, chevron on desktop */}
           <button
             type="button"
             onClick={onToggleLeftPanel}
-            className="hidden lg:flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors shrink-0"
-            title={isLeftPanelVisible ? '좌측 패널 숨기기' : '좌측 패널 보이기'}
+            className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
+              isLeftPanelVisible
+                ? 'bg-black text-white hover:bg-gray-800 lg:bg-transparent lg:text-gray-600 lg:hover:bg-gray-100 lg:hover:text-black'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-black'
+            }`}
+            title={isLeftPanelVisible ? '달력 닫기' : '달력 열기'}
           >
-            <span className="material-symbols-outlined text-lg">
+            {/* Mobile: calendar icon / Desktop: chevron */}
+            <span className="material-symbols-outlined text-lg lg:hidden">
+              {isLeftPanelVisible ? 'calendar_today' : 'calendar_month'}
+            </span>
+            <span className="material-symbols-outlined text-lg hidden lg:inline">
               {isLeftPanelVisible ? 'chevron_left' : 'chevron_right'}
             </span>
           </button>

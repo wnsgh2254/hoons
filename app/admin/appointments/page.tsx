@@ -2080,29 +2080,45 @@ export default function AppointmentsManagementPage() {
 
 
             <div className={`grid grid-cols-1 ${isLeftPanelVisible ? 'lg:grid-cols-12' : 'lg:grid-cols-1'} gap-6 flex-1 min-h-0`}>
-              {/* Left: Large Calendar */}
+              {/* Left: Calendar panel
+                  - Mobile: fixed overlay below header (out of grid flow)
+                  - Desktop lg+: normal grid col-span-3 */}
               {isLeftPanelVisible && (
-              <div className="lg:col-span-3 flex flex-col gap-6 min-h-0">
-                <AppointmentCalendar
-                  selectedDate={selectedDate}
-                  dayCounts={dayCounts}
-                  showBookingCount={showBookingCount}
-                  onDateSelect={setSelectedDate}
-                />
-
-                {/* Memo below calendar */}
-                <AdminMemo
-                  memo={memo}
-                  memoLoading={memoLoading}
-                  memoSaving={memoSaving}
-                  onMemoChange={setMemo}
-                  onSave={handleMemoSave}
-                />
-              </div>
+                <>
+                  {/* Mobile-only backdrop — click to close calendar */}
+                  <div
+                    className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+                    onClick={() => setIsLeftPanelVisible(false)}
+                  />
+                  <div className="fixed top-16 left-0 right-0 z-50 bg-white shadow-xl overflow-y-auto max-h-[80vh] rounded-b-2xl lg:static lg:top-auto lg:left-auto lg:right-auto lg:z-auto lg:max-h-none lg:overflow-visible lg:shadow-none lg:rounded-none lg:col-span-3 lg:flex lg:flex-col lg:gap-6 lg:min-h-0">
+                    <div className="p-4 flex flex-col gap-4 lg:p-0 lg:gap-6">
+                      <AppointmentCalendar
+                        selectedDate={selectedDate}
+                        dayCounts={dayCounts}
+                        showBookingCount={showBookingCount}
+                        onDateSelect={(date) => {
+                          setSelectedDate(date);
+                          // Auto-close calendar overlay on mobile after date selection
+                          if (window.innerWidth < 1024) setIsLeftPanelVisible(false);
+                        }}
+                      />
+                      {/* Memo — hidden on mobile overlay, visible on desktop sidebar */}
+                      <div className="hidden lg:block">
+                        <AdminMemo
+                          memo={memo}
+                          memoLoading={memoLoading}
+                          memoSaving={memoSaving}
+                          onMemoChange={setMemo}
+                          onSave={handleMemoSave}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
 
-              {/* Center: Full Schedule */}
-              <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} flex flex-col gap-4 min-h-0`}>
+              {/* Center: Full Schedule — always full width on mobile */}
+              <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} col-span-1 flex flex-col gap-4 min-h-0`}>
                 <div
                   ref={scheduleRef}
                   className="flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
