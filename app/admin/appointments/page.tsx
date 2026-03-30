@@ -246,6 +246,15 @@ export default function AppointmentsManagementPage() {
   // Comment: REQ_SCH_001_02 - Designer filter state
   const [selectedDesignerFilter, setSelectedDesignerFilter] = useState<string>('전체');
 
+  // Comment: Mobile-only selected designer — required on mobile to show single-designer list view
+  const [mobileSelectedDesignerId, setMobileSelectedDesignerId] = useState<number | null>(null);
+  // Auto-select first designer when designers load and screen is mobile
+  useEffect(() => {
+    if (allDesigners.length > 0 && mobileSelectedDesignerId === null && window.innerWidth < 1024) {
+      setMobileSelectedDesignerId(allDesigners[0].id);
+    }
+  }, [allDesigners, mobileSelectedDesignerId]);
+
   // Comment: REQ_SCH_001_03~06 - Date navigation state
   const [isCalendarPopupOpen, setIsCalendarPopupOpen] = useState(false);
   const [calendarPopupMonth, setCalendarPopupMonth] = useState<Date>(new Date());
@@ -1364,6 +1373,25 @@ export default function AppointmentsManagementPage() {
     return map;
   }, [filteredBookings, weekDates, allDesigners]);
 
+  // Comment: Mobile view — bookings for the selected designer on the selected date, sorted by time
+  const mobileDesignerBookings = useMemo(() => {
+    if (!mobileSelectedDesignerId) return [];
+    return filteredBookings
+      .filter((b) => {
+        const status = String((b as any).status || (b as any).booking_status || '').toLowerCase();
+        if (CANCELLED_STATUSES.has(status)) return false;
+        return (
+          b.booking_date === selectedDate &&
+          (b.designer?.id === mobileSelectedDesignerId || (b as any).designer_id === mobileSelectedDesignerId)
+        );
+      })
+      .sort((a, b) => {
+        const aTime = a.booking_time || '00:00';
+        const bTime = b.booking_time || '00:00';
+        return aTime.localeCompare(bTime);
+      });
+  }, [filteredBookings, selectedDate, mobileSelectedDesignerId]);
+
   // Comment: One grid column per (designer, venue); multi-venue designers get one column per shop when "전체"
   const scheduleColumns = useMemo((): ScheduleColumn[] => {
     if (allDesigners.length === 0) return [];
@@ -2119,9 +2147,113 @@ export default function AppointmentsManagementPage() {
 
               {/* Center: Full Schedule — always full width on mobile */}
               <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} col-span-1 flex flex-col gap-4 min-h-0`}>
+
+                {/* ===== MOBILE VIEW: single-designer list ===== */}
+                <div className="flex flex-col gap-3 lg:hidden">
+                  {/* Designer picker */}
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">직원 선택</label>
+                    <select
+                      value={mobileSelectedDesignerId ?? ''}
+                      onChange={(e) => setMobileSelectedDesignerId(Number(e.target.value) || null)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-medium bg-white focus:ring-2 focus:ring-black focus:border-transparent"
+                    >
+                      {allDesigners.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}{d.role ? ` · ${d.role}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Booking list */}
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    {/* Date header */}
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                      <span className="text-sm font-bold text-black">
+                        {(() => {
+                          const d = new Date(selectedDate);
+                          const dayName = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+                          return `${d.getMonth() + 1}월 ${d.getDate()}일 (${dayName})`;
+                        })()}
+                      </span>
+                      <span className="text-xs text-gray-500">{mobileDesignerBookings.length}건</span>
+                    </div>
+
+                    {!mobileSelectedDesignerId ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                        <span className="material-symbols-outlined text-4xl mb-2">person_search</span>
+                        <p className="text-sm">직원을 선택해주세요</p>
+                      </div>
+                    ) : mobileDesignerBookings.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                        <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
+                        <p className="text-sm">예약이 없습니다</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        {mobileDesignerBookings.map((booking) => {
+                          const timeLabel = booking.booking_time
+                            ? booking.booking_time.slice(0, 5)
+                            : '—';
+                          const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
+                          const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
+                          const duration = (booking as any).service?.duration_minutes || (booking as any).duration_minutes;
+                          const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
+                          const statusLabel =
+                            status === 'confirmed' ? '확정' :
+                            status === 'pending' ? '대기' :
+                            status === 'completed' ? '완료' :
+                            status === 'no_show' ? '노쇼' : status;
+                          const statusColor =
+                            status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                            status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                            status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                            status === 'no_show' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600';
+
+                          return (
+                            <button
+                              key={booking.id}
+                              type="button"
+                              onClick={() => setViewingBookingDetail(booking)}
+                              className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                            >
+                              {/* Time */}
+                              <div className="shrink-0 w-12 text-center">
+                                <span className="text-sm font-bold text-black">{timeLabel}</span>
+                                {duration && (
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{duration}분</p>
+                                )}
+                              </div>
+                              {/* Divider */}
+                              <div className="w-px h-10 bg-gray-200 shrink-0" />
+                              {/* Info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-black truncate">{customerName}</p>
+                                {serviceName && (
+                                  <p className="text-xs text-gray-500 truncate mt-0.5">{serviceName}</p>
+                                )}
+                              </div>
+                              {/* Status */}
+                              {statusLabel && (
+                                <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${statusColor}`}>
+                                  {statusLabel}
+                                </span>
+                              )}
+                              {/* Chevron */}
+                              <span className="material-symbols-outlined text-gray-300 text-lg shrink-0">chevron_right</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* ===== END MOBILE VIEW ===== */}
+
+                {/* ===== DESKTOP VIEW: time grid (hidden on mobile) ===== */}
                 <div
                   ref={scheduleRef}
-                  className="flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
+                  className="hidden lg:flex flex-col flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
                 >
                   {/* Loading overlay */}
                   {loadingDesignerAvailability && (
