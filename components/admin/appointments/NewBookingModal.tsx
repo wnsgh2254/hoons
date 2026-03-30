@@ -132,12 +132,23 @@ export default function NewBookingModal({
     }
   }, [isOpen, registeredCustomer?.id]);
 
-  // Comment: 저장 버튼 disable 조건에 `shopId`가 들어가므로,
-  // 모달 오픈 시 부모에서 내려오는 `newBookingShopId`로 shopId를 초기화합니다.
+  // Comment: Sync booking date from parent when modal opens — respects the slot-click date
+  const prevIsOpenRef = useRef(false);
   useEffect(() => {
-    if (!isOpen) return;
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+    if (!justOpened) return;
+
+    // Comment: Use the pre-filled date from the clicked slot (newBookingDate), fall back to selectedDate
+    const dateToUse = newBookingDate || selectedDate;
+    setBookingDate(dateToUse);
+    const d = new Date(dateToUse);
+    if (!Number.isNaN(d.getTime())) {
+      setDatePickerMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    }
+
     if (newBookingShopId != null) setShopId(newBookingShopId);
-  }, [isOpen, newBookingShopId]);
+  }, [isOpen, newBookingDate, selectedDate, newBookingShopId]);
 
   // Debounced customer search - call API when user types
   // Comment: Skip search when customer is selected to avoid overwriting results and losing selectedCustomerDetail

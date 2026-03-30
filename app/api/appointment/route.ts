@@ -115,9 +115,34 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+    // Comment: minimal=true returns only booking_date+status — used for calendar dot counts (no joins, no count)
+    const minimal = searchParams.get('minimal') === 'true';
 
     const page = Number(searchParams.get('page')) || 1;
     const limit = Number(searchParams.get('limit')) || 20;
+
+    if (minimal) {
+      // Comment: Lightweight path for calendar dot counts — skips joins and COUNT overhead
+      let minimalQuery = supabase
+        .from('bookings')
+        .select('booking_date, status')
+        .order('booking_date', { ascending: true });
+
+      if (shopId) minimalQuery = minimalQuery.eq('shop_id', shopId);
+      if (designerId) minimalQuery = minimalQuery.eq('designer_id', designerId);
+      if (startDate && endDate) {
+        minimalQuery = minimalQuery.gte('booking_date', startDate).lte('booking_date', endDate);
+      } else if (date) {
+        minimalQuery = minimalQuery.eq('booking_date', date);
+      }
+      // Comment: No pagination limit for minimal queries — only booking_date+status returned
+      const { data: minData, error: minError } = await minimalQuery;
+      if (minError) {
+        console.error('Error fetching minimal bookings:', minError);
+        return NextResponse.json({ error: '예약 조회에 실패했습니다.' }, { status: 500 });
+      }
+      return NextResponse.json({ bookings: minData || [] }, { status: 200 });
+    }
 
     let query = supabase
       .from('bookings')
@@ -128,8 +153,7 @@ export async function GET(request: NextRequest) {
         service:service_id ( id, name, duration_minutes ),
         shop:shop_id ( id, name ),
         customer:customer_id ( id, name, phone )
-      `,
-        { count: 'exact' }
+      `
       )
       .order('booking_date', { ascending: false })
       .order('booking_time', { ascending: false });
@@ -157,7 +181,7 @@ export async function GET(request: NextRequest) {
     const to = from + limit - 1;
     query = query.range(from, to);
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching bookings:', error);
@@ -170,10 +194,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         bookings: data || [],
-        total: count || 0,
+        total: data?.length ?? 0,
         page,
         limit,
-        totalPages: Math.ceil((count || 0) / limit),
       },
       { status: 200 }
     );

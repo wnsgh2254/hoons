@@ -127,14 +127,18 @@ export default function HolidaySettingModal({
     );
   }, [allDesignerTimeOffs, designerId, targetShopId]);
 
+  // Comment: Re-populate selectedDates when type, venue, or designer changes — only show dates for the current type
   useEffect(() => {
     if (!isOpen || designerId === null || targetShopId === null) return;
+    const targetReason = holidayType === 'holiday' ? '임의 휴일' : '특별 근무일';
     const dates: string[] = [];
     existingTimeOffsForVenue.forEach((to: any) => {
-      dates.push(...expandDateRange(to.start_date, to.end_date));
+      if (to.reason === targetReason) {
+        dates.push(...expandDateRange(to.start_date, to.end_date));
+      }
     });
     setSelectedDates(Array.from(new Set(dates)));
-  }, [isOpen, designerId, targetShopId, existingTimeOffsForVenue]);
+  }, [isOpen, designerId, targetShopId, existingTimeOffsForVenue, holidayType]);
 
   useEffect(() => {
     if (!isOpen) {

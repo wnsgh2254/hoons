@@ -81,9 +81,8 @@ type ScheduleColumn = {
   columnShopId: number;
 };
 
-// Comment: Group bookings per grid column (designer + venue)
+// Comment: Group bookings per grid column (designer + venue) — uses designerId to avoid name-collision bugs
 function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): string {
-  const name = b.designer?.name || 'Unassigned';
   const designerId = b.designer?.id;
   const designer = designerId ? allDesigners.find((d) => d.id === designerId) : undefined;
   let sid = b.shop_id ?? null;
@@ -96,9 +95,10 @@ function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): 
           : [];
     sid = ids[0] ?? null;
   }
-  return `${name}::${sid === null ? 'null' : String(sid)}`;
+  return `${designerId ?? 'unassigned'}::${sid === null ? 'null' : String(sid)}`;
 }
 
+// Comment: Must stay in sync with bookingColumnKeyForGrid — both use designerId::shopId
 function columnKeyForBookingsLookup(
   col: ScheduleColumn,
   designer: { shop_ids_at?: number[]; shop_id?: number | null } | undefined,
@@ -107,7 +107,7 @@ function columnKeyForBookingsLookup(
     col.columnShopId === 0
       ? sortKeyPrimaryShop(designer as { shop_id?: number | null; shop_ids_at?: number[] }) || null
       : col.columnShopId;
-  return `${col.name}::${sid === null ? 'null' : String(sid)}`;
+  return `${col.designerId}::${sid === null ? 'null' : String(sid)}`;
 }
 
 
@@ -569,20 +569,63 @@ export default function AppointmentsManagementPage() {
 
   const monthKey = selectedDate.slice(0, 7); // YYYY-MM
 
-  // Comment: Fetch user session for role (attendance management: manager/director only)
+  // Comment: Fetch user session + all designers in parallel on mount to cut waterfall latency
   useEffect(() => {
-    const fetchSession = async () => {
+    const fetchSessionAndDesigners = async () => {
       try {
-        const res = await fetch('/api/auth/session');
-        const data = await res.json();
-        if (data.authenticated && data.user?.role) {
-          setUserRole(data.user.role);
+        // Comment: Restore designers from sessionStorage immediately for instant grid render
+        const cached = sessionStorage.getItem('haeyoom_designers');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAllDesigners(parsed);
+            }
+          } catch {/* ignore corrupt cache */}
+        }
+
+        // Comment: Fire session + designers fetch in parallel
+        const [sessionRes, designersRes] = await Promise.all([
+          fetch('/api/auth/session'),
+          fetch('/api/designers'),
+        ]);
+        const [sessionData, designersData] = await Promise.all([
+          sessionRes.json(),
+          designersRes.json(),
+        ]);
+
+        if (sessionData.authenticated && sessionData.user?.role) {
+          setUserRole(sessionData.user.role);
+        }
+
+        if (designersRes.ok) {
+          const designers = designersData.designers || [];
+          if (designers.length > 0) {
+            setAllDesigners(designers);
+            // Comment: Cache designers in sessionStorage to avoid re-fetch on back-navigation
+            try { sessionStorage.setItem('haeyoom_designers', JSON.stringify(designers)); } catch {/* quota exceeded */}
+          }
+        } else {
+          console.error('Failed to load designers:', designersData.error || designersData);
         }
       } catch (err) {
-        console.error('Error fetching session:', err);
+        console.error('Error loading session/designers:', err);
       }
     };
-    fetchSession();
+
+    fetchSessionAndDesigners();
+    // Comment: Refresh designers every 5 minutes to pick up changes without a full reload
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/designers');
+        const data = await res.json();
+        if (res.ok && data.designers?.length > 0) {
+          setAllDesigners(data.designers);
+          try { sessionStorage.setItem('haeyoom_designers', JSON.stringify(data.designers)); } catch {/* ignore */}
+        }
+      } catch {/* silent */}
+    }, 300_000);
+    return () => clearInterval(interval);
   }, []);
 
   const canUseAttendanceManagement = userRole === 'manager' || userRole === 'director';
@@ -910,7 +953,7 @@ export default function AppointmentsManagementPage() {
     };
   }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate]);
 
-  // Comment: Load monthly bookings to power calendar dots (all shops)
+  // Comment: Load monthly booking counts to power calendar dots — uses minimal=true to avoid joins+COUNT overhead
   useEffect(() => {
     let isMounted = true;
     const fetchMonth = async () => {
@@ -921,29 +964,23 @@ export default function AppointmentsManagementPage() {
         const start = `${monthKey}-01`;
         const end = `${monthKey}-${String(daysInMonth).padStart(2, '0')}`;
 
+        // Comment: minimal=true returns only booking_date+status — no joins, no COUNT query
         const res = await fetch(
-          `/api/appointment?start_date=${encodeURIComponent(
-            start
-          )}&end_date=${encodeURIComponent(end)}`
+          `/api/appointment?minimal=true&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`
         );
         const data = await res.json();
         if (!isMounted) return;
-        
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to load monthly bookings');
-        }
+
+        if (!res.ok) throw new Error(data.error || 'Failed to load monthly bookings');
 
         const counts: Record<number, number> = {};
-        (data.bookings || []).forEach((b: BookingWithRelations) => {
+        (data.bookings || []).forEach((b: { booking_date: string; status: string }) => {
           if (b.status === 'cancelled') return;
           const d = new Date(b.booking_date);
           if (Number.isNaN(d.getTime())) return;
-          const day = d.getDate();
-          counts[day] = (counts[day] || 0) + 1;
+          counts[d.getDate()] = (counts[d.getDate()] || 0) + 1;
         });
-        if (isMounted) {
-          setDayCounts(counts);
-        }
+        if (isMounted) setDayCounts(counts);
       } catch (err) {
         // Silent fail – calendar dots are non-critical
         if (isMounted) {
@@ -954,9 +991,7 @@ export default function AppointmentsManagementPage() {
     };
 
     fetchMonth();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [monthKey]);
 
   // Comment: Sync edit modal fields when opening edit (from detail or Upcoming)
@@ -978,13 +1013,29 @@ export default function AppointmentsManagementPage() {
     const fetchShopsAndAvailability = async () => {
       setLoadingDesignerAvailability(true);
       try {
-        // Comment: Fetch shops inline on first load so availability can follow immediately
+        // Comment: Fetch shops — use sessionStorage cache to avoid round-trip on repeat visits
         let shops = allShops;
         if (shops.length === 0) {
+          // Comment: Try sessionStorage cache first for instant shop data
+          const cachedShops = sessionStorage.getItem('haeyoom_shops');
+          if (cachedShops) {
+            try {
+              const parsed = JSON.parse(cachedShops);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                shops = parsed;
+                if (isMounted) setAllShops(parsed);
+              }
+            } catch {/* ignore */}
+          }
+          // Comment: Always refetch from API to keep shops fresh (background update)
           const shopsRes = await fetch('/api/shops');
           const shopsData = await shopsRes.json();
-          shops = shopsData.shops || [];
-          if (isMounted && shops.length > 0) setAllShops(shops);
+          const fetchedShops = shopsData.shops || [];
+          if (fetchedShops.length > 0) {
+            shops = fetchedShops;
+            if (isMounted) setAllShops(fetchedShops);
+            try { sessionStorage.setItem('haeyoom_shops', JSON.stringify(fetchedShops)); } catch {/* ignore */}
+          }
         }
 
         if (shops.length === 0) {
@@ -1186,39 +1237,7 @@ export default function AppointmentsManagementPage() {
     loadTimeOffData();
   }, [isTimeOffModalOpen]);
 
-  // Comment: Load all designers for the schedule grid - always load on mount
-  useEffect(() => {
-    let isMounted = true;
-    const loadAllDesigners = async () => {
-      try {
-        const res = await fetch('/api/designers');
-        const data = await res.json();
-        
-        if (isMounted) {
-          if (res.ok) {
-            // Comment: API returns { designers: [...] } format with id and name
-            const designers = data.designers || [];
-            if (designers.length > 0) {
-              setAllDesigners(designers);
-            } else {
-              console.warn('No designers found in API response');
-            }
-          } else {
-            console.error('Failed to load designers:', data.error || data);
-          }
-        }
-      } catch (err) {
-        console.error('Error loading designers:', err);
-      }
-    };
-    loadAllDesigners();
-    // Comment: Reload designers periodically to ensure they're always up to date (every 5 minutes instead of 1 minute)
-    const interval = setInterval(loadAllDesigners, 300000); // Every 5 minutes
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, []);
+  // Comment: Designers are now loaded inside the combined session+designers effect above
 
   // Comment: Shops are now loaded inside the combined shops+availability effect above
 

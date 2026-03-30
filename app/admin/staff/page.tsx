@@ -24,6 +24,7 @@ export default function StaffManagementPage() {
   const [showManageServiceModal, setShowManageServiceModal] = useState(false);
   const [showViewScheduleModal, setShowViewScheduleModal] = useState(false);
   const [selectedDesigner, setSelectedDesigner] = useState<Designer | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   // Get current month in Sydney timezone (format: 'YYYY-MM')
   const getCurrentMonth = () => {
@@ -42,6 +43,22 @@ export default function StaffManagementPage() {
 
   const currentMonth = getCurrentMonth();
   const currentMonthName = getMonthName(currentMonth);
+
+  // Comment: Load admin session to determine role for rate visibility
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const res = await fetch('/api/auth/session');
+        const data = await res.json();
+        if (data.authenticated && data.user?.role) {
+          setUserRole((data.user.role as string).toLowerCase());
+        }
+      } catch (error) {
+        console.error('Error fetching session for staff page:', error);
+      }
+    };
+    fetchSession();
+  }, []);
 
   // Fetch staff data from API (single call with stats included)
   useEffect(() => {
@@ -137,6 +154,8 @@ export default function StaffManagementPage() {
     return member.role;
   };
 
+  const canViewRate = userRole === 'director';
+
 
   return (
     <AdminPageLayout>
@@ -195,7 +214,9 @@ export default function StaffManagementPage() {
                 <div className="px-5.5 py-4 bg-gray-50 border-t border-b border-gray-100 flex justify-between items-center text-sm">
                   <div className="flex flex-col">
                     <span className="text-gray-500 text-xs">Rate</span>
-                    <span className="font-bold text-black">{wageRate}</span>
+                    <span className="font-bold text-black">
+                      {canViewRate ? wageRate : '-'}
+                    </span>
                   </div>
                   <div className="h-8 w-px bg-gray-200"></div>
                   <div className="flex flex-col">
