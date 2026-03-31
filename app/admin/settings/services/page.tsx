@@ -391,7 +391,7 @@ function ServicesTab() {
       if (categoriesRes.ok && Array.isArray(categoriesData.categories) && categoriesData.categories.length > 0) {
         const dbNames = (categoriesData.categories as Array<{ name: string }>).map((c) => c.name);
         // Add any categories present in services but not yet in DB
-        const serviceCategories = new Set(
+        const serviceCategories = new Set<string>(
           (servicesData.services || []).map((s: ServiceItem) => resolveCategory(s))
         );
         const extra = Array.from(serviceCategories).filter((c) => !dbNames.includes(c));
