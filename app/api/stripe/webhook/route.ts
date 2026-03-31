@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 // Comment: Reuse Stripe instance per container (serverless)
 let stripeInstance: Stripe | null = null;
 function getStripe(secretKey: string): Stripe {
-  if (!stripeInstance) stripeInstance = new Stripe(secretKey, { apiVersion: "2026-01-28.clover" });
+  if (!stripeInstance) stripeInstance = new Stripe(secretKey, { apiVersion: "2026-02-25.clover" });
   return stripeInstance;
 }
 

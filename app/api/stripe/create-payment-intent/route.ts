@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: "2026-01-28.clover",
+      apiVersion: "2026-02-25.clover",
     });
 
     // Comment: Only look up existing customer; new customer is created in webhook after deposit is paid

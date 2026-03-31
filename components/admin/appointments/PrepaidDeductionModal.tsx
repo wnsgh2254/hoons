@@ -74,7 +74,10 @@ export default function PrepaidDeductionModal({
             is_active: m.is_active ?? true,
           }));
         setPrepaidPasses(mapped);
-        const totalBalance = mapped.reduce((sum, pass) => sum + Number(pass.points || 0), 0);
+        const totalBalance = mapped.reduce(
+          (sum: number, pass: PrepaidPass) => sum + Number(pass.points || 0),
+          0,
+        );
         onBalanceLoaded?.(totalBalance);
       } else {
         setPrepaidPasses([]);

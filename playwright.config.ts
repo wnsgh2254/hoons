@@ -14,9 +14,6 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
-    // Stop waiting for network idle — only wait for DOM to be ready.
-    // Pages with many API calls (e.g. /admin/appointments) are much faster this way.
-    waitForNavigation: 'domcontentloaded',
     // Use saved auth state for authenticated tests
     storageState: './tests/fixtures/auth.json',
   },

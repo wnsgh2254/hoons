@@ -5,7 +5,7 @@ function getStripe(): Stripe {
   if (!key) {
     throw new Error("Stripe secret key is not configured.");
   }
-  return new Stripe(key, { apiVersion: "2026-01-28.clover" });
+  return new Stripe(key, { apiVersion: "2026-02-25.clover" });
 }
 
 export type RefundDepositResult =
