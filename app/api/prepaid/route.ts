@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getPrepaidPasses,
   getPrepaidPassById,
-  getPrepaidPassByCustomerId,
   createPrepaidPass,
   updatePrepaidPass,
   deletePrepaidPass,
 } from '@/lib/data';
+import { supabase } from '@/lib/supabase';
 
 // Comment: GET - Fetch all prepaid pass members or a single member by id or customer_id query parameter
 export async function GET(request: NextRequest) {
@@ -25,14 +25,89 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ member }, { status: 200 });
     }
 
-    // Comment: If customer_id is provided, fetch member by customer_id
+    // Comment: If customer_id is provided, fetch all active prepaid passes for the customer
+    // and also expose a "usable" summary for deduction flows.
     if (customerId) {
       const customerIdNum = Number(customerId);
-      const member = await getPrepaidPassByCustomerId(customerIdNum);
-      if (!member) {
-        return NextResponse.json({ error: '선불권 회원을 찾을 수 없습니다.' }, { status: 404 });
+      if (!Number.isFinite(customerIdNum)) {
+        return NextResponse.json({ error: '유효하지 않은 고객 ID입니다.' }, { status: 400 });
       }
-      return NextResponse.json({ member }, { status: 200 });
+
+      // Resolve customer phone to include legacy prepaid rows where customer_id is null
+      const { data: customerRow } = await supabase
+        .from('customers')
+        .select('id, phone')
+        .eq('id', customerIdNum)
+        .maybeSingle();
+
+      const normalizedPhone = String(customerRow?.phone || '').replace(/\D/g, '');
+
+      let query = supabase
+        .from('prepaid_passes')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (normalizedPhone) {
+        // Include both correctly linked rows and legacy null-customer rows matched by phone
+        query = query.or(
+          `customer_id.eq.${customerIdNum},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
+        );
+      } else {
+        query = query.eq('customer_id', customerIdNum);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const members = data || [];
+      // Opportunistic backfill: attach matched legacy rows to this customer_id
+      const legacyIds = members
+        .filter((m: any) => m.customer_id == null)
+        .map((m: any) => Number(m.id))
+        .filter((id: number) => Number.isFinite(id));
+      if (legacyIds.length > 0) {
+        await supabase
+          .from('prepaid_passes')
+          .update({ customer_id: customerIdNum })
+          .in('id', legacyIds);
+      }
+
+      const now = new Date();
+      const usableMembers = members.filter((m: any) => {
+        if (!m.expires_at) return true;
+        const expires = new Date(m.expires_at);
+        return !Number.isNaN(expires.getTime()) && expires >= now;
+      });
+
+      const totalPoints = usableMembers.reduce(
+        (sum: number, m: any) => sum + Number(m.points || 0),
+        0,
+      );
+
+      // Backward-compatible shapes:
+      // - member: first usable member (or null)
+      // - prepaid: list used by existing customer info reducers
+      return NextResponse.json(
+        {
+          member: usableMembers[0] ?? null,
+          members,
+          usableMembers,
+          prepaid: usableMembers.map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            balance: Number(m.points || 0),
+            points: Number(m.points || 0),
+            expires_at: m.expires_at || null,
+            is_active: m.is_active ?? true,
+          })),
+          totalPoints,
+        },
+        { status: 200 },
+      );
     }
 
     // Comment: Otherwise, fetch members with pagination (with optional search)

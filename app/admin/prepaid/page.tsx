@@ -98,7 +98,7 @@ export default function PrepaidPassManagementPage() {
     },
     {
       key: 'points',
-      header: '선불권',
+      header: '정액권',
       render: (member: any) => (
         <span className="font-medium text-black">
           {`$${Number(member.points || 0).toLocaleString()}`}
@@ -241,7 +241,7 @@ function AddMemberModal({
       return;
     }
     if (Number(points) < 0) {
-      setError('선불권 금액은 0 이상이어야 합니다.');
+      setError('정액권 금액은 0 이상이어야 합니다.');
       return;
     }
 
@@ -328,15 +328,15 @@ function AddMemberModal({
         />
         <div>
           <Input
-            label="선불권 *"
+            label="정액권 *"
             type="number"
             required
             min="0"
             value={points}
             onChange={(e) => setPoints(e.target.value)}
-            placeholder="선불권 금액 입력"
+            placeholder="정액권 금액 입력"
           />
-          <p className="text-xs text-gray-500 mt-1">선불권 금액을 입력하세요.</p>
+          <p className="text-xs text-gray-500 mt-1">정액권 금액을 입력하세요.</p>
         </div>
         <div>
           <Input
@@ -395,7 +395,7 @@ function EditMemberModal({
       return;
     }
     if (Number(points) < 0) {
-      setError('선불권 금액은 0 이상이어야 합니다.');
+      setError('정액권 금액은 0 이상이어야 합니다.');
       return;
     }
 
@@ -484,13 +484,13 @@ function EditMemberModal({
           placeholder="Enter email address"
         />
         <Input
-          label="선불권 *"
+          label="정액권 *"
           type="number"
           required
           min="0"
           value={points}
           onChange={(e) => setPoints(e.target.value)}
-          placeholder="선불권 금액 입력"
+          placeholder="정액권 금액 입력"
         />
         <div>
           <Input
@@ -571,7 +571,7 @@ function ViewMemberModal({
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">선불권</span>
+            <span className="text-sm text-gray-500">정액권</span>
             <span className="text-sm font-bold text-black">
               {member.points !== undefined ? `${Number(member.points).toLocaleString()}` : '0'}
             </span>

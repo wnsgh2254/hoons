@@ -538,11 +538,23 @@ export async function createPrepaidPass(payload: {
     throw new Error('정액제 포인트는 0 이상이어야 합니다.');
   }
 
+  const normalizedPhone = phone?.trim() ? phone.trim().replace(/\D/g, '') : null;
+  let customerId: number | null = null;
+  if (normalizedPhone) {
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('phone', normalizedPhone)
+      .maybeSingle();
+    customerId = customer?.id ?? null;
+  }
+
   const { data, error } = await supabase
     .from('prepaid_passes')
     .insert({
       name: name.trim(),
-      phone: phone?.trim() || null,
+      phone: normalizedPhone,
+      customer_id: customerId,
       email: email?.trim() || null,
       points: Number(points) || 0,
       is_active: true,
@@ -577,7 +589,20 @@ export async function updatePrepaidPass(
   const updateData: any = {};
 
   if (updates.name !== undefined) updateData.name = updates.name.trim();
-  if (updates.phone !== undefined) updateData.phone = updates.phone?.trim() || null;
+  if (updates.phone !== undefined) {
+    const normalizedPhone = updates.phone?.trim() ? updates.phone.trim().replace(/\D/g, '') : null;
+    updateData.phone = normalizedPhone;
+    if (normalizedPhone) {
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .maybeSingle();
+      updateData.customer_id = customer?.id ?? null;
+    } else {
+      updateData.customer_id = null;
+    }
+  }
   if (updates.email !== undefined) updateData.email = updates.email?.trim() || null;
   if (updates.points !== undefined) updateData.points = Number(updates.points) || 0;
   if (updates.expiresAt !== undefined) updateData.expires_at = updates.expiresAt || null;

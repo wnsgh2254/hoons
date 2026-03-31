@@ -136,6 +136,66 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Apply prepaid deduction to customer's prepaid balance
+    const totalPrepaidDeduction = saleItems.reduce(
+      (sum: number, item: any) => sum + Number(item.prepaid_deduction || 0),
+      0,
+    );
+    if (totalPrepaidDeduction > 0) {
+      const { data: customerRow } = await supabase
+        .from('customers')
+        .select('id, phone')
+        .eq('id', customer_id)
+        .maybeSingle();
+      const normalizedPhone = String(customerRow?.phone || '').replace(/\D/g, '');
+
+      let query = supabase
+        .from('prepaid_passes')
+        .select('id, points, customer_id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (normalizedPhone) {
+        query = query.or(
+          `customer_id.eq.${customer_id},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
+        );
+      } else {
+        query = query.eq('customer_id', customer_id);
+      }
+      const { data: prepaidRows, error: prepaidSelErr } = await query;
+
+      if (prepaidSelErr) {
+        console.error('Error fetching prepaid pass for deduction:', prepaidSelErr);
+      } else {
+        const legacyIds = (prepaidRows || [])
+          .filter((r: any) => r.customer_id == null)
+          .map((r: any) => Number(r.id))
+          .filter((id: number) => Number.isFinite(id));
+        if (legacyIds.length > 0) {
+          await supabase
+            .from('prepaid_passes')
+            .update({ customer_id: customer_id })
+            .in('id', legacyIds);
+        }
+        const usableRows = (prepaidRows || []).filter((row: any) => Number(row.points || 0) > 0);
+        let remaining = totalPrepaidDeduction;
+        for (const row of usableRows) {
+          if (remaining <= 0) break;
+          const current = Number(row.points || 0);
+          const deduct = Math.min(current, remaining);
+          const next = current - deduct;
+          const { error: prepaidUpdErr } = await supabase
+            .from('prepaid_passes')
+            .update({ points: next })
+            .eq('id', row.id);
+          if (prepaidUpdErr) {
+            console.error(`Error updating prepaid balance for pass ${row.id}:`, prepaidUpdErr);
+            break;
+          }
+          remaining -= deduct;
+        }
+      }
+    }
+
     if (booking_id != null && booking_id !== '') {
       const bid = Number(booking_id);
       if (!Number.isNaN(bid)) {

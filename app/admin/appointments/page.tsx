@@ -818,11 +818,13 @@ export default function AppointmentsManagementPage() {
 
           // Comment: 정액권 / 포인트
           const prepaidTickets = prepaidData?.prepaid || [];
-          const totalPrepaidBalance = prepaidTickets.reduce(
-            (sum: number, ticket: any) =>
-              sum + (Number(ticket.balance) || 0),
-            0,
-          );
+          const totalPrepaidBalance =
+            Number(prepaidData?.totalPoints ?? 0) ||
+            prepaidTickets.reduce(
+              (sum: number, ticket: any) =>
+                sum + (Number(ticket.balance ?? ticket.points) || 0),
+              0,
+            );
 
           // Comment: 동일 고객일 때만 최신 통계를 merge
           setViewingCustomer((prev: any) => {

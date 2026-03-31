@@ -228,9 +228,13 @@ export default function CustomersPage() {
             : null;
 
           const prepaidTickets = prepaidData?.prepaid || [];
-          const totalPrepaidBalance = prepaidTickets.reduce(
-            (sum: number, ticket: any) => sum + (Number(ticket.balance) || 0), 0,
-          );
+          const totalPrepaidBalance =
+            Number(prepaidData?.totalPoints ?? 0) ||
+            prepaidTickets.reduce(
+              (sum: number, ticket: any) =>
+                sum + (Number(ticket.balance ?? ticket.points) || 0),
+              0,
+            );
 
           setViewingCustomer((prev: any) => {
             if (!prev || prev.id !== baseCustomer.id) return prev;

@@ -102,8 +102,6 @@ export default function SalesRegistrationModal({
   const [selectedItemForClassification, setSelectedItemForClassification] = useState<SalesItem | null>(null);
   const [isManagerPickerModalOpen, setIsManagerPickerModalOpen] = useState(false);
   const [selectedItemForManager, setSelectedItemForManager] = useState<SalesItem | null>(null);
-  const [isPrepaidDeductionModalOpen, setIsPrepaidDeductionModalOpen] = useState(false);
-  const [selectedItemForPrepaidDeduction, setSelectedItemForPrepaidDeduction] = useState<SalesItem | null>(null);
   const [isGlobalPrepaidDeductionModalOpen, setIsGlobalPrepaidDeductionModalOpen] = useState(false);
   const [isConfirmationAlertOpen, setIsConfirmationAlertOpen] = useState(false);
   const [confirmationAlertData, setConfirmationAlertData] = useState<{
@@ -127,6 +125,7 @@ export default function SalesRegistrationModal({
     bank_transfer: 0,
   });
   const [prepaidDeductionAmount, setPrepaidDeductionAmount] = useState(0);
+  const [availablePrepaidBalance, setAvailablePrepaidBalance] = useState(0);
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
   const [depositCredit, setDepositCredit] = useState(0);
@@ -134,7 +133,8 @@ export default function SalesRegistrationModal({
   // 정액권 잔액 확인 헬퍼 함수
   const validatePrepaidBalance = (newDeductionAmount: number): boolean => {
     if (!customer) return false;
-    const customerPrepaidBalance = customer?.prepaid_balance ?? customer?.points ?? 0;
+    const fallbackBalance = Number(customer?.prepaid_balance ?? customer?.points ?? 0);
+    const customerPrepaidBalance = Math.max(availablePrepaidBalance, fallbackBalance);
     return newDeductionAmount <= customerPrepaidBalance;
   };
 
@@ -146,23 +146,44 @@ export default function SalesRegistrationModal({
     return netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeduction;
   };
 
-  // 정액권 차감 적용 및 금액 업데이트 헬퍼 함수
-  const applyPrepaidDeduction = (
+  // Recalculate per-item amount from unit/qty/discount/prepaid
+  const normalizeItemAmount = (item: SalesItem): SalesItem => {
+    const raw = (item.unitPrice * item.quantity) - item.discount - item.prepaidDeduction;
+    return { ...item, amount: Math.max(0, raw) };
+  };
+
+  // Apply prepaid deduction once against the total (not multiplied by item count).
+  // If targetItemId is provided, apply only to that row. Otherwise distribute across all rows.
+  const applyTotalPrepaidDeduction = (
     items: SalesItem[],
-    deductionAmount: number,
-    targetItemId?: string | null
+    requestedTotalDeduction: number,
+    targetItemId?: string | null,
   ): SalesItem[] => {
-    return items.map((item) => {
-      if (targetItemId && item.id !== targetItemId) {
-        return item;
-      }
-      const newAmount = (item.unitPrice * item.quantity) - item.discount - deductionAmount;
-      return {
-        ...item,
-        prepaidDeduction: deductionAmount,
-        amount: Math.max(0, newAmount),
-      };
+    const normalizedRequested = Math.max(0, Number(requestedTotalDeduction) || 0);
+    const base = items.map((item) => ({ ...item, prepaidDeduction: 0 }));
+
+    if (base.length === 0 || normalizedRequested <= 0) {
+      return base.map(normalizeItemAmount);
+    }
+
+    if (targetItemId) {
+      return base.map((item) => {
+        if (item.id !== targetItemId) return normalizeItemAmount(item);
+        const maxForItem = Math.max(0, (item.unitPrice * item.quantity) - item.discount);
+        const applied = Math.min(normalizedRequested, maxForItem);
+        return normalizeItemAmount({ ...item, prepaidDeduction: applied });
+      });
+    }
+
+    // Global: distribute deduction from top to bottom, capped by each item's payable amount
+    let remaining = normalizedRequested;
+    const distributed = base.map((item) => {
+      const maxForItem = Math.max(0, (item.unitPrice * item.quantity) - item.discount);
+      const applied = Math.min(remaining, maxForItem);
+      remaining -= applied;
+      return normalizeItemAmount({ ...item, prepaidDeduction: applied });
     });
+    return distributed;
   };
 
   // 정액권 차감 적용 후 상태 업데이트 헬퍼 함수
@@ -174,7 +195,7 @@ export default function SalesRegistrationModal({
     
     setPrepaidDeductionAmount(newPrepaidDeductionAmount);
     setSalesItems(items);
-    recalculateAmounts(items);
+    recalculateAmounts(items, undefined, newPrepaidDeductionAmount);
     return { newPrepaidDeductionAmount, newTotal };
   };
 
@@ -182,7 +203,7 @@ export default function SalesRegistrationModal({
   const showPrepaidBalanceError = () => {
     setErrorAlertData({
       title: '알림',
-      message: '정액권이 만료되어 수정할 수 없습니다.',
+      message: '정액권 잔액이 부족하거나 사용 가능한 정액권이 없습니다.',
     });
     setIsErrorAlertOpen(true);
   };
@@ -203,18 +224,14 @@ export default function SalesRegistrationModal({
     setIsConfirmationAlertOpen(true);
   };
 
-  // 개별 항목의 정액권 차감 총액 계산 헬퍼 함수
-  const calculateItemPrepaidDeductionTotal = (itemId: string, newAmount: number): number => {
-    return salesItems.reduce((sum, item) => {
-      if (item.id === itemId) {
-        return sum + newAmount;
-      }
-      return sum + item.prepaidDeduction;
-    }, 0);
-  };
-
   // 금액 재계산 함수
-  const recalculateAmounts = (items: SalesItem[], paymentAmountsToUse?: typeof paymentAmounts) => {
+  const recalculateAmounts = (
+    items: SalesItem[],
+    paymentAmountsToUse?: typeof paymentAmounts,
+    prepaidDeductionOverride?: number,
+  ) => {
+    const prepaidToUse =
+      prepaidDeductionOverride !== undefined ? prepaidDeductionOverride : prepaidDeductionAmount;
     const amounts = paymentAmountsToUse || paymentAmounts;
     // 양수 결제 금액만 합산 (음수는 받을 금액에서 빼기용이므로 별도 처리)
     const positivePaymentAmount = Math.max(0, amounts.cash) + Math.max(0, amounts.card) + Math.max(0, amounts.bank_transfer);
@@ -230,7 +247,7 @@ export default function SalesRegistrationModal({
     setDiscountAmount(newDiscountAmount);
     setTotal(grossTotal);
     // 받을 금액 = (합계 − 예수금) − 결제 − 정액권
-    setAmountToReceive(netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount);
+    setAmountToReceive(netDue - positivePaymentAmount - negativePaymentAmount - prepaidToUse);
   };
 
   // 판매 항목 추가 함수
@@ -734,14 +751,13 @@ export default function SalesRegistrationModal({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">금액</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">담당자</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">영업 구분</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">정액권 차감</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
                   {salesItems.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-7.5 text-center text-sm text-gray-500">
+                      <td colSpan={8} className="py-7.5 text-center text-sm text-gray-500">
                         내역이 없습니다
                       </td>
                     </tr>
@@ -855,16 +871,6 @@ export default function SalesRegistrationModal({
                           }}
                         >
                           {item.salesClassification || '-'}
-                        </td>
-                        <td 
-                          className="py-3 px-4 text-sm text-gray-900 cursor-pointer hover:bg-gray-50 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedItemForPrepaidDeduction(item);
-                            setIsPrepaidDeductionModalOpen(true);
-                          }}
-                        >
-                          {formatAudAmount(item.prepaidDeduction)}
                         </td>
                         <td className="py-3 px-4">
                           <button
@@ -1004,31 +1010,9 @@ export default function SalesRegistrationModal({
               {prepaidDeductionAmount > 0 && (
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-700">정액권</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-red-600">
-                      -{formatAudAmount(prepaidDeductionAmount)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // 모든 항목의 정액권 차감 초기화
-                        const updatedItems = salesItems.map((item) => {
-                          const newAmount = (item.unitPrice * item.quantity) - item.discount;
-                          return {
-                            ...item,
-                            prepaidDeduction: 0,
-                            amount: Math.max(0, newAmount),
-                          };
-                        });
-                        setSalesItems(updatedItems);
-                        setPrepaidDeductionAmount(0);
-                        recalculateAmounts(updatedItems);
-                      }}
-                      className="text-blue-600 hover:text-blue-800 text-xs"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <span className="font-medium text-red-600">
+                    -{formatAudAmount(prepaidDeductionAmount)}
+                  </span>
                 </div>
               )}
               
@@ -1260,115 +1244,48 @@ export default function SalesRegistrationModal({
         }}
       />
 
-      {/* Prepaid Deduction Modal (for individual item) */}
-      <PrepaidDeductionModal
-        isOpen={isPrepaidDeductionModalOpen}
-        customerId={customer?.id || null}
-        initialAmount={selectedItemForPrepaidDeduction?.prepaidDeduction || 0}
-        selectedItemId={selectedItemForPrepaidDeduction?.id || null}
-        onClose={() => {
-          setIsPrepaidDeductionModalOpen(false);
-          setSelectedItemForPrepaidDeduction(null);
-        }}
-        onComplete={async (amount) => {
-          if (!selectedItemForPrepaidDeduction || !customer) return;
-          
-          // 정액권 잔액 확인
-          const currentTotalPrepaidDeduction = calculateItemPrepaidDeductionTotal(selectedItemForPrepaidDeduction.id, amount);
-          
-          if (!validatePrepaidBalance(currentTotalPrepaidDeduction)) {
-            showPrepaidBalanceError();
-            return;
-          }
-          
-          // 정액권 차감 적용 및 상태 업데이트
-          const updatedItems = applyPrepaidDeduction(salesItems, amount, selectedItemForPrepaidDeduction.id);
-          const { newPrepaidDeductionAmount, newTotal } = updatePrepaidDeductionState(updatedItems);
-          
-          // 받을 금액 확인
-          const newAmountToReceive = calculateAmountToReceive(newTotal, newPrepaidDeductionAmount);
-          
-          // 모달 닫기
-          setIsPrepaidDeductionModalOpen(false);
-          setSelectedItemForPrepaidDeduction(null);
-          
-          if (newAmountToReceive <= 0) {
-            await handleComplete();
-          } else {
-            showOutstandingAmountConfirmation(newAmountToReceive, handleComplete);
-          }
-        }}
-        onAdditionalInput={(amount) => {
-          if (!selectedItemForPrepaidDeduction || !customer) return;
-          
-          // 정액권 잔액 확인
-          const currentTotalPrepaidDeduction = calculateItemPrepaidDeductionTotal(selectedItemForPrepaidDeduction.id, amount);
-          
-          if (!validatePrepaidBalance(currentTotalPrepaidDeduction)) {
-            showPrepaidBalanceError();
-            return;
-          }
-          
-          // 정액권 차감 적용 및 상태 업데이트
-          const updatedItems = applyPrepaidDeduction(salesItems, amount, selectedItemForPrepaidDeduction.id);
-          updatePrepaidDeductionState(updatedItems);
-          
-          // 모달 닫기
-          setIsPrepaidDeductionModalOpen(false);
-          setSelectedItemForPrepaidDeduction(null);
-        }}
-      />
-
       {/* Global Prepaid Deduction Modal (for deduction section) */}
       <PrepaidDeductionModal
         isOpen={isGlobalPrepaidDeductionModalOpen}
         customerId={customer?.id || null}
         initialAmount={0}
         selectedItemId={null}
+        onBalanceLoaded={(balance) => setAvailablePrepaidBalance(balance)}
         onClose={() => {
           setIsGlobalPrepaidDeductionModalOpen(false);
         }}
         onComplete={async (amount) => {
           if (!customer) return;
           
-          // 정액권 잔액 확인
-          const totalPrepaidDeduction = amount * salesItems.length;
+          // 정액권 잔액 확인 (총액 기준 1회 차감)
+          const totalPrepaidDeduction = amount;
           
           if (!validatePrepaidBalance(totalPrepaidDeduction)) {
             showPrepaidBalanceError();
             return;
           }
           
-          // 모든 항목에 정액권 차감 적용 및 상태 업데이트
-          const updatedItems = applyPrepaidDeduction(salesItems, amount);
-          const { newPrepaidDeductionAmount, newTotal } = updatePrepaidDeductionState(updatedItems);
-          
-          // 받을 금액 확인
-          const newAmountToReceive = calculateAmountToReceive(newTotal, newPrepaidDeductionAmount);
+          // 모든 항목에 총 정액권 차감액을 분배 적용
+          const updatedItems = applyTotalPrepaidDeduction(salesItems, amount);
+          updatePrepaidDeductionState(updatedItems);
           
           // 모달 닫기
           setIsGlobalPrepaidDeductionModalOpen(false);
-          
-          if (newAmountToReceive <= 0) {
-            await handleComplete();
-          } else {
-            showOutstandingAmountConfirmation(newAmountToReceive, handleComplete);
-          }
         }}
         onAdditionalInput={(amount) => {
           if (!customer) return;
           
           // 정액권 잔액 확인
           const currentTotalPrepaidDeduction = salesItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
-          const newTotalPrepaidDeduction = currentTotalPrepaidDeduction + (amount * salesItems.length);
+          const newTotalPrepaidDeduction = currentTotalPrepaidDeduction + amount;
           
           if (!validatePrepaidBalance(newTotalPrepaidDeduction)) {
             showPrepaidBalanceError();
             return;
           }
           
-          // 모든 항목에 정액권 차감 추가 적용 및 상태 업데이트
-          const updatedItems = applyPrepaidDeduction(salesItems, amount);
+          // 기존 총액 + 추가 입력 금액을 다시 분배 적용
+          const updatedItems = applyTotalPrepaidDeduction(salesItems, newTotalPrepaidDeduction);
           updatePrepaidDeductionState(updatedItems);
           
           // 모달 닫기

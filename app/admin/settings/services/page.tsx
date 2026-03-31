@@ -1228,6 +1228,32 @@ function PrepaidPassModal({
   const [isActive] = useState(initial?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setType(initial?.type || '금액 적립');
+    setName(initial?.name || '');
+    setSalePrice(initial?.salePrice ?? 0);
+    setAccumulationAmount(initial?.accumulationAmount ?? 0);
+    setIsUnlimited(initial?.validityPeriod === '무제한');
+    setHasDiscount(initial?.hasDiscount ?? false);
+    setServiceDiscount(initial?.serviceDiscount ?? 0);
+    setProductDiscount(initial?.productDiscount ?? 0);
+    setError(null);
+    if (initial?.validityPeriod && initial.validityPeriod !== '무제한') {
+      const m = initial.validityPeriod.match(/^(\d+)\s*(월|일)$/);
+      if (m) {
+        setValidityValue(m[1]);
+        setValidityUnit(m[2] as '월' | '일');
+      } else {
+        setValidityValue('');
+        setValidityUnit('월');
+      }
+    } else {
+      setValidityValue('');
+      setValidityUnit('월');
+    }
+  }, [isOpen, initial?.id]); // Re-sync form each time add/edit modal opens
+
   const handleSave = () => {
     if (!name.trim()) {
       setError('정액권명을 입력해주세요.');
@@ -1337,7 +1363,9 @@ function PrepaidTab() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<PrepaidPassTemplate | null>(null);
 
-  const filtered = showInactive ? templates : templates.filter((t) => t.isActive);
+  const filtered = (showInactive ? templates : templates.filter((t) => t.isActive))
+    .slice()
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
   const handleAdd = (data: Omit<PrepaidPassTemplate, 'id'>) => {
     addTemplate(data);

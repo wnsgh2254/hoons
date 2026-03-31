@@ -23,6 +23,7 @@ interface PrepaidDeductionModalProps {
   onClose: () => void;
   onComplete: (amount: number) => void;
   onAdditionalInput: (amount: number) => void;
+  onBalanceLoaded?: (balance: number) => void;
 }
 
 export default function PrepaidDeductionModal({
@@ -33,6 +34,7 @@ export default function PrepaidDeductionModal({
   onClose,
   onComplete,
   onAdditionalInput,
+  onBalanceLoaded,
 }: PrepaidDeductionModalProps) {
   const [inputValue, setInputValue] = useState('0');
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
@@ -58,20 +60,30 @@ export default function PrepaidDeductionModal({
       const res = await fetch(`/api/prepaid?customer_id=${customerId}`);
       const data = await res.json();
 
-      if (res.ok && data.member) {
-        setPrepaidPasses([{
-          id: data.member.id,
-          name: data.member.name || '정액권',
-          points: Number(data.member.points || 0),
-          expires_at: data.member.expires_at,
-          is_active: data.member.is_active ?? true,
-        }]);
+      if (res.ok) {
+        const source = Array.isArray(data.usableMembers)
+          ? data.usableMembers
+          : data.member
+            ? [data.member]
+            : [];
+        const mapped = source.map((m: any) => ({
+            id: m.id,
+            name: m.name || '정액권',
+            points: Number(m.points || 0),
+            expires_at: m.expires_at || null,
+            is_active: m.is_active ?? true,
+          }));
+        setPrepaidPasses(mapped);
+        const totalBalance = mapped.reduce((sum, pass) => sum + Number(pass.points || 0), 0);
+        onBalanceLoaded?.(totalBalance);
       } else {
         setPrepaidPasses([]);
+        onBalanceLoaded?.(0);
       }
     } catch (error) {
       console.error('Error fetching prepaid passes:', error);
       setPrepaidPasses([]);
+      onBalanceLoaded?.(0);
     } finally {
       setLoading(false);
     }
@@ -204,7 +216,7 @@ export default function PrepaidDeductionModal({
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-2 w-32">
-              <Button size="lg" onClick={handleComplete}>계산 완료</Button>
+              <Button size="lg" onClick={handleComplete}>확인</Button>
               <Button variant="ghost" size="lg" onClick={handleAdditionalInput}>추가 입력</Button>
               <Button variant="ghost" size="lg" onClick={onClose}>취소</Button>
             </div>

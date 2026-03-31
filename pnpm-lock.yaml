@@ -9,8 +9,11 @@ importers:
   .:
     dependencies:
       '@stripe/react-stripe-js':
-        specifier: ^5.6.0
+        specifier: ^5.6.1
         version: 5.6.1(@stripe/stripe-js@8.11.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@stripe/stripe-js':
+        specifier: ^8.11.0
+        version: 8.11.0
       '@supabase/supabase-js':
         specifier: ^2.39.0
         version: 2.101.0
@@ -73,7 +76,7 @@ importers:
         specifier: ^4
         version: 4.2.2
       typescript:
-        specifier: ^5.9.3
+        specifier: ^5
         version: 5.9.3
 
 packages:

@@ -36,23 +36,53 @@ export async function GET(request: NextRequest) {
 
     // Comment: Get prepaid pass balances and total sales for each customer
     const customerIds = (data || []).map((c: any) => c.id);
+    const customerPhoneMap: Record<number, string> = {};
+    (data || []).forEach((c: any) => {
+      const normalized = String(c.phone || '').replace(/\D/g, '');
+      if (normalized) customerPhoneMap[c.id] = normalized;
+    });
+    const phoneValues = Array.from(new Set(Object.values(customerPhoneMap)));
     const prepaidBalances: Record<number, number> = {};
     const totalSales: Record<number, number> = {};
 
     if (customerIds.length > 0) {
       // Comment: Get prepaid pass balances (sum of points for each customer)
-      const { data: prepaidData } = await supabase
+      const { data: linkedPrepaidData } = await supabase
         .from('prepaid_passes')
-        .select('customer_id, points, is_active')
+        .select('customer_id, points, is_active, expires_at')
         .in('customer_id', customerIds)
         .eq('is_active', true);
+      const { data: legacyPrepaidData } = phoneValues.length > 0
+        ? await supabase
+            .from('prepaid_passes')
+            .select('customer_id, phone, points, is_active, expires_at')
+            .is('customer_id', null)
+            .in('phone', phoneValues)
+            .eq('is_active', true)
+        : { data: [] as any[] };
 
-      (prepaidData || []).forEach((p: any) => {
+      const now = new Date();
+      (linkedPrepaidData || []).forEach((p: any) => {
+        if (p.expires_at) {
+          const expires = new Date(p.expires_at);
+          if (!Number.isNaN(expires.getTime()) && expires < now) return;
+        }
         if (!prepaidBalances[p.customer_id]) {
           prepaidBalances[p.customer_id] = 0;
         }
         // Comment: Sum up points for each customer
         prepaidBalances[p.customer_id] += Number(p.points || 0);
+      });
+      (legacyPrepaidData || []).forEach((p: any) => {
+        if (p.expires_at) {
+          const expires = new Date(p.expires_at);
+          if (!Number.isNaN(expires.getTime()) && expires < now) return;
+        }
+        const normalizedPhone = String(p.phone || '').replace(/\D/g, '');
+        const targetCustomerId = customerIds.find((cid: number) => customerPhoneMap[cid] === normalizedPhone);
+        if (!targetCustomerId) return;
+        if (!prepaidBalances[targetCustomerId]) prepaidBalances[targetCustomerId] = 0;
+        prepaidBalances[targetCustomerId] += Number(p.points || 0);
       });
 
       // Comment: Get total sales from bookings
