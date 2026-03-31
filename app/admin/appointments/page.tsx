@@ -7,7 +7,6 @@ import type React from 'react';
 import type { Booking, BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import AdminTopNav from '@/components/AdminTopNav';
-import { useServices } from '@/hooks/useServices';
 import { useAdminMemo } from '@/hooks/useAdminMemo';
 import { useScheduleSearch } from '@/hooks/useScheduleSearch';
 import { useBookings } from '@/hooks/useBookings';
@@ -114,6 +113,9 @@ function columnKeyForBookingsLookup(
 export default function AppointmentsManagementPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
   const [dayCounts, setDayCounts] = useState<Record<number, number>>({});
+  const [initialDataReady, setInitialDataReady] = useState(false);
+  const [usedInitialDataApi, setUsedInitialDataApi] = useState(false);
+  const [skipMemoInitialFetch, setSkipMemoInitialFetch] = useState(true);
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
   const [currentSydneyTime, setCurrentSydneyTime] = useState<{
     label: string;
@@ -161,7 +163,7 @@ export default function AppointmentsManagementPage() {
   const [editDate, setEditDate] = useState<string>(selectedDate);
   const [editTime, setEditTime] = useState<string>('10:00 AM');
   const [editServiceId, setEditServiceId] = useState<number | null>(null);
-  const { services: editServices } = useServices({ excludePattern: /\(cash\)/i });
+  // Services for edit modal are provided via newBookingServices state (loaded by initial-data)
   const [isServicePickerOpen, setIsServicePickerOpen] = useState(false);
   const [servicePickerCategory, setServicePickerCategory] = useState<string | null>(null);
   const [editMemo, setEditMemo] = useState<string>('');
@@ -200,7 +202,9 @@ export default function AppointmentsManagementPage() {
   const [allShops, setAllShops] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedShopFilter, setSelectedShopFilter] = useState<string>('전체');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const { memo, setMemo, memoLoading, memoSaving, setMemoSaving, memoSuccessMessage, setMemoSuccessMessage, saveMemo } = useAdminMemo();
+  const { memo, setMemo, memoLoading, memoSaving, setMemoSaving, memoSuccessMessage, setMemoSuccessMessage, saveMemo } = useAdminMemo({
+    skipInitialFetchOnce: skipMemoInitialFetch,
+  });
 
   // Comment: Week view state (replaces modal with main timetable view)
   const [isWeekViewMode, setIsWeekViewMode] = useState(false);
@@ -292,6 +296,7 @@ export default function AppointmentsManagementPage() {
     shopFilteredDesignerIds,
     searchInput,
     availableDesignerIds,
+    skipInitialFetchOnce: true,
   });
   
   // Comment: Customer info modal state
@@ -568,9 +573,74 @@ export default function AppointmentsManagementPage() {
   }, [selectedDate]);
 
   const monthKey = selectedDate.slice(0, 7); // YYYY-MM
+  const skipNextTempSaleRefreshRef = useRef(false);
+
+  // Track what date/month was already loaded by the initial-data API
+  // so that dependent effects can skip their own fetches on the first render.
+  const [hydratedDate, setHydratedDate] = useState<string | null>(null);
+  const [hydratedMonthKey, setHydratedMonthKey] = useState<string | null>(null);
+
+  // Comment: Consolidated initial load for appointments page to reduce client-side API fan-out
+  useEffect(() => {
+    let isMounted = true;
+    const loadInitialData = async () => {
+      try {
+        const res = await fetch(
+          `/api/appointments/initial-data?date=${encodeURIComponent(selectedDate)}&month=${encodeURIComponent(monthKey)}`,
+        );
+        const data = await res.json();
+        if (!isMounted) return;
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to load appointments initial data');
+        }
+
+        setUserRole(data.userRole || null);
+        setMemo(data.memo || '');
+        setAllDesigners(data.designers || []);
+        setAllShops(data.shops || []);
+        setNewBookingServices(data.services || []);
+        setBookingRestrictions(data.bookingRestrictions || []);
+        setDayCounts(data.dayCounts || {});
+        setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
+
+        const nextBookings = data.bookings || [];
+        skipNextTempSaleRefreshRef.current = true;
+        setBookings(nextBookings);
+        setFilteredBookings(nextBookings);
+        setTempSaleBookingIds(new Set<number>(data.tempSaleBookingIds || []));
+
+        try {
+          if (Array.isArray(data.designers) && data.designers.length > 0) {
+            sessionStorage.setItem('haeyoom_designers', JSON.stringify(data.designers));
+          }
+          if (Array.isArray(data.shops) && data.shops.length > 0) {
+            sessionStorage.setItem('haeyoom_shops', JSON.stringify(data.shops));
+          }
+        } catch {
+          // Ignore browser storage failures
+        }
+
+        // Record the hydrated date/month so effects can skip redundant fetches
+        setHydratedDate(selectedDate);
+        setHydratedMonthKey(monthKey);
+        setUsedInitialDataApi(true);
+        setInitialDataReady(true);
+      } catch (err) {
+        console.error('Error loading appointments initial data:', err);
+        // Comment: Fallback to legacy per-endpoint loading when consolidated API fails
+        setSkipMemoInitialFetch(false);
+        void refreshBookings();
+        setInitialDataReady(true);
+      }
+    };
+
+    loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Comment: Fetch user session + all designers in parallel on mount to cut waterfall latency
   useEffect(() => {
+    if (!initialDataReady) return;
     const fetchSessionAndDesigners = async () => {
       try {
         // Comment: Restore designers from sessionStorage immediately for instant grid render
@@ -613,7 +683,9 @@ export default function AppointmentsManagementPage() {
       }
     };
 
-    fetchSessionAndDesigners();
+    if (!usedInitialDataApi) {
+      fetchSessionAndDesigners();
+    }
     // Comment: Refresh designers every 5 minutes to pick up changes without a full reload
     const interval = setInterval(async () => {
       try {
@@ -626,7 +698,7 @@ export default function AppointmentsManagementPage() {
       } catch {/* silent */}
     }, 300_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [initialDataReady, usedInitialDataApi]);
 
   const canUseAttendanceManagement = userRole === 'manager' || userRole === 'director';
 
@@ -814,10 +886,15 @@ export default function AppointmentsManagementPage() {
 
   // 예약 데이터 로드 시 임시저장 목록도 조회
   useEffect(() => {
+    if (!initialDataReady) return;
     if (bookings.length > 0) {
+      if (skipNextTempSaleRefreshRef.current) {
+        skipNextTempSaleRefreshRef.current = false;
+        return;
+      }
       refreshTempSaleBookingIds();
     }
-  }, [bookings]);
+  }, [bookings, initialDataReady]);
 
   // Comment: Handle customer selection from autocomplete
   const handleCustomerSelect = useCallback(
@@ -879,6 +956,9 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Load booking restrictions for selected date or week range
   useEffect(() => {
+    if (!initialDataReady) return;
+    // Skip if this date was already loaded by the initial-data API (non-week-view only)
+    if (!isWeekViewMode && selectedDate === hydratedDate) return;
     let isMounted = true;
     const fetchRestrictions = async () => {
       try {
@@ -915,7 +995,7 @@ export default function AppointmentsManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId]);
+  }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId, initialDataReady, hydratedDate]);
 
 
   // Comment: Load week view bookings when week view mode is active
@@ -955,6 +1035,9 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Load monthly booking counts to power calendar dots — uses minimal=true to avoid joins+COUNT overhead
   useEffect(() => {
+    if (!initialDataReady) return;
+    // Skip if this month was already loaded by the initial-data API
+    if (monthKey === hydratedMonthKey) return;
     let isMounted = true;
     const fetchMonth = async () => {
       try {
@@ -992,7 +1075,7 @@ export default function AppointmentsManagementPage() {
 
     fetchMonth();
     return () => { isMounted = false; };
-  }, [monthKey]);
+  }, [monthKey, initialDataReady, hydratedMonthKey]);
 
   // Comment: Sync edit modal fields when opening edit (from detail or Upcoming)
   useEffect(() => {
@@ -1009,6 +1092,9 @@ export default function AppointmentsManagementPage() {
   // Shops are fetched once on first run; subsequent runs (date change, refresh) reuse cached allShops.
   // availabilityRefreshKey is incremented after holiday/special-day saves to force a re-fetch.
   useEffect(() => {
+    if (!initialDataReady) return;
+    // Skip if this date was already loaded by initial-data (only for the first render, not forced refreshes)
+    if (selectedDate === hydratedDate && availabilityRefreshKey === 0) return;
     let isMounted = true;
     const fetchShopsAndAvailability = async () => {
       setLoadingDesignerAvailability(true);
@@ -1080,7 +1166,7 @@ export default function AppointmentsManagementPage() {
     return () => { isMounted = false; };
     // Comment: allShops intentionally omitted — it is loaded inline above on first run
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, availabilityRefreshKey]);
+  }, [selectedDate, availabilityRefreshKey, initialDataReady, hydratedDate]);
 
 
   // Comment: Load per-day designer availability for week view (7 days)
@@ -1992,6 +2078,13 @@ export default function AppointmentsManagementPage() {
   return (
     <div className="bg-white text-slate-900 font-display antialiased overflow-hidden h-screen flex flex-col">
       <AdminTopNav />
+      {/* Full-screen loading overlay while initial data is being fetched */}
+      {!initialDataReady && (
+        <div className="fixed inset-0 z-[99999] bg-white flex flex-col items-center justify-center gap-4">
+          <div className="w-10 h-10 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">예약 정보를 불러오는 중...</p>
+        </div>
+      )}
       {/* Success toast for new bookings */}
       {bookingSuccessMessage && (
         <div className="pointer-events-none fixed right-4 top-20 z-50">
@@ -3696,6 +3789,7 @@ export default function AppointmentsManagementPage() {
       <TimeOffModal
         isOpen={isTimeOffModalOpen}
         onClose={() => setIsTimeOffModalOpen(false)}
+        initialDesigners={allDesigners}
       />
 
 

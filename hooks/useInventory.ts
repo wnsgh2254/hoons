@@ -13,6 +13,8 @@ export interface InventoryItem {
   status: string;
   icon: string | null;
   brand: string | null;
+  for_internal?: boolean;
+  for_retail?: boolean;
 }
 
 export interface InventoryBrand {

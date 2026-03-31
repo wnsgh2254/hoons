@@ -10,10 +10,18 @@ interface UseBookingsOptions {
   shopFilteredDesignerIds?: number[];
   searchInput?: string;
   availableDesignerIds?: number[];
+  skipInitialFetchOnce?: boolean;
 }
 
 export function useBookings(selectedDate: string, options: UseBookingsOptions = {}) {
-  const { designerFilter = '전체', shopFilter = '전체', shopFilteredDesignerIds = [], searchInput = '', availableDesignerIds = [] } = options;
+  const {
+    designerFilter = '전체',
+    shopFilter = '전체',
+    shopFilteredDesignerIds = [],
+    searchInput = '',
+    availableDesignerIds = [],
+    skipInitialFetchOnce = false,
+  } = options;
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
   const [filteredBookings, setFilteredBookings] = useState<BookingWithRelations[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,6 +32,11 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  // Capture the date to skip at mount time via useState (stable — survives React Strict Mode double-invoke)
+  // When skipInitialFetchOnce=true, we skip the auto-fetch for the initial selectedDate only.
+  // When selectedDate later changes, the new date won't match skipForDate → fetch proceeds normally.
+  const [skipForDate] = useState<string | null>(() => skipInitialFetchOnce ? selectedDate : null);
 
   // Fetch bookings for selected week
   const fetchBookings = useCallback(async () => {
@@ -55,8 +68,10 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
   }, [selectedDate]);
 
   useEffect(() => {
+    // Skip auto-fetch if this date was already loaded via initial-data (state-based, Strict Mode safe)
+    if (skipForDate !== null && skipForDate === selectedDate) return;
     fetchBookings();
-  }, [fetchBookings]);
+  }, [fetchBookings, skipForDate]);
 
   // Apply shop, designer filter and search
   useEffect(() => {

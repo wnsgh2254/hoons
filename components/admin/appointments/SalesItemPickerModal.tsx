@@ -335,15 +335,17 @@ export default function SalesItemPickerModal({
   };
 
   const renderProductTab = () => {
-    // 인벤토리 API에서 가져온 실제 제품 데이터 사용
-    const allProducts = inventoryItems.map((item) => ({
+    // Show only products marked as retail-sale enabled
+    const allProducts = inventoryItems
+      .filter((item) => item.for_retail === true)
+      .map((item) => ({
       id: item.id,
       category: item.brand || item.category || '기타',
       code: item.sku || String(item.id),
       name: item.name,
       price: item.price,
       stock: item.stock,
-    }));
+      }));
 
     // 제품 분류 목록 추출 (브랜드 목록 우선 사용)
     const brandNames = inventoryBrands.map((b) => b.name);

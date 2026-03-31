@@ -262,10 +262,11 @@ export default function SalesRegistrationModal({
     });
   };
 
-  // 모달이 열릴 때마다 모든 상태 초기화 (또는 수정 모드일 때 데이터 채우기)
+  // Fetch shops only when the modal is first opened (avoid calling on mount when closed)
   useEffect(() => {
+    if (!isOpen) return;
     fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
-  }, []);
+  }, [isOpen]);
 
   useEffect(() => {
     setSelectedShopId(shopId || null);

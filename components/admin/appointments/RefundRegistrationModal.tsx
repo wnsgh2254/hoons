@@ -64,9 +64,11 @@ export default function RefundRegistrationModal({
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
 
+  // Fetch shops only when the modal is first opened (avoid calling on mount when closed)
   useEffect(() => {
+    if (!isOpen) return;
     fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
-  }, []);
+  }, [isOpen]);
 
   useEffect(() => {
     setSelectedShopId(shopId || null);

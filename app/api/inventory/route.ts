@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, size, sku, category, price, stock, icon } = body;
+    const { name, size, sku, category, price, stock, icon, for_internal, for_retail } = body;
 
     if (!name || !category || price == null || stock == null) {
       return NextResponse.json(
@@ -93,6 +93,9 @@ export async function POST(request: NextRequest) {
         stock: numericStock,
         status: getInventoryStatus(numericStock),
         icon: icon ? String(icon).trim() : null,
+        // Keep backward compatibility: products are internal by default unless explicitly changed.
+        for_internal: for_internal !== undefined ? Boolean(for_internal) : true,
+        for_retail: for_retail !== undefined ? Boolean(for_retail) : false,
       })
       .select()
       .single();
@@ -156,7 +159,7 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, size, sku, category, price, icon, stock } = body;
+    const { id, name, size, sku, category, price, icon, stock, for_internal, for_retail } = body;
 
     const numericId = Number(id);
     if (!numericId) {
@@ -171,6 +174,8 @@ export async function PATCH(request: NextRequest) {
     if (price !== undefined) updates.price = Number(price);
     if (icon !== undefined) updates.icon = icon ? String(icon).trim() : null;
     if (stock !== undefined) updates.stock = Math.max(0, Number(stock));
+    if (for_internal !== undefined) updates.for_internal = Boolean(for_internal);
+    if (for_retail !== undefined) updates.for_retail = Boolean(for_retail);
 
     const { data, error } = await supabase
       .from('inventory_items')

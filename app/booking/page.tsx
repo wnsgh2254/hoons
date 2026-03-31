@@ -556,14 +556,14 @@ export default function BookingPage() {
       });
   }, [designerServicesForDesigner, selectedServices]);
 
-  // Comment: Combined service list: designer-specific first, then shared booking_items
+  // Comment: Combined service list: shared booking_items first, then designer-specific
   const displayServices: Service[] = useMemo(() => {
     const sharedItems = bookingItemServices.map((s) => ({
       ...s,
       selected: selectedServices.some((sel) => sel.id === s.id),
     }));
     if (designerSpecificServices.length > 0) {
-      return [...designerSpecificServices, ...sharedItems];
+      return [...sharedItems, ...designerSpecificServices];
     }
     // Comment: Fallback to services table if no designer_services configured
     return sharedItems.length > 0

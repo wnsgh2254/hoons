@@ -372,14 +372,31 @@ function ServicesTab() {
   const [isAddingService, setIsAddingService] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
 
+  // Fetch both services and category order from DB in one pass
   const fetchServices = useCallback(async () => {
     try {
       setLoading(true);
       setFetchError(null);
-      const res = await fetch('/api/services');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '서비스 목록을 불러오지 못했습니다.');
-      setServices(data.services || []);
+      const [servicesRes, categoriesRes] = await Promise.all([
+        fetch('/api/services'),
+        fetch('/api/services/categories'),
+      ]);
+      const servicesData = await servicesRes.json();
+      const categoriesData = await categoriesRes.json();
+
+      if (!servicesRes.ok) throw new Error(servicesData.error || '서비스 목록을 불러오지 못했습니다.');
+      setServices(servicesData.services || []);
+
+      // Load DB-persisted category order; fall back to CATEGORY_ORDER if empty
+      if (categoriesRes.ok && Array.isArray(categoriesData.categories) && categoriesData.categories.length > 0) {
+        const dbNames = (categoriesData.categories as Array<{ name: string }>).map((c) => c.name);
+        // Add any categories present in services but not yet in DB
+        const serviceCategories = new Set(
+          (servicesData.services || []).map((s: ServiceItem) => resolveCategory(s))
+        );
+        const extra = Array.from(serviceCategories).filter((c) => !dbNames.includes(c));
+        setCategories([...dbNames, ...extra]);
+      }
     } catch (err: any) {
       setFetchError(err.message);
       setServices([]);
@@ -406,10 +423,14 @@ function ServicesTab() {
     count: (servicesByCategory[cat] || []).length,
   }));
 
-  // Filtered services for selected category
+  // Filtered services for selected category — sort by DB sort_order first, then fall back to card/name
   const categoryServices = servicesByCategory[selectedCategory] || [];
   const filteredServices = (showInactiveServices ? categoryServices : categoryServices.filter((s) => s.is_active))
     .sort((a, b) => {
+      const aOrder = (a as any).sort_order ?? 0;
+      const bOrder = (b as any).sort_order ?? 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      // Secondary: card before cash, then alphabetical
       const aIsCard = isCardService(a.name);
       const bIsCard = isCardService(b.name);
       if (aIsCard && !bIsCard) return -1;
@@ -546,8 +567,20 @@ function ServicesTab() {
             onRowClick={(c) => setSelectedCategory(c.name)}
             emptyMessage="등록된 분류가 없습니다."
             draggable
-            onReorder={(reordered) => {
-              setCategories(reordered.map((c) => c.name));
+            onReorder={async (reordered) => {
+              const names = reordered.map((c) => c.name);
+              setCategories(names); // Optimistic update
+              try {
+                await fetch('/api/services/categories', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    items: names.map((name, i) => ({ name, sort_order: i + 1 })),
+                  }),
+                });
+              } catch (err) {
+                console.error('Error saving category order:', err);
+              }
             }}
           />
         </div>
@@ -570,7 +603,28 @@ function ServicesTab() {
             keyExtractor={(s) => s.id}
             emptyMessage="등록된 서비스가 없습니다."
             draggable
-            onReorder={() => {}}
+            onReorder={async (reordered) => {
+              // Optimistic update: apply new sort_order to local state
+              setServices((prev) => {
+                const updated = [...prev];
+                reordered.forEach((item, i) => {
+                  const idx = updated.findIndex((s) => s.id === item.id);
+                  if (idx !== -1) (updated[idx] as any).sort_order = i + 1;
+                });
+                return updated;
+              });
+              try {
+                await fetch('/api/services/reorder', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    items: reordered.map((s, i) => ({ id: s.id, sort_order: i + 1 })),
+                  }),
+                });
+              } catch (err) {
+                console.error('Error saving service order:', err);
+              }
+            }}
           />
         </div>
       </div>
@@ -1409,7 +1463,7 @@ function ProductModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null }) => void;
+  onSave: (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => void;
   onDelete?: () => void;
   initial?: InventoryItem;
   title: string;
@@ -1422,6 +1476,8 @@ function ProductModal({
   const [size, setSize] = useState(initial?.size || '');
   const [price, setPrice] = useState(initial?.price ?? 0);
   const [stock, setStock] = useState(initial?.stock ?? 0);
+  const [forInternal, setForInternal] = useState(initial?.for_internal ?? true);
+  const [forRetail, setForRetail] = useState(initial?.for_retail ?? false);
   const [error, setError] = useState<string | null>(null);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
 
@@ -1437,6 +1493,8 @@ function ProductModal({
       stock,
       brand,
       icon: initial?.icon || null,
+      for_internal: forInternal,
+      for_retail: forRetail,
     });
   };
 
@@ -1474,6 +1532,29 @@ function ProductModal({
         <Input label="규격" value={size} onChange={(e) => setSize(e.target.value)} />
         <Input label="판매가 (AUD)" type="number" min={0} value={price} onChange={(e) => setPrice(Number(e.target.value))} />
         <Input label="재고" type="number" min={0} value={stock} onChange={(e) => setStock(Number(e.target.value))} />
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">용도</p>
+          <div className="flex items-center gap-4">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={forInternal}
+                onChange={(e) => setForInternal(e.target.checked)}
+              />
+              <span>내수</span>
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={forRetail}
+                onChange={(e) => setForRetail(e.target.checked)}
+              />
+              <span>판매</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       {isAddingCategory && (
@@ -1516,7 +1597,7 @@ function ProductsTab({
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  const handleAdd = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null }) => {
+  const handleAdd = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
     try {
       const res = await fetch('/api/inventory', {
         method: 'POST',
@@ -1531,7 +1612,7 @@ function ProductsTab({
       console.error('Error creating product:', err);
     }
   };
-  const handleUpdate = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null }) => {
+  const handleUpdate = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
     if (!editingProduct) return;
     try {
       const res = await fetch('/api/inventory', {
@@ -1581,6 +1662,17 @@ function ProductsTab({
     { key: 'size', header: '규격', align: 'center' as const, render: (item: InventoryItem) => item.size || '' },
     { key: 'price', header: '판매가', align: 'center' as const, render: (item: InventoryItem) => formatPrice(item.price) },
     { key: 'stock', header: '재고', align: 'center' as const, render: (item: InventoryItem) => item.stock },
+    {
+      key: 'usage',
+      header: '용도',
+      align: 'center' as const,
+      render: (item: InventoryItem) => {
+        const labels: string[] = [];
+        if (item.for_internal) labels.push('내수');
+        if (item.for_retail) labels.push('판매');
+        return labels.length > 0 ? labels.join(' / ') : '-';
+      },
+    },
     { key: 'actions', header: '수정', align: 'center' as const, render: (item: InventoryItem) => <Button variant="outline" size="sm" onClick={() => setEditingProduct(item)}>수정</Button> },
   ];
 

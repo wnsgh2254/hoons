@@ -10,10 +10,12 @@ import { Z } from '@/lib/constants';
 interface TimeOffModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Pre-loaded designers from parent — skips the /api/staff fetch when provided */
+  initialDesigners?: Array<{ id: number; name: string; [key: string]: any }>;
 }
 
-export default function TimeOffModal({ isOpen, onClose }: TimeOffModalProps) {
-  const [designers, setDesigners] = useState<any[]>([]);
+export default function TimeOffModal({ isOpen, onClose, initialDesigners }: TimeOffModalProps) {
+  const [designers, setDesigners] = useState<any[]>(initialDesigners || []);
   const [records, setRecords] = useState<any[]>([]);
   const [designerId, setDesignerId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState('');
@@ -25,20 +27,21 @@ export default function TimeOffModal({ isOpen, onClose }: TimeOffModalProps) {
     if (!isOpen) return;
     const loadData = async () => {
       try {
-        const [designersRes, recordsRes] = await Promise.all([
-          fetch('/api/staff?role=designer'),
-          fetch('/api/designer-time-off'),
-        ]);
-        const designersData = await designersRes.json();
+        // Only fetch designers if the parent didn't provide them (avoids /api/staff call on load)
+        if (!initialDesigners || initialDesigners.length === 0) {
+          const designersRes = await fetch('/api/staff?role=designer');
+          const designersData = await designersRes.json();
+          if (designersRes.ok && designersData.staff) setDesigners(designersData.staff);
+        }
+        const recordsRes = await fetch('/api/designer-time-off');
         const recordsData = await recordsRes.json();
-        if (designersRes.ok && designersData.staff) setDesigners(designersData.staff);
         if (recordsRes.ok && recordsData.timeOffs) setRecords(recordsData.timeOffs);
       } catch (err) {
         console.error('Error loading time off data:', err);
       }
     };
     loadData();
-  }, [isOpen]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const designerOptions = designers.map((d) => ({ value: d.id, label: d.name }));
 

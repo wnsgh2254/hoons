@@ -12,7 +12,6 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import { Z } from '@/lib/constants';
-import { useServices } from '@/hooks/useServices';
 import BookingItemPickerModal from './BookingItemPickerModal';
 import type { NewBookingTimeSlot, NewBookingTimeSlotSelectedItem } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
@@ -112,7 +111,7 @@ export default function NewBookingModal({
   const [shops, setShops] = useState<any[]>([]);
   const [shopId, setShopId] = useState<number | null>(null);
   const shopManuallySet = useRef(false);
-  const { services } = useServices();
+  // Services are provided via the newBookingServices prop (loaded by initial-data on the parent page)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(() => {
     const d = new Date();

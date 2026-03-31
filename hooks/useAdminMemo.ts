@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export function useAdminMemo() {
-  const [memo, setMemo] = useState('');
+interface UseAdminMemoOptions {
+  initialMemo?: string;
+  skipInitialFetchOnce?: boolean;
+}
+
+export function useAdminMemo(options: UseAdminMemoOptions = {}) {
+  const { initialMemo = '', skipInitialFetchOnce = false } = options;
+  const [memo, setMemo] = useState(initialMemo);
   const [memoLoading, setMemoLoading] = useState(false);
   const [memoSaving, setMemoSaving] = useState(false);
   const [memoSuccessMessage, setMemoSuccessMessage] = useState<string | null>(null);
@@ -12,10 +18,11 @@ export function useAdminMemo() {
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
+  }, [skipInitialFetchOnce]);
 
   // Load memo on mount
   useEffect(() => {
+    if (skipInitialFetchOnce) return;
     const fetchMemo = async () => {
       setMemoLoading(true);
       try {
