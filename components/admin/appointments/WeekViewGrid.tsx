@@ -490,9 +490,8 @@ export default function WeekViewGrid({
                           slotTime,
                         });
                         setNewBookingDate?.(dateStr);
-                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
-                          slotMin,
-                        ).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
+                        const displayHour = slotHour % 12 === 0 ? 12 : slotHour % 12;
+                        const timeStr = `${displayHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
                         setNewBookingTimeSlots?.([
                           {
                             designerId: weekViewDesignerId,
@@ -794,9 +793,8 @@ export default function WeekViewGrid({
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
-                                          slotMin,
-                                        ).padStart(2, '0')} ${
+                                        const displayHour = slotHour % 12 === 0 ? 12 : slotHour % 12;
+                                        const timeStr = `${displayHour}:${String(slotMin).padStart(2, '0')} ${
                                           slotHour >= 12 ? 'PM' : 'AM'
                                         }`;
                                         onOpenNewBooking({ date: dateStr, designerId: weekViewDesignerId || 0, time: timeStr });
@@ -813,9 +811,8 @@ export default function WeekViewGrid({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         // 바로 방문: 예약 등록 모달에 "바로 방문" 체크박스 체크된 상태로 열기
-                                        const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(
-                                          slotMin,
-                                        ).padStart(2, '0')} ${
+                                        const displayHour = slotHour % 12 === 0 ? 12 : slotHour % 12;
+                                        const timeStr = `${displayHour}:${String(slotMin).padStart(2, '0')} ${
                                           slotHour >= 12 ? 'PM' : 'AM'
                                         }`;
                                         onOpenNewBooking({ date: dateStr, designerId: weekViewDesignerId || 0, time: timeStr, directVisit: true });

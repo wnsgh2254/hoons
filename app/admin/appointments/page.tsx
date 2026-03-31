@@ -2137,8 +2137,8 @@ export default function AppointmentsManagementPage() {
                     className="fixed inset-0 bg-black/30 z-40 lg:hidden"
                     onClick={() => setIsLeftPanelVisible(false)}
                   />
-                  <div className="fixed top-16 left-0 right-0 z-50 bg-white shadow-xl overflow-y-auto max-h-[80vh] rounded-b-2xl lg:static lg:top-auto lg:left-auto lg:right-auto lg:z-auto lg:max-h-none lg:overflow-visible lg:shadow-none lg:rounded-none lg:col-span-3 lg:flex lg:flex-col lg:gap-6 lg:min-h-0">
-                    <div className="p-4 flex flex-col gap-4 lg:p-0 lg:gap-6">
+                  <div className="fixed top-16 left-0 right-0 z-50 bg-white shadow-xl overflow-y-auto max-h-[80vh] rounded-b-2xl lg:static lg:top-auto lg:left-auto lg:right-auto lg:z-auto lg:max-h-none lg:overflow-visible lg:shadow-none lg:rounded-none lg:col-span-3 lg:flex lg:flex-col lg:gap-6 lg:min-h-0 lg:h-full">
+                    <div className="p-4 flex flex-col gap-4 lg:p-0 lg:gap-6 lg:flex-1 lg:min-h-0">
                       <AppointmentCalendar
                         selectedDate={selectedDate}
                         dayCounts={dayCounts}
@@ -2150,7 +2150,7 @@ export default function AppointmentsManagementPage() {
                         }}
                       />
                       {/* Memo — hidden on mobile overlay, visible on desktop sidebar */}
-                      <div className="hidden lg:block">
+                      <div className="hidden lg:flex lg:flex-1 lg:min-h-0">
                         <AdminMemo
                           memo={memo}
                           memoLoading={memoLoading}
@@ -2707,7 +2707,8 @@ export default function AppointmentsManagementPage() {
                                           if (col.columnShopId !== 0) {
                                             setNewBookingShopId(col.columnShopId);
                                           }
-                                          const timeStr = `${slotHour >= 12 ? slotHour - 12 : slotHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
+                                          const displayHour = slotHour % 12 === 0 ? 12 : slotHour % 12;
+                                          const timeStr = `${displayHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
                                           setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
                                           setIsNewBookingOpen(true);
                                           setHoveredEmptySlot(null);
@@ -2999,7 +3000,8 @@ export default function AppointmentsManagementPage() {
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 const [menuSlotHour1, menuSlotMin1] = menuSlotTime.split(':').map(Number);
-                                                const timeStr1 = `${menuSlotHour1 >= 12 ? menuSlotHour1 - 12 : menuSlotHour1}:${String(menuSlotMin1).padStart(2, '0')} ${menuSlotHour1 >= 12 ? 'PM' : 'AM'}`;
+                                                const displayHour1 = menuSlotHour1 % 12 === 0 ? 12 : menuSlotHour1 % 12;
+                                                const timeStr1 = `${displayHour1}:${String(menuSlotMin1).padStart(2, '0')} ${menuSlotHour1 >= 12 ? 'PM' : 'AM'}`;
                                                 setNewBookingDate(emptySlotMenuOpen.date);
                                                 if (emptySlotMenuOpen.columnShopId !== 0) {
                                                   setNewBookingShopId(emptySlotMenuOpen.columnShopId);
@@ -3021,7 +3023,8 @@ export default function AppointmentsManagementPage() {
                                                 e.stopPropagation();
                                                 // 바로 방문: 예약 등록 모달에 "바로 방문" 체크박스 체크된 상태로 열기
                                                 const [menuSlotHour2, menuSlotMin2] = menuSlotTime.split(':').map(Number);
-                                                const timeStr2 = `${menuSlotHour2 >= 12 ? menuSlotHour2 - 12 : menuSlotHour2}:${String(menuSlotMin2).padStart(2, '0')} ${menuSlotHour2 >= 12 ? 'PM' : 'AM'}`;
+                                                const displayHour2 = menuSlotHour2 % 12 === 0 ? 12 : menuSlotHour2 % 12;
+                                                const timeStr2 = `${displayHour2}:${String(menuSlotMin2).padStart(2, '0')} ${menuSlotHour2 >= 12 ? 'PM' : 'AM'}`;
                                                 setNewBookingDate(emptySlotMenuOpen.date);
                                                 if (emptySlotMenuOpen.columnShopId !== 0) {
                                                   setNewBookingShopId(emptySlotMenuOpen.columnShopId);
