@@ -1,6 +1,10 @@
 'use client';
 
-import { buildDateFromDay, getSydneyToday } from '@/lib/utils/appointment-utils';
+import {
+  buildDateFromDay,
+  formatLocalDateString,
+  parseLocalDateString,
+} from '@/lib/utils/appointment-utils';
 
 interface AppointmentCalendarProps {
   selectedDate: string;
@@ -15,7 +19,7 @@ export default function AppointmentCalendar({
   showBookingCount,
   onDateSelect,
 }: AppointmentCalendarProps) {
-  const monthLabel = new Date(selectedDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthLabel = parseLocalDateString(selectedDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const monthKey = selectedDate.slice(0, 7); // YYYY-MM
   const selectedDayNumber = Number(selectedDate.split('-')[2] || '0');
 
@@ -25,9 +29,9 @@ export default function AppointmentCalendar({
         <button
           type="button"
           onClick={() => {
-            const date = new Date(selectedDate);
+            const date = parseLocalDateString(selectedDate);
             date.setMonth(date.getMonth() - 1);
-            onDateSelect(date.toISOString().split('T')[0]);
+            onDateSelect(formatLocalDateString(date));
           }}
           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
         >
@@ -37,9 +41,9 @@ export default function AppointmentCalendar({
         <button
           type="button"
           onClick={() => {
-            const date = new Date(selectedDate);
+            const date = parseLocalDateString(selectedDate);
             date.setMonth(date.getMonth() + 1);
-            onDateSelect(date.toISOString().split('T')[0]);
+            onDateSelect(formatLocalDateString(date));
           }}
           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
         >
@@ -58,7 +62,7 @@ export default function AppointmentCalendar({
         {(() => {
           const [year, month] = monthKey.split('-').map((v) => Number(v));
           const daysInMonth = new Date(year, month, 0).getDate();
-          const firstDay = new Date(`${monthKey}-01`).getDay();
+          const firstDay = parseLocalDateString(`${monthKey}-01`).getDay();
           const cells: (number | null)[] = [
             ...Array(firstDay).fill(null),
             ...Array.from({ length: daysInMonth }, (_, i) => i + 1),

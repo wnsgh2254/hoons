@@ -195,6 +195,20 @@ export function buildDateFromDay(baseDate: string, day: number): string {
   return `${year}-${month}-${dayStr}`;
 }
 
+// Comment: Parse YYYY-MM-DD as a local date to avoid timezone shift bugs.
+export function parseLocalDateString(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map((v) => Number(v));
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+// Comment: Format a Date object as YYYY-MM-DD using local date fields.
+export function formatLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Comment: Convert DB time 'HH:MM:SS' to 12h label like '3:00 PM'
 // Delegates to formatTimeString from lib/utils.ts (same logic)
 export { formatTimeString as bookingTimeToLabel } from '@/lib/utils';

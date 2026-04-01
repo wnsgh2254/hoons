@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
-import { getSydneyToday } from '@/lib/utils/appointment-utils';
+import {
+  formatLocalDateString,
+  getSydneyToday,
+  parseLocalDateString,
+} from '@/lib/utils/appointment-utils';
 import Select from '@/components/ui/Select';
 
 interface ScheduleHeaderControlsProps {
@@ -130,13 +134,13 @@ export default function ScheduleHeaderControls({
               type="button"
               onClick={() => {
                 if (isWeekViewMode && onWeekNavigate && weekViewStartDate) {
-                  const prevWeek = new Date(weekViewStartDate);
+                  const prevWeek = parseLocalDateString(weekViewStartDate);
                   prevWeek.setDate(prevWeek.getDate() - 7);
-                  onWeekNavigate(prevWeek.toISOString().split('T')[0]);
+                  onWeekNavigate(formatLocalDateString(prevWeek));
                 } else {
-                  const prevDay = new Date(selectedDate);
+                  const prevDay = parseLocalDateString(selectedDate);
                   prevDay.setDate(prevDay.getDate() - 1);
-                  onDateChange(prevDay.toISOString().split('T')[0]);
+                  onDateChange(formatLocalDateString(prevDay));
                 }
               }}
               className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors shrink-0"
@@ -152,20 +156,20 @@ export default function ScheduleHeaderControls({
                 onClick={(e) => {
                   e.stopPropagation();
                   onCalendarPopupToggle();
-                  onCalendarMonthChange(new Date(selectedDate));
+                  onCalendarMonthChange(parseLocalDateString(selectedDate));
                 }}
                 className="px-2 sm:px-4 py-2 bg-white border border-gray-200 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 transition-colors whitespace-nowrap"
               >
                 {(() => {
                   if (isWeekViewMode && weekViewStartDate) {
-                    const start = new Date(weekViewStartDate);
-                    const end = new Date(weekViewStartDate);
+                    const start = parseLocalDateString(weekViewStartDate);
+                    const end = parseLocalDateString(weekViewStartDate);
                     end.setDate(end.getDate() + 6);
                     const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
                     const endStr = `${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
                     return `${startStr} ~ ${endStr}`;
                   }
-                  const date = new Date(selectedDate);
+                  const date = parseLocalDateString(selectedDate);
                   const dayName = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
                   return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 (${dayName})`;
                 })()}
@@ -224,7 +228,7 @@ export default function ScheduleHeaderControls({
                           days.push(date);
                         }
                         return days.map((date, idx) => {
-                          const dateStr = date.toISOString().split('T')[0];
+                          const dateStr = formatLocalDateString(date);
                           const isCurrentMonth = date.getMonth() === month;
                           const isSelected = dateStr === selectedDate;
                           return (
@@ -256,13 +260,13 @@ export default function ScheduleHeaderControls({
                 type="button"
                 onClick={() => {
                   if (isWeekViewMode && onWeekNavigate && weekViewStartDate) {
-                    const nextWeek = new Date(weekViewStartDate);
+                  const nextWeek = parseLocalDateString(weekViewStartDate);
                     nextWeek.setDate(nextWeek.getDate() + 7);
-                    onWeekNavigate(nextWeek.toISOString().split('T')[0]);
+                  onWeekNavigate(formatLocalDateString(nextWeek));
                   } else {
-                    const nextDay = new Date(selectedDate);
+                  const nextDay = parseLocalDateString(selectedDate);
                     nextDay.setDate(nextDay.getDate() + 1);
-                    onDateChange(nextDay.toISOString().split('T')[0]);
+                  onDateChange(formatLocalDateString(nextDay));
                   }
                 }}
                 className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-black transition-colors"
