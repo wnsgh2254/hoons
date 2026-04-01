@@ -55,6 +55,7 @@ import {
   buildDateFromDay,
   bookingTimeToLabel,
   labelToDbTime,
+  parseLocalDateString,
 } from '@/lib/utils/appointment-utils';
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
@@ -249,15 +250,6 @@ export default function AppointmentsManagementPage() {
 
   // Comment: REQ_SCH_001_02 - Designer filter state
   const [selectedDesignerFilter, setSelectedDesignerFilter] = useState<string>('전체');
-
-  // Comment: Mobile-only selected designer — required on mobile to show single-designer list view
-  const [mobileSelectedDesignerId, setMobileSelectedDesignerId] = useState<number | null>(null);
-  // Auto-select first designer when designers load and screen is mobile
-  useEffect(() => {
-    if (allDesigners.length > 0 && mobileSelectedDesignerId === null && window.innerWidth < 1024) {
-      setMobileSelectedDesignerId(allDesigners[0].id);
-    }
-  }, [allDesigners, mobileSelectedDesignerId]);
 
   // Comment: REQ_SCH_001_03~06 - Date navigation state
   const [isCalendarPopupOpen, setIsCalendarPopupOpen] = useState(false);
@@ -1480,24 +1472,20 @@ export default function AppointmentsManagementPage() {
     return map;
   }, [filteredBookings, weekDates, allDesigners]);
 
-  // Comment: Mobile view — bookings for the selected designer on the selected date, sorted by time
+  // Comment: Mobile view — bookings for the current date from active top filters, sorted by time
   const mobileDesignerBookings = useMemo(() => {
-    if (!mobileSelectedDesignerId) return [];
     return filteredBookings
       .filter((b) => {
         const status = String((b as any).status || (b as any).booking_status || '').toLowerCase();
         if (CANCELLED_STATUSES.has(status)) return false;
-        return (
-          b.booking_date === selectedDate &&
-          (b.designer?.id === mobileSelectedDesignerId || (b as any).designer_id === mobileSelectedDesignerId)
-        );
+        return b.booking_date === selectedDate;
       })
       .sort((a, b) => {
         const aTime = a.booking_time || '00:00';
         const bTime = b.booking_time || '00:00';
         return aTime.localeCompare(bTime);
       });
-  }, [filteredBookings, selectedDate, mobileSelectedDesignerId]);
+  }, [filteredBookings, selectedDate]);
 
   // Comment: One grid column per (designer, venue); multi-venue designers get one column per shop when "전체"
   const scheduleColumns = useMemo((): ScheduleColumn[] => {
@@ -2262,29 +2250,15 @@ export default function AppointmentsManagementPage() {
               {/* Center: Full Schedule — always full width on mobile */}
               <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} col-span-1 flex flex-col gap-4 min-h-0`}>
 
-                {/* ===== MOBILE VIEW: single-designer list ===== */}
+                {/* ===== MOBILE VIEW: list filtered by top controls ===== */}
                 <div className="flex flex-col gap-3 lg:hidden">
-                  {/* Designer picker */}
-                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">직원 선택</label>
-                    <select
-                      value={mobileSelectedDesignerId ?? ''}
-                      onChange={(e) => setMobileSelectedDesignerId(Number(e.target.value) || null)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-medium bg-white focus:ring-2 focus:ring-black focus:border-transparent"
-                    >
-                      {allDesigners.map((d) => (
-                        <option key={d.id} value={d.id}>{d.name}{d.role ? ` · ${d.role}` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Booking list */}
                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                     {/* Date header */}
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                       <span className="text-sm font-bold text-black">
                         {(() => {
-                          const d = new Date(selectedDate);
+                          const d = parseLocalDateString(selectedDate);
                           const dayName = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
                           return `${d.getMonth() + 1}월 ${d.getDate()}일 (${dayName})`;
                         })()}
@@ -2292,12 +2266,7 @@ export default function AppointmentsManagementPage() {
                       <span className="text-xs text-gray-500">{mobileDesignerBookings.length}건</span>
                     </div>
 
-                    {!mobileSelectedDesignerId ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                        <span className="material-symbols-outlined text-4xl mb-2">person_search</span>
-                        <p className="text-sm">직원을 선택해주세요</p>
-                      </div>
-                    ) : mobileDesignerBookings.length === 0 ? (
+                    {mobileDesignerBookings.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                         <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
                         <p className="text-sm">예약이 없습니다</p>
