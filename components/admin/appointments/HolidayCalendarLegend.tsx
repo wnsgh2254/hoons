@@ -8,8 +8,8 @@ interface HolidayCalendarLegendProps {
 
 export default function HolidayCalendarLegend({ onClose }: HolidayCalendarLegendProps) {
   return (
-    <div className="p-5.5 border-t border-gray-200 bg-gray-50/60">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-5.5 border-t border-gray-200 bg-gray-50/60">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         {/* Left: Explanation Text */}
         <div className="flex-1">
           <p className="text-xs text-gray-600">
@@ -18,7 +18,7 @@ export default function HolidayCalendarLegend({ onClose }: HolidayCalendarLegend
         </div>
 
         {/* Right: Legend */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1.5">
             <span className="text-red-500 text-xs">●</span>
             <span className="text-xs text-gray-700">정기 휴일</span>

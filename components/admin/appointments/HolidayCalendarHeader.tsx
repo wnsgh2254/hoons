@@ -10,9 +10,9 @@ export default function HolidayCalendarHeader({
   onClose,
 }: HolidayCalendarHeaderProps) {
   return (
-    <div className="p-5.5 border-b border-gray-200">
+    <div className="p-4 sm:p-5.5 border-b border-gray-200">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-black">휴일 및 특근 현황</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-black">휴일 및 특근 현황</h2>
         <button
           type="button"
           onClick={onClose}

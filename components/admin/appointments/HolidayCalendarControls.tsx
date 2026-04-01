@@ -51,10 +51,10 @@ export default function HolidayCalendarControls({
   }, [isDesignerFilterOpen]);
 
   return (
-    <div className="px-5.5 py-4">
-      <div className="flex items-center justify-between">
+    <div className="px-4 py-3 sm:px-5.5 sm:py-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         {/* Left: Filter Dropdown */}
-        <div className="relative" data-designer-filter-dropdown>
+        <div className="relative w-full lg:w-auto" data-designer-filter-dropdown>
           <button
             ref={designerFilterButtonRef}
             type="button"
@@ -70,7 +70,7 @@ export default function HolidayCalendarControls({
               }
               setIsDesignerFilterOpen(!isDesignerFilterOpen);
             }}
-            className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 min-w-[120px] justify-between transition-colors"
+            className="w-full lg:w-auto px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-2 min-w-[120px] justify-between transition-colors"
             data-designer-filter-button
           >
             <span>{selectedDesignerFilter}</span>
@@ -84,7 +84,7 @@ export default function HolidayCalendarControls({
               style={{
                 top: `${designerFilterPosition.top}px`,
                 left: `${designerFilterPosition.left}px`,
-                width: `${designerFilterPosition.width}px`
+                width: `${Math.max(designerFilterPosition.width, 220)}px`
               }}
               onClick={(e) => e.stopPropagation()}
               data-designer-filter-menu
@@ -127,7 +127,7 @@ export default function HolidayCalendarControls({
         </div>
 
         {/* Center: Month Navigation */}
-        <div className="flex items-center gap-2 flex-1 justify-center">
+        <div className="flex items-center justify-between gap-2 w-full lg:flex-1 lg:justify-center">
           <button
             type="button"
             onClick={onPreviousMonth}
@@ -137,7 +137,7 @@ export default function HolidayCalendarControls({
             <span className="material-symbols-outlined text-lg">chevron_left</span>
           </button>
           
-          <div className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium">
+          <div className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium whitespace-nowrap">
             {monthYear}
           </div>
           
@@ -152,9 +152,9 @@ export default function HolidayCalendarControls({
         </div>
 
         {/* Right: Action Button */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full lg:w-auto">
           {onRegisterModify && (
-            <Button onClick={onRegisterModify}>등록/수정</Button>
+            <Button className="w-full lg:w-auto" onClick={onRegisterModify}>등록/수정</Button>
           )}
         </div>
       </div>

@@ -52,9 +52,11 @@ export default function HolidayCalendarGrid({
     }
   };
 
+  const nonEmptyDays = calendarDays.filter((d) => d.date !== 0 && (calendarData[d.dateStr] || []).length > 0);
+
   return (
-    <div className="px-5.5 pb-5.5">
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="px-4 pb-4 sm:px-5.5 sm:pb-5.5">
+      <div className="border border-gray-200 rounded-xl overflow-hidden hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -121,6 +123,41 @@ export default function HolidayCalendarGrid({
           </tbody>
         </table>
         </div>
+      </div>
+
+      {/* Mobile: compact day cards for readability */}
+      <div className="md:hidden space-y-2">
+        {nonEmptyDays.length === 0 ? (
+          <div className="border border-dashed border-gray-300 rounded-xl px-4 py-8 text-center text-sm text-gray-500">
+            표시할 휴일/특근 정보가 없습니다.
+          </div>
+        ) : (
+          nonEmptyDays.map((day) => {
+            const entries = calendarData[day.dateStr] || [];
+            return (
+              <div key={day.dateStr} className="border border-gray-200 rounded-xl p-3 bg-white">
+                <div className="text-sm font-semibold text-gray-900 mb-2">{day.date}일</div>
+                <div className="space-y-1.5">
+                  {entries.map((entry, idx) => (
+                    <button
+                      key={`${day.dateStr}-${entry.name}-${idx}`}
+                      type="button"
+                      className={`w-full text-left flex items-center gap-2 text-sm text-gray-900 ${
+                        onDesignerClick ? 'hover:text-blue-600' : ''
+                      }`}
+                      onClick={() => {
+                        if (onDesignerClick) onDesignerClick(entry.name);
+                      }}
+                    >
+                      {getHolidayIcon(entry.type)}
+                      <span>{entry.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

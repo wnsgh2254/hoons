@@ -1487,6 +1487,41 @@ export default function AppointmentsManagementPage() {
       });
   }, [filteredBookings, selectedDate]);
 
+  // Comment: Mobile "all designers" view groups bookings by designer for clearer scanning.
+  const mobileBookingsByDesigner = useMemo(() => {
+    const groups = new Map<number, { designerId: number; designerName: string; bookings: BookingWithRelations[] }>();
+    const fallbackDesignerId = -1;
+    const fallbackDesignerName = '미지정';
+
+    mobileDesignerBookings.forEach((booking) => {
+      const designerIdRaw = booking.designer?.id ?? (booking as any).designer_id;
+      const designerId = typeof designerIdRaw === 'number' ? designerIdRaw : fallbackDesignerId;
+      const designerName = booking.designer?.name || (designerId === fallbackDesignerId ? fallbackDesignerName : 'Unknown');
+
+      if (!groups.has(designerId)) {
+        groups.set(designerId, { designerId, designerName, bookings: [] });
+      }
+      groups.get(designerId)!.bookings.push(booking);
+    });
+
+    const designerOrder = new Map<number, number>();
+    allDesigners.forEach((d, index) => {
+      designerOrder.set(d.id, index);
+    });
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        bookings: [...group.bookings].sort((a, b) => (a.booking_time || '00:00').localeCompare(b.booking_time || '00:00')),
+      }))
+      .sort((a, b) => {
+        const ai = designerOrder.has(a.designerId) ? designerOrder.get(a.designerId)! : Number.MAX_SAFE_INTEGER;
+        const bi = designerOrder.has(b.designerId) ? designerOrder.get(b.designerId)! : Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        return a.designerName.localeCompare(b.designerName);
+      });
+  }, [mobileDesignerBookings, allDesigners]);
+
   // Comment: One grid column per (designer, venue); multi-venue designers get one column per shop when "전체"
   const scheduleColumns = useMemo((): ScheduleColumn[] => {
     if (allDesigners.length === 0) return [];
@@ -2270,6 +2305,68 @@ export default function AppointmentsManagementPage() {
                       <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                         <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
                         <p className="text-sm">예약이 없습니다</p>
+                      </div>
+                    ) : selectedDesignerFilter === '전체' ? (
+                      <div className="divide-y divide-gray-100">
+                        {mobileBookingsByDesigner.map((group) => (
+                          <div key={`mobile-group-${group.designerId}`} className="py-2">
+                            <div className="px-4 py-2 bg-gray-50 border-y border-gray-100 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-gray-700">{group.designerName}</span>
+                              <span className="text-[11px] text-gray-500">{group.bookings.length}건</span>
+                            </div>
+                            <div className="divide-y divide-gray-100">
+                              {group.bookings.map((booking) => {
+                                const timeLabel = booking.booking_time
+                                  ? booking.booking_time.slice(0, 5)
+                                  : '—';
+                                const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
+                                const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
+                                const duration = (booking as any).service?.duration_minutes || (booking as any).duration_minutes;
+                                const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
+                                const statusLabel =
+                                  status === 'confirmed' ? '확정' :
+                                  status === 'pending' ? '대기' :
+                                  status === 'completed' ? '완료' :
+                                  status === 'no_show' ? '노쇼' : status;
+                                const statusColor =
+                                  status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                                  status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                  status === 'no_show' ? 'bg-red-100 text-red-700' :
+                                  'bg-gray-100 text-gray-600';
+
+                                return (
+                                  <button
+                                    key={booking.id}
+                                    type="button"
+                                    onClick={() => setViewingBookingDetail(booking)}
+                                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="shrink-0 w-12 text-center">
+                                      <span className="text-sm font-bold text-black">{timeLabel}</span>
+                                      {duration && (
+                                        <p className="text-[10px] text-gray-400 mt-0.5">{duration}분</p>
+                                      )}
+                                    </div>
+                                    <div className="w-px h-10 bg-gray-200 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold text-black truncate">{customerName}</p>
+                                      {serviceName && (
+                                        <p className="text-xs text-gray-500 truncate mt-0.5">{serviceName}</p>
+                                      )}
+                                    </div>
+                                    {statusLabel && (
+                                      <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${statusColor}`}>
+                                        {statusLabel}
+                                      </span>
+                                    )}
+                                    <span className="material-symbols-outlined text-gray-300 text-lg shrink-0">chevron_right</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <div className="divide-y divide-gray-100">

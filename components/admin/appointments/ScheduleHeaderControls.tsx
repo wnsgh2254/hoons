@@ -107,22 +107,18 @@ export default function ScheduleHeaderControls({
       <div className="max-w-full mx-auto px-3 md:px-9.5">
         {/* Row 1 (always visible on all screens): date nav + MENU */}
         <div className="flex items-center gap-2 py-2">
-          {/* Calendar toggle — icon button on mobile, chevron on desktop */}
+          {/* Calendar toggle — desktop only (mobile uses date text button) */}
           <button
             type="button"
             onClick={onToggleLeftPanel}
-            className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
+            className={`hidden lg:flex items-center justify-center w-8 h-8 rounded-lg transition-colors shrink-0 ${
               isLeftPanelVisible
                 ? 'bg-black text-white hover:bg-gray-800 lg:bg-transparent lg:text-gray-600 lg:hover:bg-gray-100 lg:hover:text-black'
                 : 'text-gray-600 hover:bg-gray-100 hover:text-black'
             }`}
             title={isLeftPanelVisible ? '달력 닫기' : '달력 열기'}
           >
-            {/* Mobile: calendar icon / Desktop: chevron */}
-            <span className="material-symbols-outlined text-lg lg:hidden">
-              {isLeftPanelVisible ? 'calendar_today' : 'calendar_month'}
-            </span>
-            <span className="material-symbols-outlined text-lg hidden lg:inline">
+            <span className="material-symbols-outlined text-lg">
               {isLeftPanelVisible ? 'chevron_left' : 'chevron_right'}
             </span>
           </button>
@@ -325,7 +321,7 @@ export default function ScheduleHeaderControls({
                 >
                   <button
                     type="button"
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 first:rounded-t-lg transition-colors"
+                    className="hidden lg:block w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-50 first:rounded-t-lg transition-colors"
                     onClick={() => {
                       onOpenReservationHistory();
                       onSetIsMenuDropdownOpen(false);
