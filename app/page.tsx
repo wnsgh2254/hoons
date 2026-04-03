@@ -113,7 +113,7 @@ const Home = () => {
       : designers.filter((d) => d.shop_id === selectedShop);
 
   return (
-    <div className="w-full bg-[#F4F4F4]">
+    <div className="w-full bg-[#F4F4F4] text-black">
       
       {/* HERO SECTION: Single Large Image - full coverage so no white gap when zoomed out */}
       <section className="relative w-full min-h-dvh overflow-hidden border-b border-black bg-[#2a2a2a]">
@@ -142,7 +142,7 @@ const Home = () => {
         {/* Adjusted padding to px-6 md:px-12 */}
         <div className="flex justify-between items-center px-6 md:px-12 py-12 md:py-20 overflow-hidden">
             <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter">Book</h2>
-            <Link href="/booking" className="text-sm md:text-base font-normal uppercase tracking-widest border border-black px-8 py-3 hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
+            <Link href="/booking" className="text-sm md:text-base font-normal uppercase tracking-widest border border-black px-8 py-3 text-black hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
             <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-right">Now</h2>
@@ -189,7 +189,7 @@ const Home = () => {
                             {shop.name.replace('HAEYOOM ', '')}
                         </h4>
                         
-                        <p className="text-base leading-relaxed text-gray-600">
+                        <p className="text-base leading-relaxed text-black">
                            {shop.address}
                         </p>
               </div>
@@ -209,11 +209,11 @@ const Home = () => {
       <section id="designers" className="border-t border-black bg-[#F4F4F4]">
         <div className="w-full">
           <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-            <h4 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>Designers</h4>
+            <h4 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter mb-6 md:mb-9 text-left text-black">Designers</h4>
             <div className="flex gap-4 mb-2 md:mb-4 shrink-0">
                   <button 
                       onClick={() => setSelectedShop('all')}
-                      className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                      className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black ${selectedShop === 'all' ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
                   >
                       All
                   </button>
@@ -221,7 +221,7 @@ const Home = () => {
                       <button 
                           key={shop.id}
                           onClick={() => setSelectedShop(shop.id)}
-                          className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                          className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black ${selectedShop === shop.id ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
                       >
                           {shop.name.replace('HAEYOOM ', '')}
                       </button>
@@ -262,7 +262,7 @@ const Home = () => {
                         href={designer.instagramLink ?? undefined} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase"
+                        className="hidden md:flex items-center gap-1 hover:underline text-xs uppercase text-black"
                       >
                           <span>Instagram</span>
                           <ArrowUpRight size={12} />
@@ -280,8 +280,8 @@ const Home = () => {
         <Script src="https://elfsightcdn.com/platform.js" strategy="lazyOnload" />
         <div className="w-full">
           <div className="px-6 md:px-12 pt-12 md:pt-24 pb-12 md:pb-24">
-            <h4 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left">Explore</h4>
-            <p className="font-normal text-lg text-left text-gray-500">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
+            <h4 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter mb-4 text-left text-black">Explore</h4>
+            <p className="font-normal text-lg text-left text-black">Discover our latest styles and inspirations from our designers&apos; Instagram.</p>
           </div>
           <div
             className="elfsight-app-c3f65fc0-2543-463a-b7c9-9c8f2a655e4b"
@@ -293,7 +293,7 @@ const Home = () => {
       {/* NEW CTA SECTION */}
       <section className="bg-[#F4F4F4] px-6 md:px-12 py-32">
          <div className="w-full border-t border-black pt-12 flex flex-col md:flex-row justify-between md:items-end gap-10">
-             <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter leading-[0.9] text-left" style={{ color: 'rgba(26, 26, 26, 1)' }}>
+             <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter leading-[0.9] text-left text-black">
                 Ready to<br/>Transform?
              </h2>
              <Link 
