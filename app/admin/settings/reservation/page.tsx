@@ -13,6 +13,7 @@ import {
   IconButton,
   Toggle,
   FormAlert,
+  Badge,
 } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import { useBusinessHours, invalidateBusinessHoursCache } from '@/hooks/useBusinessHours';
@@ -474,16 +475,6 @@ function ResourceModal({
           )}
         </div>
 
-        {/* 매장 */}
-        {shops.length > 0 && (
-          <Select
-            label="매장 (Venue)"
-            value={shopId ?? ''}
-            onChange={(e) => setShopId(Number(e.target.value))}
-            options={shops.map((s) => ({ value: s.id, label: s.name }))}
-          />
-        )}
-
         {/* 자원명 */}
         <Input
           label="자원명"
@@ -622,10 +613,11 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
         for (const s of rawSchedules) {
           const st = s.start_time?.slice(0, 5) || '00:00';
           const et = s.end_time?.slice(0, 5) || '00:00';
-          // Comment: Prefer weekday default venue; fall back to schedule's own shop_id
+          // Comment: Prefer weekday default venue; fall back to schedule's own shop_id; then designer's home shop
           const shopId =
             defaultsMap.get(`${member.id}:${s.weekday}`) ??
-            (s.shop_id != null ? Number(s.shop_id) : null);
+            (s.shop_id != null ? Number(s.shop_id) : null) ??
+            (member.shop_id != null ? Number(member.shop_id) : null);
           const key = `${st}-${et}-${shopId ?? 'null'}`;
           const existing = timeGroups.get(key);
           const dayName = WEEKDAY_TO_KOREAN[s.weekday] || '';
@@ -785,20 +777,17 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       render: (item: BookingResource) => item.linkedStaff || '-',
     },
     {
-      key: 'shop',
-      header: '매장',
-      align: 'center' as const,
-      render: (item: BookingResource) => shopNameMap[item.shopId ?? 0] || '-',
-    },
-    {
       key: 'schedules',
       header: '예약 가능 시간',
-      align: 'center' as const,
+      align: 'left' as const,
       render: (item: BookingResource) => (
         <div className="space-y-0.5">
           {item.schedules.map((s) => (
-            <div key={s.id} className="text-sm">
-              {s.startTime} ~ {s.endTime} {s.days.join(', ')}
+            <div key={s.id} className="text-sm flex items-center gap-2">
+              <span>{s.startTime} ~ {s.endTime} {s.days.join(', ')}</span>
+              {shopNameMap[s.shopId ?? 0] ? (
+                <Badge size="sm">{shopNameMap[s.shopId ?? 0]}</Badge>
+              ) : null}
             </div>
           ))}
         </div>

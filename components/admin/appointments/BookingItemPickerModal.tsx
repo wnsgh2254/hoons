@@ -127,14 +127,14 @@ export default function BookingItemPickerModal({
       : [];
 
     return (
-      <div className="flex gap-6 h-[500px]">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-auto lg:h-[500px]">
         {/* Left: Category Selection */}
-        <div className="w-64 border-r border-gray-200 pr-5.5">
+        <div className="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-gray-200 pb-4 lg:pb-0 pr-0 lg:pr-5.5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">분류</h3>
           {servicesLoading ? (
             <div className="text-sm text-gray-500">로딩 중...</div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[450px]">
+            <div className="grid grid-cols-4 lg:grid-cols-2 gap-2 overflow-y-auto max-h-[200px] lg:max-h-[450px]">
               {categories.map((category) => (
                 <button
                   key={category.key}
@@ -187,7 +187,7 @@ export default function BookingItemPickerModal({
                 </div>
               </div>
               {currentItems.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[450px]">
+                <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[250px] lg:max-h-[450px]">
                   {currentItems.map((item) => {
                     const displayName = item.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
                     const duration = item.duration_minutes ? ` · ${item.duration_minutes}분` : '';
@@ -239,14 +239,14 @@ export default function BookingItemPickerModal({
 
   const renderBookingItemsTab = () => {
     return (
-      <div className="flex gap-6 h-[500px]">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-auto lg:h-[500px]">
         {/* Left: Booking Items List */}
         <div className="flex-1">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">예약 항목</h3>
           {bookingItemsLoading ? (
             <div className="flex items-center justify-center h-full text-sm text-gray-500">로딩 중...</div>
           ) : bookingItems.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[450px]">
+            <div className="grid grid-cols-2 gap-2 overflow-y-auto max-h-[250px] lg:max-h-[450px]">
               {bookingItems.map((item) => {
                 const totalMinutes = item.duration_hours * 60 + item.duration_minutes;
                 const durationLabel = formatDuration(totalMinutes);
@@ -296,7 +296,7 @@ export default function BookingItemPickerModal({
   // ─── Shared Selected Items Panel ────────────────────────────────────────────
 
   const renderSelectedPanel = () => (
-    <div className="w-64 border-l border-gray-200 pl-5.5">
+    <div className="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-gray-200 pt-4 lg:pt-0 pl-0 lg:pl-5.5">
       <h3 className="text-sm font-semibold text-gray-700 mb-4">선택한 항목</h3>
       {selectedItems.length === 0 ? (
         <div className="text-sm text-gray-500">선택한 항목이 없습니다</div>

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
+import AlertModal from '@/components/ui/AlertModal';
 import { Z } from '@/lib/constants';
 
 export type HolidayModalShopOption = { id: number; name: string };
@@ -28,13 +29,24 @@ function timeOffAppliesToVenue(to: { shop_id?: number | null }, venueId: number 
   return sid == null || Number(sid) === Number(venueId);
 }
 
+/** Format a Date as YYYY-MM-DD in local timezone (avoids UTC shift issues). */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function expandDateRange(startStr: string, endStr: string): string[] {
   const dates: string[] = [];
-  const start = new Date(startStr);
-  const end = new Date(endStr);
+  // Comment: Parse as local dates by splitting the string (avoid UTC midnight shift)
+  const [sy, sm, sd] = startStr.split('-').map(Number);
+  const [ey, em, ed] = endStr.split('-').map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
   const current = new Date(start);
   while (current <= end) {
-    dates.push(current.toISOString().split('T')[0]);
+    dates.push(toLocalDateStr(current));
     current.setDate(current.getDate() + 1);
   }
   return dates;
@@ -57,6 +69,7 @@ export default function HolidaySettingModal({
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [removeConfirm, setRemoveConfirm] = useState<{ timeOffId: number; reason: string; dateStr: string } | null>(null);
   const [regularSchedule, setRegularSchedule] = useState<any[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
   const [allDesignerTimeOffs, setAllDesignerTimeOffs] = useState<any[]>([]);
@@ -148,6 +161,69 @@ export default function HolidaySettingModal({
       setSelectedDates([]);
     }
   }, [isOpen]);
+
+  const handleRemoveTimeOff = useCallback(async () => {
+    if (!removeConfirm) return;
+    try {
+      const res = await fetch(`/api/designer-time-off/${removeConfirm.timeOffId}`, { method: 'DELETE' });
+      if (res.ok) {
+        // Comment: Remove from local state so calendar updates immediately
+        setAllDesignerTimeOffs((prev) => prev.filter((to: any) => to.id !== removeConfirm.timeOffId));
+        onAvailableDesignerIdsChange();
+      } else {
+        alert('삭제에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Error removing time off:', error);
+      alert('삭제에 실패했습니다.');
+    } finally {
+      setRemoveConfirm(null);
+    }
+  }, [removeConfirm, onAvailableDesignerIdsChange]);
+
+  /** Handle calendar cell click with type-aware logic */
+  const handleDateClick = useCallback(
+    (dateStr: string, existingTimeOff: any, isRegularHoliday: boolean, isExistingSpecial: boolean, isExistingHoliday: boolean) => {
+      if (holidayType === 'holiday') {
+        // Comment: 임의 휴일 모드 — 정기 휴일과 특별 근무일은 클릭 불가
+        if (isRegularHoliday || isExistingSpecial) return;
+        if (isExistingHoliday && existingTimeOff) {
+          // Confirm removal of existing 임의 휴일
+          setRemoveConfirm({
+            timeOffId: existingTimeOff.id,
+            reason: '임의 휴일',
+            dateStr,
+          });
+          return;
+        }
+      } else {
+        // Comment: 특별 근무일 모드 — 모든 날짜 선택 가능
+        if (isExistingSpecial && existingTimeOff) {
+          // Confirm removal of existing 특별 근무일
+          setRemoveConfirm({
+            timeOffId: existingTimeOff.id,
+            reason: '특별 근무일',
+            dateStr,
+          });
+          return;
+        }
+        if (isExistingHoliday && existingTimeOff) {
+          // Confirm removal of existing 임의 휴일 (to allow special workday)
+          setRemoveConfirm({
+            timeOffId: existingTimeOff.id,
+            reason: '임의 휴일 해제',
+            dateStr,
+          });
+          return;
+        }
+      }
+      // Toggle selection
+      setSelectedDates((prev) =>
+        prev.includes(dateStr) ? prev.filter((x) => x !== dateStr) : [...prev, dateStr],
+      );
+    },
+    [holidayType],
+  );
 
   const handleSave = async () => {
     if (!designerId && holidayType === 'special') {
@@ -242,27 +318,49 @@ export default function HolidaySettingModal({
               if (d) {
                 setDesignerId(id);
                 setDesignerName(d.name);
+                // Comment: Auto-set shop for single-venue designers (non-directors)
+                const isDir = String(d.role || '').toLowerCase().includes('director');
+                const shopIds: number[] = d.shop_ids_at ?? (d.shop_id != null ? [d.shop_id] : []);
+                if (!isDir && shopIds.length === 1) {
+                  setTargetShopId(shopIds[0]);
+                }
               }
             }
             setSelectedDates([]);
           }}
         />
 
-        {shops.length > 0 && (
-          <Select
-            label="적용 매장 (지점)"
-            options={shopSelectOptions}
-            value={targetShopId != null ? String(targetShopId) : ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              setTargetShopId(v ? Number(v) : null);
-            }}
-          />
-        )}
-        <p className="text-xs text-gray-500 -mt-2">
-          Director는 모든 지점 예약 화면에 나오지만, 여기서 고른 지점에서만 임의 휴일·특별 근무일이 적용됩니다. 예: 목요일 Haymarket만 휴일로 두면
-          그날 해당 지점 예약에서는 숨겨지고 Meadowbank 등 다른 지점에서는 그대로 보입니다.
-        </p>
+        {(() => {
+          // Comment: Show shop selector only for "전체" or multi-venue designers (directors)
+          const selectedDesigner = designerId != null
+            ? allDesigners.find((d) => d.id === designerId)
+            : null;
+          const isMultiVenue =
+            designerId === null || // "전체" selected
+            (selectedDesigner &&
+              ((selectedDesigner.shop_ids_at?.length ?? 0) >= 2 ||
+                String(selectedDesigner.role || '').toLowerCase().includes('director')));
+
+          if (isMultiVenue && shops.length > 0) {
+            return (
+              <>
+                <Select
+                  label="적용 매장 (지점)"
+                  options={shopSelectOptions}
+                  value={targetShopId != null ? String(targetShopId) : ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setTargetShopId(v ? Number(v) : null);
+                  }}
+                />
+                <p className="text-xs text-gray-500 -mt-2">
+                  Director는 모든 지점 예약 화면에 나오지만, 여기서 고른 지점에서만 임의 휴일·특별 근무일이 적용됩니다.
+                </p>
+              </>
+            );
+          }
+          return null;
+        })()}
 
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1">유형</label>
@@ -353,10 +451,10 @@ export default function HolidaySettingModal({
                     days.push(d);
                   }
                   return days.map((d, index) => {
-                    const dateStr = d.toISOString().split('T')[0];
+                    const dateStr = toLocalDateStr(d);
                     const isCurrentMonth = d.getMonth() === month;
                     const isSelected = selectedDates.includes(dateStr);
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
+                    const isToday = dateStr === toLocalDateStr(new Date());
 
                     if (scheduleLoading) {
                       return (
@@ -413,18 +511,21 @@ export default function HolidaySettingModal({
                       !isExistingHoliday &&
                       !isExistingSpecial;
 
+                    // Comment: Determine if this cell should be disabled based on type mode
+                    const isDisabledCell =
+                      !isCurrentMonth ||
+                      (holidayType === 'holiday' && (isRegularHoliday || isExistingSpecial));
+
                     return (
                       <button
                         key={index}
                         type="button"
                         onClick={() => {
                           if (!isCurrentMonth) return;
-                          setSelectedDates((prev) =>
-                            prev.includes(dateStr) ? prev.filter((x) => x !== dateStr) : [...prev, dateStr],
-                          );
+                          handleDateClick(dateStr, existingTimeOff, isRegularHoliday, isExistingSpecial, isExistingHoliday);
                         }}
                         disabled={!isCurrentMonth}
-                        className={`aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'} ${displayClass} ${showTodayBorder ? 'border-2 border-blue-500' : ''}`}
+                        className={`aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : ''} ${isDisabledCell ? 'opacity-40 cursor-not-allowed' : 'text-gray-900'} ${displayClass} ${showTodayBorder ? 'border-2 border-blue-500' : ''}`}
                       >
                         {d.getDate()}
                       </button>
@@ -463,6 +564,25 @@ export default function HolidaySettingModal({
           저장하기
         </Button>
       </div>
+
+      {/* Confirm removal of existing time-off */}
+      <AlertModal
+        isOpen={removeConfirm !== null}
+        title="알림"
+        message={
+          removeConfirm
+            ? removeConfirm.reason === '임의 휴일'
+              ? `${designerName}의 임의 휴일을 근무일로 변경 하시겠습니까?`
+              : removeConfirm.reason === '임의 휴일 해제'
+                ? `자원 임의 휴일은 특별 근무일로 지정할 수 없습니다. 선택된 날짜를 임의 휴일에서 제외 하시겠습니까?`
+                : `${designerName}의 특별 근무일을 휴일로 변경 하시겠습니까?`
+            : ''
+        }
+        variant="confirm"
+        onConfirm={handleRemoveTimeOff}
+        onClose={() => setRemoveConfirm(null)}
+        zIndex={Z.MODAL_ALERT}
+      />
     </Modal>
   );
 }

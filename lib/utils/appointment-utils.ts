@@ -159,21 +159,29 @@ export function getSydneyToday(): string {
   return `${year}-${month}-${day}`;
 }
 
+// Comment: Format a Date object as YYYY-MM-DD in local timezone (avoids UTC offset issues with toISOString)
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Comment: Get week start date (Monday) for a given date
 export function getWeekStart(date: string): string {
-  const d = new Date(date);
+  const d = new Date(date + 'T00:00:00'); // Parse as local time, not UTC
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-  const monday = new Date(d.setDate(diff));
-  return monday.toISOString().split('T')[0];
+  d.setDate(diff);
+  return formatLocalDate(d);
 }
 
 // Comment: Get week end date (Sunday) for a given date
 export function getWeekEnd(date: string): string {
   const start = getWeekStart(date);
-  const end = new Date(start);
+  const end = new Date(start + 'T00:00:00'); // Parse as local time, not UTC
   end.setDate(end.getDate() + 6);
-  return end.toISOString().split('T')[0];
+  return formatLocalDate(end);
 }
 
 // Comment: Format date range for display (YYYY-MM-DD ~ MM-DD)

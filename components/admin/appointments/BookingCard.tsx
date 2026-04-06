@@ -233,7 +233,7 @@ function BookingCard({
           <p className={`text-xs font-bold ${statusColor.text} mb-0.5 flex items-center`}>
             {(b as any).color_label && COLOR_LABEL_MAP[(b as any).color_label] && (
               <span
-                className="inline-block w-2.5 h-2.5 rounded-sm mr-1 shrink-0"
+                className="inline-block w-3 h-3 rounded-sm mr-1 shrink-0"
                 style={{ backgroundColor: COLOR_LABEL_MAP[(b as any).color_label] }}
               />
             )}

@@ -442,13 +442,22 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
           options={roleOptions}
           placeholder="Select Role"
         />
-        <Select
-          label="Venue (Shop)"
-          value={formData.shop_id}
-          onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-          options={shopOptions}
-          placeholder="Select Venue"
-        />
+        {formData.role.toLowerCase().includes('director') ? (
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Venue (Shop)</label>
+            <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">
+              모든 매장 <span className="text-xs text-gray-400 ml-1">(요일별 매장은 예약 자원에서 설정)</span>
+            </div>
+          </div>
+        ) : (
+          <Select
+            label="Venue (Shop)"
+            value={formData.shop_id}
+            onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+            options={shopOptions}
+            placeholder="Select Venue"
+          />
+        )}
         <Select
           label="Wage Type"
           required
@@ -654,13 +663,22 @@ function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; de
           options={roleOptions}
           placeholder="Select Role"
         />
-        <Select
-          label="Venue (Shop)"
-          value={formData.shop_id}
-          onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-          options={shopOptions}
-          placeholder="Select Venue"
-        />
+        {formData.role.toLowerCase().includes('director') ? (
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Venue (Shop)</label>
+            <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">
+              모든 매장 <span className="text-xs text-gray-400 ml-1">(요일별 매장은 예약 자원에서 설정)</span>
+            </div>
+          </div>
+        ) : (
+          <Select
+            label="Venue (Shop)"
+            value={formData.shop_id}
+            onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+            options={shopOptions}
+            placeholder="Select Venue"
+          />
+        )}
         <Input
           label="Instagram URL"
           type="url"

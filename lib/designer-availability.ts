@@ -147,5 +147,13 @@ export async function getAvailableDesignerIdsForShop(
     specialWorkDesignerIds: new Set(designerIdsFromSpecialWork.map(Number)),
   });
 
-  return allDesignerIds;
+  // Comment: Filter out inactive/deleted designers — schedule rows may reference old designer IDs
+  const { data: activeRows } = await supabase
+    .from('designers')
+    .select('id')
+    .eq('is_active', true)
+    .in('id', allDesignerIds.map(Number));
+  const activeIdSet = new Set((activeRows || []).map((r: { id: number }) => Number(r.id)));
+
+  return allDesignerIds.filter((id) => activeIdSet.has(Number(id)));
 }

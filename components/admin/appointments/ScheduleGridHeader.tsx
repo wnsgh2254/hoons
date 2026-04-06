@@ -111,7 +111,7 @@ export default function ScheduleGridHeader({
                           className="grid border-b border-[#e2e8f0]"
                           style={{
                             gridTemplateColumns: shopGroups
-                              .map((g) => `repeat(${g.count}, minmax(150px, 1fr))`)
+                              .map((g) => `repeat(${g.count}, minmax(120px, 1fr))`)
                               .join(' '),
                           }}
                         >
@@ -126,7 +126,7 @@ export default function ScheduleGridHeader({
                           ))}
                         </div>
                       )}
-                      <div className="grid" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(150px, 1fr))` }}>
+                      <div className="grid" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(120px, 1fr))` }}>
                     {scheduleColumns.map((col, idx) => {
                       const designer = allDesigners.find((d) => d.id === col.designerId);
                       const designerId = designer?.id;
@@ -258,7 +258,7 @@ export default function ScheduleGridHeader({
           <span className="text-xs font-medium text-gray-600">시간</span>
         </div>
         {weekViewDesignerId ? (
-          <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}>
+          <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))' }}>
             {Array.from({ length: 7 }).map((_, dayIndex) => {
               const currentDate = new Date(weekViewStartDate);
               currentDate.setDate(currentDate.getDate() + dayIndex);

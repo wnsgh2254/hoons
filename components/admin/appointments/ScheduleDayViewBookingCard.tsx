@@ -3,7 +3,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
-import { resolveBookingCardStatusColor } from '@/lib/utils/appointment-utils';
+import { resolveBookingCardStatusColor, COLOR_LABEL_MAP } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 
 export interface ScheduleDayViewMenuHandlers {
@@ -143,7 +143,15 @@ function ScheduleDayViewBookingCard({
         )}
 
         <div>
-          <p className={`text-xs font-bold ${statusColor.text} mb-0.5`}>{customerName}</p>
+          <p className={`text-xs font-bold ${statusColor.text} mb-0.5 flex items-center`}>
+            {(booking as any).color_label && COLOR_LABEL_MAP[(booking as any).color_label] && (
+              <span
+                className="inline-block w-3 h-3 rounded-sm mr-1 shrink-0"
+                style={{ backgroundColor: COLOR_LABEL_MAP[(booking as any).color_label] }}
+              />
+            )}
+            <span className="truncate">{customerName}</span>
+          </p>
           <p className={`text-[11px] ${statusColor.text} opacity-70`}>{serviceName}</p>
         </div>
         <div className="flex items-center justify-between mt-1">

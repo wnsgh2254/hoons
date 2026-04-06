@@ -103,7 +103,7 @@ export default function ScheduleHeaderControls({
   onWeekNavigate,
 }: ScheduleHeaderControlsProps) {
   return (
-    <div className="bg-white border-b border-gray-200 shrink-0 relative z-[100]">
+    <div className="bg-white border-b border-gray-200 shrink-0 relative z-[150]">
       <div className="max-w-full mx-auto px-3 md:px-9.5">
         {/* Row 1 (always visible on all screens): date nav + MENU */}
         <div className="flex items-center gap-2 py-2">

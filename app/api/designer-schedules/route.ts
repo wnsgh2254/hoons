@@ -267,7 +267,16 @@ export async function GET(request: NextRequest) {
       console.log(`[designer-schedules] Special work day designers for ${date}:`, designerIdsFromSpecialWork);
     }
 
-    return NextResponse.json({ designerIds: allDesignerIds }, { status: 200 });
+    // Comment: Filter out inactive/deleted designers — schedule rows may reference old designer IDs
+    const { data: activeRows } = await supabase
+      .from('designers')
+      .select('id')
+      .eq('is_active', true)
+      .in('id', allDesignerIds.map(Number));
+    const activeIdSet = new Set((activeRows || []).map((r: { id: number }) => Number(r.id)));
+    const finalDesignerIds = allDesignerIds.filter((id) => activeIdSet.has(Number(id)));
+
+    return NextResponse.json({ designerIds: finalDesignerIds }, { status: 200 });
   } catch (error) {
     console.error('Error in designer-schedules route:', error);
     return NextResponse.json(

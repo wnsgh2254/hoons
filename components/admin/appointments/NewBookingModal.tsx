@@ -101,6 +101,10 @@ export default function NewBookingModal({
   const [bookingDate, setBookingDate] = useState(selectedDate);
   const [memo, setMemo] = useState('');
   const [colorLabel, setColorLabel] = useState<string | null>(null);
+  // Unregistered customer booking state
+  const [isUnregisteredBooking, setIsUnregisteredBooking] = useState(false);
+  const [unregisteredName, setUnregisteredName] = useState('');
+  const [unregisteredPhone, setUnregisteredPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Booking item picker state
@@ -299,10 +303,47 @@ export default function NewBookingModal({
     setIsCustomerDropdownOpen(false);
     setCustomerDetail(null);
     setCustomerStats({});
+    setMemo('');
+    setColorLabel(null);
+    setIsUnregisteredBooking(false);
+    setUnregisteredName('');
+    setUnregisteredPhone('');
   };
 
   const handleSubmit = async () => {
-    if (!selectedCustomerId) {
+    // Handle unregistered customer: create customer first
+    let finalCustomerId = selectedCustomerId;
+    if (isUnregisteredBooking) {
+      if (!unregisteredName.trim()) {
+        alert('고객명을 입력해주세요.');
+        return;
+      }
+      if (!unregisteredPhone.trim()) {
+        alert('휴대폰 번호를 입력해주세요.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: unregisteredName.trim(),
+            phone: unregisteredPhone.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || '고객 등록에 실패했습니다.');
+          return;
+        }
+        finalCustomerId = data.customer.id;
+      } catch {
+        alert('고객 등록에 실패했습니다.');
+        return;
+      }
+    }
+
+    if (!finalCustomerId) {
       alert('고객이 선택되지 않았습니다.');
       return;
     }
@@ -388,9 +429,10 @@ export default function NewBookingModal({
             fullDate: bookingDate,
             memo,
             colorLabel,
-            customerName: selectedCustomer?.name ?? null,
-            customerPhone: selectedCustomer?.phone ?? (customerSearch || null),
-            existingCustomerId: selectedCustomer?.id ?? selectedCustomerId ?? null,
+            customerName: isUnregisteredBooking ? unregisteredName.trim() : (selectedCustomer?.name ?? null),
+            customerPhone: isUnregisteredBooking ? unregisteredPhone.trim() : (selectedCustomer?.phone ?? (customerSearch || null)),
+            existingCustomerId: isUnregisteredBooking ? finalCustomerId : (selectedCustomer?.id ?? finalCustomerId ?? null),
+            status: 'BOOKED',
           }),
         });
 
@@ -480,7 +522,8 @@ export default function NewBookingModal({
           <Button
             loading={submitting}
             disabled={
-              !selectedCustomerId ||
+              (!selectedCustomerId && !isUnregisteredBooking) ||
+              (isUnregisteredBooking && (!unregisteredName.trim() || !unregisteredPhone.trim())) ||
               !shopId ||
               !bookingDate ||
               newBookingTimeSlots.length === 0 ||
@@ -493,7 +536,7 @@ export default function NewBookingModal({
         </>
       }
     >
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column: Customer Information */}
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -560,10 +603,9 @@ export default function NewBookingModal({
                 </div>
               )}
             </div>
-            <Button onClick={onOpenCustomerRegistration}>고객등록</Button>
           </div>
 
-          {selectedCustomerId && (selectedCustomerDetail || customerDetail) ? (
+          {!isUnregisteredBooking && selectedCustomerId && (selectedCustomerDetail || customerDetail) ? (
             <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
               {/* Customer header */}
               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
@@ -644,8 +686,50 @@ export default function NewBookingModal({
               </div>
             </div>
           ) : !selectedCustomerId ? (
-            <div className="text-xs text-gray-500">
-              <p>신규 고객은 먼저 고객을 등록하세요.</p>
+            <div className="space-y-3">
+              <div className="text-xs text-gray-500">
+                <p>신규 고객은 먼저 고객을 등록하세요.</p>
+                <p className="mt-1">고객을 등록하지 않고 예약 등록을 하시려면 &apos;미등록 고객 예약&apos;을 체크하세요.</p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isUnregisteredBooking}
+                  onChange={(e) => {
+                    setIsUnregisteredBooking(e.target.checked);
+                    if (!e.target.checked) {
+                      setUnregisteredName('');
+                      setUnregisteredPhone('');
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black accent-black"
+                />
+                <span className="text-sm font-medium text-gray-700">미등록 고객 예약</span>
+              </label>
+              {isUnregisteredBooking && (
+                <div className="border border-gray-200 rounded-xl bg-white p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 text-sm font-medium text-gray-700 shrink-0">고객명</label>
+                    <input
+                      type="text"
+                      value={unregisteredName}
+                      onChange={(e) => setUnregisteredName(e.target.value)}
+                      placeholder="이름을 입력하세요"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 text-sm font-medium text-gray-700 shrink-0">휴대폰 번호</label>
+                    <input
+                      type="tel"
+                      value={unregisteredPhone}
+                      onChange={(e) => setUnregisteredPhone(e.target.value.replace(/\D/g, ''))}
+                      placeholder="숫자만 입력해 주세요(- 제외)"
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ) : null}
         </div>

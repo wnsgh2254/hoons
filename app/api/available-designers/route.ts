@@ -153,10 +153,11 @@ export async function GET(request: NextRequest) {
         finalIds.push(id);
         continue;
       }
+      // Comment: Special workday designers bypass the default-shop restriction
+      if (specialWorkDesignerIds.has(id)) { finalIds.push(id); continue; }
       const def = defaultShop.get(id);
       if (def === undefined) continue;         // not configured → block
       if (def === sid) { finalIds.push(id); continue; }
-      if (specialWorkDesignerIds.has(id)) { finalIds.push(id); }
     }
 
     // Comment: Return only the details for qualifying designers

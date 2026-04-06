@@ -54,10 +54,12 @@ export async function filterDesignerIdsByDefaultVenueRule(
 
   return designerIds.filter((id) => {
     if (!multiVenue.has(id)) return true;
+    // Comment: Special workday designers bypass the default-shop restriction
+    if (specialWorkDesignerIds.has(id)) return true;
     const def = defaultShop.get(`${id}:${weekday}`);
     if (def === undefined) return false;
     if (Number(shopId) === def) return true;
-    return specialWorkDesignerIds.has(id);
+    return false;
   });
 }
 

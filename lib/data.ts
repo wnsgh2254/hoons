@@ -16,6 +16,9 @@ export interface PublicBookingPayload {
   // Comment: Optional custom service name/duration when not using a predefined service_id
   customServiceName?: string | null;
   customServiceDuration?: number | null;
+  memo?: string | null;
+  colorLabel?: string | null;
+  status?: string | null;
 }
 
 // Comment: Convert display time like "2:00 PM" to 24h "14:00:00" string for DB
@@ -116,6 +119,9 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
     customerId,
     customServiceName,
     customServiceDuration,
+    memo,
+    colorLabel,
+    status,
   } =
     payload;
 
@@ -135,11 +141,13 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
       service_id: serviceId,
       booking_date: bookingDate,
       booking_time: bookingTime,
-      status: 'pending', // Comment: Public booking starts as pending after deposit step
+      status: status || 'pending', // Comment: Admin bookings use 'BOOKED'; public bookings default to 'pending'
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
       custom_service_name: customServiceName ?? null,
       custom_service_duration: customServiceDuration ?? null,
+      memo: memo ?? null,
+      color_label: colorLabel ?? null,
     })
     .select()
     .single();

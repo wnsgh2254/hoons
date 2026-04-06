@@ -239,7 +239,7 @@ export default function WeekViewGrid({
   return (
     <div
       className="grid flex-1 bg-white relative"
-      style={{ gridTemplateColumns: 'repeat(7, minmax(150px, 1fr))' }}
+      style={{ gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))' }}
     >
       {/* Vertical column dividers for week view - positioned to extend full scrollable height */}
       {/* Note: These dividers are rendered at lines 1166-1179 in the original page. */}

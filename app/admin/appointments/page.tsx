@@ -246,6 +246,12 @@ export default function AppointmentsManagementPage() {
   const [isLeftPanelVisible, setIsLeftPanelVisible] = useState(true);
   useEffect(() => {
     if (window.innerWidth < 1024) setIsLeftPanelVisible(false);
+
+    const handleResize = () => {
+      if (window.innerWidth < 1024) setIsLeftPanelVisible(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Comment: REQ_SCH_001_02 - Designer filter state
@@ -2286,7 +2292,7 @@ export default function AppointmentsManagementPage() {
               <div className={`${isLeftPanelVisible ? 'lg:col-span-9' : 'lg:col-span-12'} col-span-1 flex flex-col gap-4 min-h-0`}>
 
                 {/* ===== MOBILE VIEW: list filtered by top controls ===== */}
-                <div className="flex flex-col gap-3 lg:hidden">
+                <div className="hidden flex-col gap-3">
                   {/* Booking list */}
                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                     {/* Date header */}
@@ -2433,7 +2439,7 @@ export default function AppointmentsManagementPage() {
                 {/* ===== DESKTOP VIEW: time grid (hidden on mobile) ===== */}
                 <div
                   ref={scheduleRef}
-                  className="hidden lg:flex flex-col flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
+                  className="flex flex-col flex-1 overflow-hidden bg-[#f8f9fc] relative rounded-2xl border border-gray-200 shadow-sm min-h-0"
                 >
                   {/* Loading overlay */}
                   {loadingDesignerAvailability && (
@@ -2442,6 +2448,23 @@ export default function AppointmentsManagementPage() {
                         <div className="w-12 h-12 border-4 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
                         <span className="text-sm font-medium text-gray-700">로딩 중...</span>
                       </div>
+                    </div>
+                  )}
+                  {/* Move mode banner */}
+                  {movingBooking && (
+                    <div className="flex items-center justify-center bg-sky-400 text-white px-4 py-2.5 rounded-t-2xl shrink-0 relative">
+                      <span className="text-sm font-medium leading-none">예약을 이동시킬 셀을 클릭하세요</span>
+                      <button
+                        type="button"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-white/80 transition-colors flex items-center justify-center"
+                        onClick={() => {
+                          setMovingBooking(null);
+                          setMoveTargetSlot(null);
+                          setIsMoveConfirmOpen(false);
+                        }}
+                      >
+                        <span className="material-symbols-outlined leading-none" style={{ fontSize: '20px' }}>close</span>
+                      </button>
                     </div>
                   )}
                   <div className="h-full overflow-auto relative" id="schedule-scroll-container">
@@ -2674,7 +2697,7 @@ export default function AppointmentsManagementPage() {
                           {weekDates.map((dateStr, dateIndex) => {
                             return (
                               <div key={dateStr} className="border-r border-[#e2e8f0] flex-1 relative" style={{ minWidth: `${scheduleColumns.length * 150}px`, minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}>
-                                <div className="grid relative" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(150px, 1fr))` }}>
+                                <div className="grid relative" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(120px, 1fr))` }}>
                                 {scheduleColumns.map((col, designerIndex) => {
                           const designer = allDesigners.find((d) => d.id === col.designerId);
                           const designerId = designer?.id;

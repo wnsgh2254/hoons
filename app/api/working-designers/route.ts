@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
+import { resolvePerShopTimeOffOutcomes, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
 
-// Comment: Get designers who are scheduled to work on a given date (and are active)
+// Comment: Get designers who are scheduled to work on a given date (and are active).
+// Optional shopId param enables per-shop time-off resolution.
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const dateParam = (searchParams.get('date') || '').trim();
+  const shopIdParam = searchParams.get('shopId');
 
   if (!dateParam) {
     return NextResponse.json({ designers: [] });
@@ -16,7 +20,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ designers: [] });
   }
 
-  const weekday = targetDate.getDay(); // 0 (Sun) - 6 (Sat)
+  const weekday = salonCalendarWeekdayIndex(dateParam);
+  const shopId = shopIdParam ? Number(shopIdParam) : null;
 
   try {
     // Comment: Load active designers
@@ -42,10 +47,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '근무 스케줄 정보를 불러오지 못했습니다.' }, { status: 500 });
     }
 
-    // Comment: Load time-off records to exclude designers on leave
+    // Comment: Load time-off records filtered by reason and date range
     const { data: timeOff, error: timeOffError } = await supabase
       .from('designer_time_off')
-      .select('designer_id, start_date, end_date');
+      .select('id, designer_id, shop_id, reason, created_at')
+      .in('reason', ['임의 휴일', '특별 근무일'])
+      .lte('start_date', dateParam)
+      .gte('end_date', dateParam);
 
     if (timeOffError) {
       console.error('Error fetching designer_time_off:', timeOffError);
@@ -73,30 +81,45 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const timeOffMap = new Map<number, { start_date: string; end_date: string }[]>();
-    (timeOff || []).forEach((t: any) => {
-      const id = Number(t.designer_id);
-      if (!timeOffMap.has(id)) {
-        timeOffMap.set(id, []);
-      }
-      timeOffMap.get(id)!.push({ start_date: t.start_date, end_date: t.end_date });
-    });
+    // Comment: Resolve time-off using per-shop logic when shopId is provided
+    if (shopId != null) {
+      const { specialWorkDesignerIds, arbitraryHolidayDesignerIds } =
+        resolvePerShopTimeOffOutcomes((timeOff || []) as VenueTimeOffRow[], shopId);
 
-    const isOnTimeOff = (designerId: number) => {
-      const records = timeOffMap.get(designerId);
-      if (!records || records.length === 0) return false;
-      return records.some((r) => {
-        const start = new Date(r.start_date);
-        const end = new Date(r.end_date);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(0, 0, 0, 0);
-        return start <= dateOnly && end >= dateOnly;
-      });
-    };
+      // Add special work day designers (they work even without regular schedule)
+      for (const id of specialWorkDesignerIds) {
+        workingDesignerIdSet.add(id);
+      }
+
+      // Remove arbitrary holiday designers
+      for (const id of arbitraryHolidayDesignerIds) {
+        workingDesignerIdSet.delete(id);
+      }
+    } else {
+      // Comment: Fallback for calls without shopId — treat all 임의 휴일 as exclusion
+      const arbitraryHolidayIds = new Set<number>();
+      const specialWorkIds = new Set<number>();
+
+      for (const t of (timeOff || []) as VenueTimeOffRow[]) {
+        const did = Number(t.designer_id);
+        if (t.reason === '임의 휴일') arbitraryHolidayIds.add(did);
+        else if (t.reason === '특별 근무일') specialWorkIds.add(did);
+      }
+
+      for (const id of specialWorkIds) {
+        workingDesignerIdSet.add(id);
+      }
+      for (const id of arbitraryHolidayIds) {
+        // Only exclude if there's no competing special work day
+        if (!specialWorkIds.has(id)) {
+          workingDesignerIdSet.delete(id);
+        }
+      }
+    }
 
     const workingDesigners = activeDesigners.filter((d: any) => {
       const id = Number(d.id);
-      return workingDesignerIdSet.has(id) && !isOnTimeOff(id);
+      return workingDesignerIdSet.has(id);
     });
 
     return NextResponse.json({
@@ -112,4 +135,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '근무 디자이너 정보를 불러오지 못했습니다.' }, { status: 500 });
   }
 }
-
