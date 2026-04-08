@@ -81,7 +81,7 @@ type ScheduleColumn = {
   columnShopId: number;
 };
 
-// Comment: Group bookings per grid column (designer + venue) — uses designerId to avoid name-collision bugs
+// Comment: Group bookings per grid. column (designer + venue) — uses designerId to avoid name-collision bugs
 function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): string {
   const designerId = b.designer?.id;
   const designer = designerId ? allDesigners.find((d) => d.id === designerId) : undefined;
