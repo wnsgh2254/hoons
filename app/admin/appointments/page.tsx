@@ -1224,78 +1224,45 @@ export default function AppointmentsManagementPage() {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [focusedBookingId]);
 
-  // Comment: Load options for New Booking modal when it opens (designers use shop-scoped schedules + per-venue holidays)
+  // Comment: Load New Booking options from already hydrated page data only (no extra API calls).
   useEffect(() => {
     if (!isNewBookingOpen) return;
-
     setNewBookingLoadingOptions(true);
+    // Shops/services are already hydrated at page load; just reflect them into modal state.
+    const shopsList = allShops;
+    setNewBookingShops(shopsList);
+    if (shopsList.length > 0) {
+      setNewBookingShopId((prev) => prev ?? shopsList[0].id);
+    }
 
-    const targetDate = newBookingDate || selectedDate;
+    const shopIdForSched =
+      newBookingShopId ??
+      (selectedShopFilter !== '전체' ? Number(selectedShopFilter) : null) ??
+      shopsList[0]?.id ??
+      null;
 
-    (async () => {
-      try {
-        const [shopsRes, servicesRes] = await Promise.all([
-          fetch('/api/shops'),
-          fetch('/api/services'),
-        ]);
-        const shopsJson = await shopsRes.json();
-        const servicesJson = await servicesRes.json();
+    if (shopIdForSched != null) {
+      // Use already loaded per-venue availability map.
+      // Note: availability map is hydrated for selectedDate and refreshed when selectedDate changes.
+      const availableIds = availableDesignerIdsByShop[shopIdForSched] || [];
+      const idSet = new Set<number>(availableIds);
+      const designersForModal = allDesigners
+        .filter((d) => idSet.has(d.id))
+        .filter((d) => designerBelongsToShop(d, shopIdForSched));
+      setNewBookingDesigners(designersForModal);
+    } else {
+      setNewBookingDesigners([]);
+    }
 
-        if (shopsRes.ok) {
-          const shops = shopsJson.shops || [];
-          setNewBookingShops(shops);
-          if (shops.length > 0) {
-            setNewBookingShopId((prev) => prev ?? shops[0].id);
-          }
-        } else {
-          console.error('Failed to load shops for new booking:', shopsJson.error);
-        }
-
-        if (servicesRes.ok) {
-          setNewBookingServices(servicesJson.services || []);
-        } else {
-          console.error('Failed to load services for new booking:', servicesJson.error);
-        }
-
-        const shopsList = shopsJson.shops || [];
-        const shopIdForSched =
-          newBookingShopId ??
-          (selectedShopFilter !== '전체' ? Number(selectedShopFilter) : null) ??
-          shopsList[0]?.id ??
-          null;
-
-        if (shopIdForSched != null) {
-          const schedRes = await fetch(
-            `/api/designer-schedules?date=${encodeURIComponent(targetDate)}&shopId=${shopIdForSched}`,
-          );
-          const schedJson = await schedRes.json();
-          if (schedRes.ok) {
-            const ids: number[] = schedJson.designerIds || [];
-            if (ids.length === 0) {
-              setNewBookingDesigners([]);
-            } else {
-              const q = ids.map((id) => encodeURIComponent(String(id))).join(',');
-              const desRes = await fetch(`/api/designers?ids=${q}`);
-              const desJson = await desRes.json();
-              if (desRes.ok) {
-                setNewBookingDesigners(desJson.designers || []);
-              } else {
-                setNewBookingDesigners([]);
-              }
-            }
-          } else {
-            setNewBookingDesigners([]);
-          }
-        } else {
-          setNewBookingDesigners([]);
-        }
-      } catch (e) {
-        console.error('New booking options load error:', e);
-      } finally {
-        setNewBookingLoadingOptions(false);
-      }
-    })();
-  }, [isNewBookingOpen, newBookingDate, selectedDate, newBookingShopId, selectedShopFilter]);
+    setNewBookingLoadingOptions(false);
+  }, [
+    isNewBookingOpen,
+    newBookingShopId,
+    selectedShopFilter,
+    allShops,
+    allDesigners,
+    availableDesignerIdsByShop,
+  ]);
 
   // Comment: Load designers and time off records when Time Off modal opens
   useEffect(() => {
@@ -1933,6 +1900,9 @@ export default function AppointmentsManagementPage() {
     () => ({
       onNewBooking: (booking) => {
         setNewBookingDate(booking.booking_date || selectedDate);
+        if (booking.shop_id != null) {
+          setNewBookingShopId(Number(booking.shop_id));
+        }
         if (booking.booking_time) {
           const [hourStr2, minuteStr2] = booking.booking_time.split(':');
           const hourNum2 = Number(hourStr2);
@@ -2568,6 +2538,9 @@ export default function AppointmentsManagementPage() {
                           menuOriginalPositionRef={menuOriginalPositionRef}
                           onOpenNewBooking={(data) => {
                             setNewBookingDate(data.date);
+                            if (data.shopId != null) {
+                              setNewBookingShopId(Number(data.shopId));
+                            }
                             setNewBookingTimeSlots([{
                               designerId: data.designerId ?? null,
                               time: data.time,

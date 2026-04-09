@@ -62,7 +62,7 @@ interface WeekViewGridProps {
   } | null) => void;
   menuCloseTimeoutRef: React.RefObject<NodeJS.Timeout | null>;
   menuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
-  onOpenNewBooking: (data: { date: string; designerId: number; time: string; directVisit?: boolean }) => void;
+  onOpenNewBooking: (data: { date: string; designerId: number; time: string; shopId?: number | null; directVisit?: boolean }) => void;
   setBookingRestrictions: React.Dispatch<React.SetStateAction<any[]>>;
   setRestrictionDesignerId: (id: number | null) => void;
   setRestrictionDesignerName: (name: string) => void;
@@ -995,7 +995,12 @@ export default function WeekViewGrid({
                       const dh = hNum > 12 ? hNum - 12 : hNum === 0 ? 12 : hNum;
                       bookingTime = `${dh}:${m} ${hNum >= 12 ? 'PM' : 'AM'}`;
                     }
-                    onOpenNewBooking({ date: bookingDate, designerId: booking.designer?.id || weekViewDesignerId || 0, time: bookingTime });
+                    onOpenNewBooking({
+                      date: bookingDate,
+                      designerId: booking.designer?.id || weekViewDesignerId || 0,
+                      time: bookingTime,
+                      shopId: Number((booking as any)?.shop_id) || null,
+                    });
                     closeMenu();
                   }}
                   onEditBooking={(booking) => {
