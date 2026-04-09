@@ -1900,6 +1900,19 @@ export default function AppointmentsManagementPage() {
     () => ({
       onNewBooking: (booking) => {
         setNewBookingDate(booking.booking_date || selectedDate);
+        const bookingCustomer = (booking as any)?.customer;
+        if (bookingCustomer?.id) {
+          const prefill = {
+            id: Number(bookingCustomer.id),
+            name: String(bookingCustomer.name || ''),
+            phone: bookingCustomer.phone ?? null,
+          };
+          setRegisteredCustomer(prefill);
+          setNewBookingSelectedCustomerId(prefill.id);
+        } else {
+          setRegisteredCustomer(null);
+          setNewBookingSelectedCustomerId(null);
+        }
         if (booking.shop_id != null) {
           setNewBookingShopId(Number(booking.shop_id));
         }
@@ -2538,6 +2551,18 @@ export default function AppointmentsManagementPage() {
                           menuOriginalPositionRef={menuOriginalPositionRef}
                           onOpenNewBooking={(data) => {
                             setNewBookingDate(data.date);
+                            if (data.customer?.id) {
+                              const prefill = {
+                                id: Number(data.customer.id),
+                                name: String(data.customer.name || ''),
+                                phone: data.customer.phone ?? null,
+                              };
+                              setRegisteredCustomer(prefill);
+                              setNewBookingSelectedCustomerId(prefill.id);
+                            } else {
+                              setRegisteredCustomer(null);
+                              setNewBookingSelectedCustomerId(null);
+                            }
                             if (data.shopId != null) {
                               setNewBookingShopId(Number(data.shopId));
                             }
@@ -3528,6 +3553,7 @@ export default function AppointmentsManagementPage() {
         setNewBookingSelectedCustomerId={setNewBookingSelectedCustomerId}
         setNewBookingCustomerSearchResults={setNewBookingCustomerSearchResults}
         setNewBookingIsCustomerSearching={setNewBookingIsCustomerSearching}
+        registeredCustomer={registeredCustomer}
       />
 
       {/* Appointment Detail Modal */}
