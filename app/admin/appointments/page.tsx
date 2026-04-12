@@ -60,18 +60,24 @@ import {
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
 
-// Comment: designer_shops + designers.shop_id — venue filter for schedule grid
-function designerBelongsToShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null }, shopId: number): boolean {
-  if (String(d.role || '').toLowerCase().includes('director')) return true;
-  const ids =
-    d.shop_ids_at && d.shop_ids_at.length > 0 ? d.shop_ids_at : d.shop_id != null ? [d.shop_id] : [];
-  return ids.includes(shopId);
+function isDirectorRole(role: string | null | undefined): boolean {
+  return String(role || '').toLowerCase().includes('director');
 }
 
-function sortKeyPrimaryShop(d: { shop_id?: number | null; shop_ids_at?: number[] }): number {
-  const ids =
-    d.shop_ids_at && d.shop_ids_at.length > 0 ? d.shop_ids_at : d.shop_id != null ? [d.shop_id] : [];
-  return ids.length ? Math.min(...ids) : 0;
+// Comment: Match admin/staff venue (designers.shop_id + shop name). Directors: every shop. Non-directors: home shop only (ignore designer_shops for column placement).
+function designerBelongsToShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null }, shopId: number): boolean {
+  if (isDirectorRole(d.role)) return true;
+  return d.shop_id != null && Number(d.shop_id) === shopId;
+}
+
+function sortKeyPrimaryShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null } | undefined): number {
+  if (!d) return 0;
+  if (isDirectorRole(d.role)) {
+    const ids =
+      d.shop_ids_at && d.shop_ids_at.length > 0 ? d.shop_ids_at : d.shop_id != null ? [d.shop_id] : [];
+    return ids.length ? Math.min(...ids) : 0;
+  }
+  return d.shop_id != null && Number.isFinite(Number(d.shop_id)) ? Number(d.shop_id) : 0;
 }
 
 type ScheduleColumn = {
@@ -87,13 +93,17 @@ function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): 
   const designer = designerId ? allDesigners.find((d) => d.id === designerId) : undefined;
   let sid = b.shop_id ?? null;
   if (sid == null && designer) {
-    const ids =
-      designer.shop_ids_at && designer.shop_ids_at.length > 0
-        ? designer.shop_ids_at
-        : designer.shop_id != null
-          ? [designer.shop_id]
-          : [];
-    sid = ids[0] ?? null;
+    if (isDirectorRole(designer.role)) {
+      const ids =
+        designer.shop_ids_at && designer.shop_ids_at.length > 0
+          ? designer.shop_ids_at
+          : designer.shop_id != null
+            ? [designer.shop_id]
+            : [];
+      sid = ids[0] ?? null;
+    } else {
+      sid = designer.shop_id != null ? Number(designer.shop_id) : null;
+    }
   }
   return `${designerId ?? 'unassigned'}::${sid === null ? 'null' : String(sid)}`;
 }
@@ -101,11 +111,11 @@ function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): 
 // Comment: Must stay in sync with bookingColumnKeyForGrid — both use designerId::shopId
 function columnKeyForBookingsLookup(
   col: ScheduleColumn,
-  designer: { shop_ids_at?: number[]; shop_id?: number | null } | undefined,
+  designer: { shop_ids_at?: number[]; shop_id?: number | null; role?: string | null } | undefined,
 ): string {
   const sid =
     col.columnShopId === 0
-      ? sortKeyPrimaryShop(designer as { shop_id?: number | null; shop_ids_at?: number[] }) || null
+      ? sortKeyPrimaryShop(designer) || null
       : col.columnShopId;
   return `${col.designerId}::${sid === null ? 'null' : String(sid)}`;
 }
@@ -227,7 +237,18 @@ export default function AppointmentsManagementPage() {
   const [isHolidayCalendarModalOpen, setIsHolidayCalendarModalOpen] = useState(false);
   const [holidayDesignerId, setHolidayDesignerId] = useState<number | null>(null);
   const [holidayDesignerName, setHolidayDesignerName] = useState<string>('전체');
+  /** When opening 휴일 모달 from a schedule column, use that venue (avoids wrong shop when filter is "전체"). */
+  const [holidayModalShopId, setHolidayModalShopId] = useState<number | null>(null);
   const [holidayCalendarRefreshKey, setHolidayCalendarRefreshKey] = useState(0);
+
+  const holidayModalDefaultShopId = useMemo(() => {
+    if (holidayModalShopId != null && holidayModalShopId > 0) return holidayModalShopId;
+    if (selectedShopFilter !== '전체') {
+      const n = Number(selectedShopFilter);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return allShops[0]?.id ?? null;
+  }, [holidayModalShopId, selectedShopFilter, allShops]);
 
   // Comment: Attendance (clock-in/out) modal state
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
@@ -1465,7 +1486,7 @@ export default function AppointmentsManagementPage() {
       });
   }, [mobileDesignerBookings, allDesigners]);
 
-  // Comment: One grid column per (designer, venue); multi-venue designers get one column per shop when "전체"
+  // Comment: One grid column per (designer, venue) when "전체"; non-directors use designers.shop_id only (same as admin/staff)
   const scheduleColumns = useMemo((): ScheduleColumn[] => {
     if (allDesigners.length === 0) return [];
 
@@ -1725,11 +1746,14 @@ export default function AppointmentsManagementPage() {
     setIsRestrictionModalOpen(true);
   }, [selectedDate]);
 
-  const handleOpenHolidayModal = useCallback((designerId: number, name: string) => {
+  const handleOpenHolidayModal = useCallback((designerId: number, name: string, columnShopId?: number) => {
     setHolidayDesignerId(designerId);
     setHolidayDesignerName(name);
+    setHolidayModalShopId(
+      columnShopId != null && Number.isFinite(columnShopId) && columnShopId > 0 ? columnShopId : null,
+    );
     setIsHolidayModalOpen(true);
-  }, [selectedDate]);
+  }, []);
 
   const handleOpenAttendanceModal = useCallback((designerId: number, name: string) => {
     setAttendanceModalDesignerId(designerId);
@@ -3877,14 +3901,13 @@ export default function AppointmentsManagementPage() {
         initialDesignerName={holidayDesignerName}
         allDesigners={allDesigners}
         shops={allShops}
-        defaultTargetShopId={
-          selectedShopFilter !== '전체' ? Number(selectedShopFilter) : allShops[0]?.id ?? null
-        }
+        defaultTargetShopId={holidayModalDefaultShopId}
         selectedDate={selectedDate}
         onClose={() => {
           setIsHolidayModalOpen(false);
           setHolidayDesignerId(null);
           setHolidayDesignerName('전체');
+          setHolidayModalShopId(null);
           setHolidayCalendarRefreshKey((k) => k + 1);
         }}
         onAvailableDesignerIdsChange={() => {
@@ -3914,6 +3937,7 @@ export default function AppointmentsManagementPage() {
         allDesigners={allDesigners}
         refreshKey={holidayCalendarRefreshKey}
         onOpenHolidayModal={(designerId, designerName) => {
+          setHolidayModalShopId(null);
           if (designerId === null) {
             setHolidayDesignerId(null);
             setHolidayDesignerName('전체');

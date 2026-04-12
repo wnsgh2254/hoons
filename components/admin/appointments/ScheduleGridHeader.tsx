@@ -22,7 +22,8 @@ interface ScheduleGridHeaderProps {
   onOpenWeekView: (designerId: number, designerName: string) => void;
   onCloseWeekView: () => void;
   onOpenRestriction: (designerId: number, designerName: string) => void;
-  onOpenHolidayModal: (designerId: number, designerName: string) => void;
+  /** columnShopId: venue of the header column (required when grid is "전체" so 휴일 모달 loads the right shop). */
+  onOpenHolidayModal: (designerId: number, designerName: string, columnShopId?: number) => void;
   onOpenAttendanceModal: (designerId: number, designerName: string) => void;
   canUseAttendanceManagement?: boolean;
   /** Precomputed grey-out (휴무) per grid column — includes multi-venue per-shop 임의 휴일 */
@@ -194,7 +195,11 @@ export default function ScheduleGridHeader({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onOpenHolidayModal(designerId, name);
+                                    onOpenHolidayModal(
+                                      designerId,
+                                      name,
+                                      col.columnShopId > 0 ? col.columnShopId : undefined,
+                                    );
                                     onDesignerDropdownToggle(null);
                                   }}
                                   className={`w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 ${canUseAttendanceManagement ? '' : 'last:rounded-b-lg'}`}

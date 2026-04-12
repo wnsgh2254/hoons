@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import AlertModal from '@/components/ui/AlertModal';
 import { Z } from '@/lib/constants';
+import { pickWinningTimeOffRow, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
 
 export type HolidayModalShopOption = { id: number; name: string };
 
@@ -52,6 +53,38 @@ function expandDateRange(startStr: string, endStr: string): string[] {
   return dates;
 }
 
+/** Overlapping venue 임의/특근 rows for dateStr; winner = latest created_at then highest id (same as designer-schedules API). */
+function winningVenueTimeOffOnDate(venueRows: any[], dateStr: string): any | null {
+  const overlapping = venueRows.filter(
+    (to: any) =>
+      (to.reason === '임의 휴일' || to.reason === '특별 근무일') &&
+      dateStr >= String(to.start_date).slice(0, 10) &&
+      dateStr <= String(to.end_date).slice(0, 10),
+  );
+  if (overlapping.length === 0) return null;
+  return pickWinningTimeOffRow(overlapping as VenueTimeOffRow[]);
+}
+
+/** Dates where the winning row for that day matches targetReason (not merely “any row covers the day”). */
+function datesWhereWinningReason(
+  venueRows: any[],
+  targetReason: '임의 휴일' | '특별 근무일',
+): string[] {
+  const applicable = venueRows.filter(
+    (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일',
+  );
+  const allDates = new Set<string>();
+  for (const to of applicable) {
+    expandDateRange(to.start_date, to.end_date).forEach((d) => allDates.add(d));
+  }
+  const out: string[] = [];
+  for (const d of allDates) {
+    const w = winningVenueTimeOffOnDate(applicable, d);
+    if (w?.reason === targetReason) out.push(d);
+  }
+  return Array.from(new Set(out)).sort();
+}
+
 export default function HolidaySettingModal({
   isOpen,
   initialDesignerId,
@@ -80,55 +113,74 @@ export default function HolidaySettingModal({
     [shops],
   );
 
-  useEffect(() => {
+  // Comment: Sync props before paint so the fetch effect never runs with a stale designerId (fixes intermittent empty schedule).
+  useLayoutEffect(() => {
     if (!isOpen) return;
     setDesignerId(initialDesignerId);
     setDesignerName(initialDesignerName);
     setHolidayType('holiday');
     setCurrentMonth(new Date());
     setTargetShopId(
-      defaultTargetShopId != null && Number.isFinite(Number(defaultTargetShopId))
+      defaultTargetShopId != null &&
+        Number.isFinite(Number(defaultTargetShopId)) &&
+        Number(defaultTargetShopId) > 0
         ? Number(defaultTargetShopId)
         : shops[0]?.id ?? null,
     );
   }, [isOpen, initialDesignerId, initialDesignerName, defaultTargetShopId, shops]);
 
+  // Comment: Load weekday schedule + venue time-offs together; ignore stale responses when designer or open state changes.
   useEffect(() => {
     if (!isOpen) return;
-    if (designerId !== null) {
-      const fetchData = async () => {
-        setScheduleLoading(true);
-        try {
-          const scheduleRes = await fetch(`/api/designer-schedules?designer_id=${designerId}`);
-          const scheduleData = await scheduleRes.json();
-          if (scheduleRes.ok) {
-            setRegularSchedule(scheduleData.schedules || []);
-          }
-          const timeOffRes = await fetch(`/api/designer-time-off?designer_id=${designerId}`);
-          const timeOffData = await timeOffRes.json();
-          if (timeOffRes.ok) {
-            const raw = (timeOffData.timeOffs || []).filter(
-              (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일',
-            );
-            setAllDesignerTimeOffs(raw);
-          } else {
-            setAllDesignerTimeOffs([]);
-          }
-        } catch (error) {
-          console.error('Error fetching holiday data:', error);
+
+    if (designerId === null) {
+      setRegularSchedule([]);
+      setAllDesignerTimeOffs([]);
+      setScheduleLoading(false);
+      setSelectedDates([]);
+      return;
+    }
+
+    const loadDesignerId = designerId;
+    let cancelled = false;
+
+    setScheduleLoading(true);
+    void (async () => {
+      try {
+        const [scheduleRes, timeOffRes] = await Promise.all([
+          fetch(`/api/designer-schedules?designer_id=${loadDesignerId}`),
+          fetch(`/api/designer-time-off?designer_id=${loadDesignerId}`),
+        ]);
+
+        const [scheduleData, timeOffData] = await Promise.all([scheduleRes.json(), timeOffRes.json()]);
+
+        if (cancelled) return;
+
+        setRegularSchedule(scheduleRes.ok ? scheduleData.schedules || [] : []);
+        if (timeOffRes.ok) {
+          const raw = (timeOffData.timeOffs || []).filter(
+            (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일',
+          );
+          setAllDesignerTimeOffs(raw);
+        } else {
+          setAllDesignerTimeOffs([]);
+        }
+      } catch (error) {
+        console.error('Error fetching holiday data:', error);
+        if (!cancelled) {
           setRegularSchedule([]);
           setAllDesignerTimeOffs([]);
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setScheduleLoading(false);
         }
-      };
-      void fetchData();
-    } else {
-      setRegularSchedule([]);
-      setScheduleLoading(false);
-      setAllDesignerTimeOffs([]);
-      setSelectedDates([]);
-    }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, designerId]);
 
   const existingTimeOffsForVenue = useMemo(() => {
@@ -140,17 +192,11 @@ export default function HolidaySettingModal({
     );
   }, [allDesignerTimeOffs, designerId, targetShopId]);
 
-  // Comment: Re-populate selectedDates when type, venue, or designer changes — only show dates for the current type
+  // Comment: Re-populate selectedDates when type, venue, or designer changes — winner per day (latest row) must match current type
   useEffect(() => {
     if (!isOpen || designerId === null || targetShopId === null) return;
     const targetReason = holidayType === 'holiday' ? '임의 휴일' : '특별 근무일';
-    const dates: string[] = [];
-    existingTimeOffsForVenue.forEach((to: any) => {
-      if (to.reason === targetReason) {
-        dates.push(...expandDateRange(to.start_date, to.end_date));
-      }
-    });
-    setSelectedDates(Array.from(new Set(dates)));
+    setSelectedDates(datesWhereWinningReason(existingTimeOffsForVenue, targetReason));
   }, [isOpen, designerId, targetShopId, existingTimeOffsForVenue, holidayType]);
 
   useEffect(() => {
@@ -468,8 +514,11 @@ export default function HolidaySettingModal({
                             );
                           }}
                           disabled={!isCurrentMonth}
-                          className={`aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'} ${isSelected ? (holidayType === 'holiday' ? 'border-2 border-red-500 bg-white text-gray-900' : 'bg-blue-500 text-white') : 'hover:bg-gray-100'} ${isToday && !isSelected ? 'border-2 border-blue-500' : ''}`}
+                          className={`relative aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'} ${isSelected ? (holidayType === 'holiday' ? 'border-2 border-red-500 bg-white text-gray-900' : 'bg-blue-500 text-white') : 'hover:bg-gray-100'}`}
                         >
+                          {isToday && isCurrentMonth && (
+                            <span className="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500" aria-hidden />
+                          )}
                           {d.getDate()}
                         </button>
                       );
@@ -482,12 +531,7 @@ export default function HolidaySettingModal({
                         : false;
                     const isRegularHoliday = isCurrentMonth && !hasRegularSchedule && designerId !== null;
 
-                    const existingTimeOff = existingTimeOffsForVenue.find((to: any) => {
-                      const start = new Date(to.start_date);
-                      const end = new Date(to.end_date);
-                      const current = new Date(dateStr);
-                      return current >= start && current <= end;
-                    });
+                    const existingTimeOff = winningVenueTimeOffOnDate(existingTimeOffsForVenue, dateStr);
                     const isExistingHoliday = existingTimeOff?.reason === '임의 휴일';
                     const isExistingSpecial = existingTimeOff?.reason === '특별 근무일';
                     const isNewlySelectedHoliday = isSelected && holidayType === 'holiday';
@@ -504,12 +548,8 @@ export default function HolidaySettingModal({
                       displayClass = 'hover:bg-gray-100';
                     }
 
-                    const showTodayBorder =
-                      isToday &&
-                      !isSelected &&
-                      !isRegularHoliday &&
-                      !isExistingHoliday &&
-                      !isExistingSpecial;
+                    // Comment: "Today" = small corner dot (blue border looked like 특별 근무일 in the legend)
+                    const showTodayDot = isToday && isCurrentMonth;
 
                     // Comment: Determine if this cell should be disabled based on type mode
                     const isDisabledCell =
@@ -525,8 +565,14 @@ export default function HolidaySettingModal({
                           handleDateClick(dateStr, existingTimeOff, isRegularHoliday, isExistingSpecial, isExistingHoliday);
                         }}
                         disabled={!isCurrentMonth}
-                        className={`aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : ''} ${isDisabledCell ? 'opacity-40 cursor-not-allowed' : 'text-gray-900'} ${displayClass} ${showTodayBorder ? 'border-2 border-blue-500' : ''}`}
+                        className={`relative aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : ''} ${isDisabledCell ? 'opacity-40 cursor-not-allowed' : 'text-gray-900'} ${displayClass}`}
                       >
+                        {showTodayDot && (
+                          <span
+                            className="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500"
+                            aria-hidden
+                          />
+                        )}
                         {d.getDate()}
                       </button>
                     );
@@ -547,7 +593,9 @@ export default function HolidaySettingModal({
                   <span className="text-gray-700">특별 근무일 (선택 지점)</span>
                 </div>
               </div>
-              <p className="text-xs text-gray-500 mt-4">*날짜를 선택하면 등록/수정이 가능합니다.</p>
+              <p className="text-xs text-gray-500 mt-4">
+                *날짜를 선택하면 등록/수정이 가능합니다. 셀 우측 상단의 작은 파란 점은 오늘 날짜입니다.
+              </p>
             </>
           )}
         </div>

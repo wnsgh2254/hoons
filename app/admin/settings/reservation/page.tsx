@@ -366,14 +366,17 @@ function ResourceModal({
   title,
   shops,
   staffList,
+  saveInProgress = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Omit<BookingResource, 'id'>) => void;
+  onSave: (data: Omit<BookingResource, 'id'>) => void | Promise<void>;
   initial?: BookingResource;
   title: string;
   shops: ShopOption[];
   staffList: { id: number; name: string }[];
+  /** When true, save/cancel reflect an async save (edit flow). */
+  saveInProgress?: boolean;
 }) {
   const [isLinked, setIsLinked] = useState(initial?.isLinked ?? true);
   const [linkedStaff, setLinkedStaff] = useState(initial?.linkedStaff || '');
@@ -387,6 +390,7 @@ function ResourceModal({
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
+    if (saveInProgress) return;
     if (!name.trim()) {
       setError('자원명을 입력해주세요.');
       return;
@@ -427,8 +431,12 @@ function ResourceModal({
       zIndex={Z.MODAL_PRIMARY}
       footer={
         <>
-          <Button onClick={handleSave} className="flex-1">저장</Button>
-          <Button variant="outline" onClick={onClose} className="flex-1">취소</Button>
+          <Button loading={saveInProgress} onClick={handleSave} className="flex-1">
+            저장
+          </Button>
+          <Button variant="outline" disabled={saveInProgress} onClick={onClose} className="flex-1">
+            취소
+          </Button>
         </>
       }
     >
@@ -564,6 +572,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
   const [showInactive, setShowInactive] = useState(false);
   const [editingResource, setEditingResource] = useState<BookingResource | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [resourceSavePending, setResourceSavePending] = useState(false);
 
   const shopNameMap = Object.fromEntries((shops || []).map((s) => [s.id, s.name]));
   const filteredResources = showInactive ? resources : resources.filter((r) => r.isActive);
@@ -668,6 +677,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
 
   const handleUpdate = async (data: Omit<BookingResource, 'id'>) => {
     if (!editingResource) return;
+    setResourceSavePending(true);
     try {
       // Update shop_id via staff API
       await fetch(`/api/staff?id=${editingResource.id}`, {
@@ -757,8 +767,10 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       fetchResources();
     } catch (err) {
       console.error('Error updating resource:', err);
+    } finally {
+      setResourceSavePending(false);
+      setEditingResource(null);
     }
-    setEditingResource(null);
   };
 
   const columns = [
@@ -851,12 +863,15 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       {editingResource && (
         <ResourceModal
           isOpen
-          onClose={() => setEditingResource(null)}
+          onClose={() => {
+            if (!resourceSavePending) setEditingResource(null);
+          }}
           onSave={handleUpdate}
           initial={editingResource}
           title="자원 수정"
           shops={shops}
           staffList={staffList}
+          saveInProgress={resourceSavePending}
         />
       )}
     </div>
