@@ -28,24 +28,41 @@ function normalizeCategory(cat: string): string {
   return CATEGORY_NORMALIZE_MAP[cat] || cat;
 }
 
+export type PickerSelectedItem = {
+  id: number;
+  name: string;
+  price: number;
+  type: SalesItemType;
+  manager?: string;
+  /** Comment: Prepaid credit (적립 금액) — persisted to prepaid_passes on sale POST */
+  prepaid_credit_points?: number;
+  prepaid_expires_at?: string | null;
+};
+
 interface SalesItemPickerModalProps {
   isOpen: boolean;
   activeTab: SalesItemType;
   onClose: () => void;
-  onSelect: (item: {
-    id: number;
-    name: string;
-    price: number;
-    type: SalesItemType;
-    manager?: string;
-  } | Array<{
-    id: number;
-    name: string;
-    price: number;
-    type: SalesItemType;
-    manager?: string;
-  }>) => void;
+  onSelect: (item: PickerSelectedItem | PickerSelectedItem[]) => void;
   title?: string;
+}
+
+/** Comment: Build ISO expiry from validity UI (null = unlimited / not set) */
+function buildPrepaidExpiresAtIso(
+  isUnlimited: boolean,
+  period: number | null,
+  unit: 'month' | 'day',
+): string | null {
+  if (isUnlimited || period == null || !Number.isFinite(period) || period <= 0) {
+    return null;
+  }
+  const d = new Date();
+  if (unit === 'month') {
+    d.setMonth(d.getMonth() + Math.floor(period));
+  } else {
+    d.setDate(d.getDate() + Math.floor(period));
+  }
+  return d.toISOString();
 }
 
 type SelectedItem = {
@@ -145,14 +162,24 @@ export default function SalesItemPickerModal({
       }));
       // 모든 항목을 배열로 한 번에 전달 (parent onSelect closes modal)
       onSelect(itemsWithManager);
-    } else if (activeTab === 'prepaid' && selectedPrepaid && customPrice) {
-      // 정액권 탭인 경우 선택한 정액권 정보를 전달
-      const prepaidItem = {
-        id: Date.now(), // 임시 ID 생성
+    } else if (activeTab === 'prepaid' && selectedPrepaid && customPrice !== '') {
+      if (accumulatedAmount === '') {
+        alert('적립 금액을 입력해 주세요.');
+        return;
+      }
+      const credit = Math.round(Number(accumulatedAmount));
+      if (!Number.isFinite(credit) || credit < 1) {
+        alert('적립 금액은 1 이상의 숫자로 입력해 주세요.');
+        return;
+      }
+      const prepaidItem: PickerSelectedItem = {
+        id: Date.now(),
         name: selectedPrepaid,
         price: Number(customPrice) || 0,
-        type: 'prepaid' as const,
+        type: 'prepaid',
         manager: selectedManager,
+        prepaid_credit_points: credit,
+        prepaid_expires_at: buildPrepaidExpiresAtIso(isUnlimited, validityPeriod, validityUnit),
       };
       onSelect(prepaidItem);
     } else {

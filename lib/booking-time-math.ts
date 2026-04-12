@@ -34,6 +34,12 @@ export type DesignerAvailabilityIntervals = {
   fullDayBlocked: boolean;
   restrictionIntervals: { start: number; end: number }[];
   bookingIntervals: { start: number; end: number }[];
+  /**
+   * When set and non-empty: slot [start, start+duration) must lie fully inside at least one interval.
+   * Mirrors designer_schedules for this shop+weekday (admin working hours).
+   * Omitted or null: no designer-specific window (same as legacy shop-hours-only behaviour).
+   */
+  workingIntervals?: { start: number; end: number }[] | null;
 };
 
 /** Comment: True if starting at slotStartMin for newDurationMin would overlap restrictions or existing bookings */
@@ -46,6 +52,12 @@ export function isStartSlotUnavailable(
   if (newDurationMin <= 0) return false;
   const aStart = slotStartMin;
   const aEnd = slotStartMin + newDurationMin;
+  // Comment: Enforce per-designer working window from designer_schedules (this shop + weekday)
+  const windows = data.workingIntervals;
+  if (windows && windows.length > 0) {
+    const inside = windows.some((w) => aStart >= w.start && aEnd <= w.end);
+    if (!inside) return true;
+  }
   for (const r of data.restrictionIntervals) {
     if (intervalsOverlap(aStart, aEnd, r.start, r.end)) return true;
   }

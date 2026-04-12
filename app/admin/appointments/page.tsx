@@ -571,7 +571,6 @@ export default function AppointmentsManagementPage() {
   }, [selectedDate]);
 
   const monthKey = selectedDate.slice(0, 7); // YYYY-MM
-  const skipNextTempSaleRefreshRef = useRef(false);
 
   // Track what date/month was already loaded by the initial-data API
   // so that dependent effects can skip their own fetches on the first render.
@@ -602,7 +601,6 @@ export default function AppointmentsManagementPage() {
         setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
 
         const nextBookings = data.bookings || [];
-        skipNextTempSaleRefreshRef.current = true;
         setBookings(nextBookings);
         setFilteredBookings(nextBookings);
         setTempSaleBookingIds(new Set<number>(data.tempSaleBookingIds || []));
@@ -866,35 +864,7 @@ export default function AppointmentsManagementPage() {
     }
   }, []);
 
-  // 임시저장 목록 갱신
-  const refreshTempSaleBookingIds = async () => {
-    try {
-      const bookingIds = bookings.map((b: any) => b.id).filter(Boolean);
-      if (bookingIds.length === 0) {
-        setTempSaleBookingIds(new Set());
-        return;
-      }
-      const response = await fetch(`/api/temp-sales?booking_ids=${bookingIds.join(',')}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTempSaleBookingIds(new Set(data.booking_ids || []));
-      }
-    } catch {
-      // 실패해도 무시
-    }
-  };
-
-  // 예약 데이터 로드 시 임시저장 목록도 조회
-  useEffect(() => {
-    if (!initialDataReady) return;
-    if (bookings.length > 0) {
-      if (skipNextTempSaleRefreshRef.current) {
-        skipNextTempSaleRefreshRef.current = false;
-        return;
-      }
-      refreshTempSaleBookingIds();
-    }
-  }, [bookings, initialDataReady]);
+  // Comment: tempSaleBookingIds — seeded from initial-data; updated locally on temp save / delete / sale complete (no bulk booking_ids fetch)
 
   // Comment: Handle customer selection from autocomplete
   const handleCustomerSelect = useCallback(
@@ -4085,13 +4055,17 @@ export default function AppointmentsManagementPage() {
         bookingId={salesLinkedBookingId ?? currentTempSaleBookingId}
         bookingDepositPaid={salesLinkedDepositPaid}
         tempSaveData={currentTempSaleData}
-        onTemporarySave={() => {
-          refreshTempSaleBookingIds();
+        onTemporarySave={(bid) => {
+          setTempSaleBookingIds((prev) => new Set([...prev, bid]));
           setCurrentTempSaleBookingId(null);
           setCurrentTempSaleData(null);
         }}
-        onDeleteTempSave={() => {
-          refreshTempSaleBookingIds();
+        onDeleteTempSave={(bid) => {
+          setTempSaleBookingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(bid);
+            return next;
+          });
           setCurrentTempSaleBookingId(null);
           setCurrentTempSaleData(null);
         }}

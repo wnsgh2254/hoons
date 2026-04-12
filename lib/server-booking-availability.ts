@@ -9,6 +9,60 @@ import { resolvePerShopTimeOffOutcomes, type VenueTimeOffRow } from '@/lib/desig
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import { assertMultiVenueDefaultShopAllowsBooking } from '@/lib/multi-venue-default-shop';
 
+/** Comment: Merge overlapping [start,end) minute intervals from midnight */
+function mergeMinuteIntervals(intervals: { start: number; end: number }[]): { start: number; end: number }[] {
+  if (intervals.length === 0) return [];
+  const sorted = [...intervals].sort((a, b) => a.start - b.start);
+  const out: { start: number; end: number }[] = [];
+  let cur = { ...sorted[0]! };
+  for (let i = 1; i < sorted.length; i++) {
+    const n = sorted[i]!;
+    if (n.start <= cur.end) {
+      cur.end = Math.max(cur.end, n.end);
+    } else {
+      out.push(cur);
+      cur = { ...n };
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * Comment: Working hours at this shop for this calendar date — from designer_schedules (same source as admin).
+ * Returns null when there is no row for this shop (e.g. special-work-only without a local schedule); caller keeps shop-hour-only behaviour.
+ */
+export async function loadDesignerWorkingIntervalsForShopDate(
+  supabase: SupabaseClient,
+  params: { designerId: number; shopId: number; date: string },
+): Promise<{ start: number; end: number }[] | null> {
+  const weekday = salonCalendarWeekdayIndex(params.date);
+  const { data, error } = await supabase
+    .from('designer_schedules')
+    .select('start_time, end_time')
+    .eq('designer_id', params.designerId)
+    .eq('shop_id', params.shopId)
+    .eq('weekday', weekday)
+    .lte('effective_from', params.date)
+    .or(`effective_to.is.null,effective_to.gte.${params.date}`);
+
+  if (error) {
+    console.error('loadDesignerWorkingIntervalsForShopDate:', error);
+    return null;
+  }
+  const raw: { start: number; end: number }[] = [];
+  for (const row of data || []) {
+    const r = row as { start_time?: string | null; end_time?: string | null };
+    const start = dbTimeStringToMinutes(r.start_time);
+    const end = dbTimeStringToMinutes(r.end_time);
+    if (end > start) {
+      raw.push({ start, end });
+    }
+  }
+  if (raw.length === 0) return null;
+  return mergeMinuteIntervals(raw);
+}
+
 // Comment: DB stores mixed case (e.g. cancelled, CANCELLED) — match Supabase live data
 function isCancelledStatus(status: string | null | undefined): boolean {
   const n = (status || '').toString().trim().toLowerCase();
@@ -40,6 +94,12 @@ export async function loadDesignerAvailabilityForPublicBooking(
 ): Promise<DesignerAvailabilityIntervals> {
   const { designerId, shopId, date } = params;
 
+  const workingIntervals = await loadDesignerWorkingIntervalsForShopDate(supabase, {
+    designerId,
+    shopId,
+    date,
+  });
+
   const { data: restrictions, error: rErr } = await supabase
     .from('booking_restrictions')
     .select('id, designer_id, restriction_type, restriction_date, start_time, end_time')
@@ -68,7 +128,12 @@ export async function loadDesignerAvailabilityForPublicBooking(
   }
 
   if (fullDayBlocked) {
-    return { fullDayBlocked: true, restrictionIntervals: [], bookingIntervals: [] };
+    return {
+      fullDayBlocked: true,
+      restrictionIntervals: [],
+      bookingIntervals: [],
+      workingIntervals: workingIntervals ?? undefined,
+    };
   }
 
   const { data: bookings, error: bErr } = await supabase
@@ -92,7 +157,12 @@ export async function loadDesignerAvailabilityForPublicBooking(
     bookingIntervals.push({ start, end: start + dur });
   }
 
-  return { fullDayBlocked: false, restrictionIntervals, bookingIntervals };
+  return {
+    fullDayBlocked: false,
+    restrictionIntervals,
+    bookingIntervals,
+    workingIntervals: workingIntervals ?? undefined,
+  };
 }
 
 /** Comment: Resolve duration for overlap check (client may send explicit minutes) */

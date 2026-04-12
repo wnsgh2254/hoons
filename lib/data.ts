@@ -578,6 +578,50 @@ export async function createPrepaidPass(payload: {
   return data;
 }
 
+/**
+ * Comment: Issue a new prepaid_passes row for a customer after a prepaid product sale (sales flow).
+ * Uses explicit customer_id so balance stays in sync even if phone lookup would fail.
+ */
+export async function issuePrepaidPassFromSale(params: {
+  customerId: number;
+  passLabel: string;
+  creditPoints: number;
+  expiresAt?: string | null;
+}) {
+  const credit = Math.round(Number(params.creditPoints) || 0);
+  if (credit <= 0) {
+    throw new Error('정액권 적립 포인트는 1 이상이어야 합니다.');
+  }
+  const { data: cust, error: custErr } = await supabase
+    .from('customers')
+    .select('phone')
+    .eq('id', params.customerId)
+    .maybeSingle();
+  if (custErr) {
+    throw new Error(custErr.message);
+  }
+  const normalizedPhone = String(cust?.phone || '').replace(/\D/g, '') || null;
+
+  const { data, error } = await supabase
+    .from('prepaid_passes')
+    .insert({
+      name: String(params.passLabel || '정액권').trim(),
+      phone: normalizedPhone,
+      customer_id: params.customerId,
+      email: null,
+      points: credit,
+      is_active: true,
+      expires_at: params.expiresAt || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data;
+}
+
 // Comment: Update a prepaid pass member
 export async function updatePrepaidPass(
   id: number,

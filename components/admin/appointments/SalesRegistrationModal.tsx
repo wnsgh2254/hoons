@@ -41,6 +41,9 @@ type SalesItem = {
   manager: string;
   salesClassification: string;
   prepaidDeduction: number;
+  /** Comment: Prepaid product — credit issued to prepaid_passes on sale POST */
+  prepaidCreditPoints?: number;
+  prepaidExpiresAt?: string | null;
 };
 
 interface SalesRegistrationModalProps {
@@ -63,8 +66,9 @@ interface SalesRegistrationModalProps {
   /** Already-paid deposit for linked booking (AUD); reduces net due / 합계 */
   bookingDepositPaid?: number | null;
   tempSaveData?: TempSalesData | null;
-  onTemporarySave?: () => void;
-  onDeleteTempSave?: () => void;
+  /** Comment: Called after temp save/delete so parent can update temp-sale flags without bulk fetch */
+  onTemporarySave?: (bookingId: number) => void;
+  onDeleteTempSave?: (bookingId: number) => void;
 }
 
 export default function SalesRegistrationModal({
@@ -257,6 +261,8 @@ export default function SalesRegistrationModal({
     price: number;
     type: 'service' | 'product' | 'prepaid';
     manager?: string;
+    prepaid_credit_points?: number;
+    prepaid_expires_at?: string | null;
   }) => {
     const newSalesItem: SalesItem = {
       id: `${item.type}-${item.id}-${Date.now()}`,
@@ -271,6 +277,14 @@ export default function SalesRegistrationModal({
       manager: item.manager || '',
       salesClassification: '',
       prepaidDeduction: 0,
+      prepaidCreditPoints:
+        item.type === 'prepaid' ? Math.round(Number(item.prepaid_credit_points ?? 0)) : undefined,
+      prepaidExpiresAt:
+        item.type === 'prepaid' && item.prepaid_expires_at != null
+          ? String(item.prepaid_expires_at)
+          : item.type === 'prepaid'
+            ? null
+            : undefined,
     };
     setSalesItems(prev => {
       const updatedItems = [...prev, newSalesItem];
@@ -361,6 +375,8 @@ export default function SalesRegistrationModal({
           manager: item.manager,
           salesClassification: item.salesClassification,
           prepaidDeduction: item.prepaidDeduction,
+          prepaidCreditPoints: item.prepaidCreditPoints,
+          prepaidExpiresAt: item.prepaidExpiresAt,
         }));
         setSalesItems(mappedItems);
         setMemo(tempSaveData.memo);
@@ -494,6 +510,12 @@ export default function SalesRegistrationModal({
             manager: item.manager,
             sales_classification: item.salesClassification,
             prepaid_deduction: item.prepaidDeduction,
+            ...(item.type === 'prepaid'
+              ? {
+                  prepaid_credit_points: item.prepaidCreditPoints ?? 0,
+                  prepaid_expires_at: item.prepaidExpiresAt ?? null,
+                }
+              : {}),
           })),
           sales_amount: salesAmount,
           discount_amount: discountAmount,
@@ -516,7 +538,7 @@ export default function SalesRegistrationModal({
       if (bookingId) {
         try {
           await fetch(`/api/temp-sales?booking_id=${bookingId}`, { method: 'DELETE' });
-          onDeleteTempSave?.();
+          onDeleteTempSave?.(bookingId);
         } catch {
           // 임시저장 삭제 실패해도 판매는 완료된 것으로 처리
         }
@@ -627,6 +649,12 @@ export default function SalesRegistrationModal({
           manager: item.manager,
           salesClassification: item.salesClassification,
           prepaidDeduction: item.prepaidDeduction,
+          ...(item.type === 'prepaid'
+            ? {
+                prepaidCreditPoints: item.prepaidCreditPoints,
+                prepaidExpiresAt: item.prepaidExpiresAt ?? null,
+              }
+            : {}),
         })),
         paymentAmounts,
         pointAccumulation,
@@ -650,7 +678,7 @@ export default function SalesRegistrationModal({
         throw new Error('임시 저장에 실패했습니다.');
       }
 
-      onTemporarySave?.();
+      onTemporarySave?.(bookingId);
       onClose();
     } catch (error: any) {
       console.error('임시 저장 오류:', error);
@@ -674,7 +702,7 @@ export default function SalesRegistrationModal({
         throw new Error('임시저장 삭제에 실패했습니다.');
       }
 
-      onDeleteTempSave?.();
+      onDeleteTempSave?.(bookingId);
       onClose();
     } catch (error: any) {
       console.error('임시저장 삭제 오류:', error);

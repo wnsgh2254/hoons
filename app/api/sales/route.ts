@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { issuePrepaidPassFromSale } from '@/lib/data';
 
 export async function GET(request: NextRequest) {
   try {
@@ -134,6 +135,41 @@ export async function POST(request: NextRequest) {
         { error: '판매 항목 등록에 실패했습니다.' },
         { status: 500 }
       );
+    }
+
+    // Comment: Credit prepaid_passes for each prepaid line item (purchase). Deduction-only path below is separate.
+    const rawItems = (items || []) as any[];
+    for (const rawItem of rawItems) {
+      if (String(rawItem.type) !== 'prepaid') continue;
+      const qty = Math.max(1, Math.round(Number(rawItem.quantity || 1)));
+      const perCredit = Math.round(Number(rawItem.prepaid_credit_points ?? rawItem.prepaid_points ?? 0));
+      const totalCredit = perCredit * qty;
+      if (totalCredit <= 0) continue;
+      const passLabel = String(rawItem.name || '정액권').trim();
+      const expiresAt =
+        rawItem.prepaid_expires_at != null && String(rawItem.prepaid_expires_at).trim() !== ''
+          ? String(rawItem.prepaid_expires_at).trim()
+          : null;
+      try {
+        await issuePrepaidPassFromSale({
+          customerId: Number(customer_id),
+          passLabel: passLabel,
+          creditPoints: totalCredit,
+          expiresAt,
+        });
+      } catch (prepaidIssueErr: any) {
+        console.error('Error issuing prepaid pass after sale:', prepaidIssueErr);
+        await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
+        await supabase.from('sales').delete().eq('id', saleHeader.id);
+        return NextResponse.json(
+          {
+            error:
+              prepaidIssueErr?.message ||
+              '정액권 잔액 반영에 실패했습니다. 판매 등록이 취소되었습니다.',
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // Apply prepaid deduction to customer's prepaid balance

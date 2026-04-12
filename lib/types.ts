@@ -205,6 +205,8 @@ export interface TempSalesData {
     manager: string;
     salesClassification: string;
     prepaidDeduction: number;
+    prepaidCreditPoints?: number;
+    prepaidExpiresAt?: string | null;
   }>;
   paymentAmounts: { cash: number; card: number; bank_transfer: number };
   pointAccumulation: number;

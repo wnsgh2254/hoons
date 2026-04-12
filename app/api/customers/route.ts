@@ -162,17 +162,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedPhone = phone.trim().replace(/\D/g, '');
+    const normalizedName = name.trim();
+
+    // Comment: Block duplicate phone (one customer record per phone number)
+    const { data: samePhoneRows } = await supabase
+      .from('customers')
+      .select('id, name')
+      .eq('phone', normalizedPhone)
+      .limit(1);
+    const existingByPhone = samePhoneRows?.[0];
+    if (existingByPhone) {
+      return NextResponse.json(
+        {
+          error: '이미 등록된 전화번호입니다.',
+          existingCustomerName: String(existingByPhone.name || '').trim(),
+        },
+        { status: 409 },
+      );
+    }
+
     // Comment: Insert new customer (customer_number is no longer used here)
     const { data, error } = await supabase
       .from('customers')
       .insert({
-        name: name.trim(),
-        phone: phone.trim().replace(/\D/g, ''), // Comment: Remove non-digits
+        name: normalizedName,
+        phone: normalizedPhone,
         created_at: new Date().toISOString(),
         assigned_designer_id: assigned_designer_id ? Number(assigned_designer_id) : null,
       })
       .select()
       .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
 
     // Comment: Get designer information if assigned
     let assignedDesigner = null;
@@ -185,21 +209,20 @@ export async function POST(request: NextRequest) {
       assignedDesigner = designerData;
     }
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return NextResponse.json({ 
-      customer: {
-        ...data,
-        assigned_designer: assignedDesigner,
-      }
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        customer: {
+          ...data,
+          assigned_designer: assignedDesigner,
+        },
+      },
+      { status: 201 },
+    );
   } catch (error: any) {
     console.error('Error in customers POST route:', error);
     return NextResponse.json(
       { error: error.message || '고객을 등록하지 못했습니다.' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -234,14 +257,33 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const normalizedPhone = phone.trim().replace(/\D/g, '');
     const updateData: any = {
       name: name.trim(),
-      phone: phone.trim().replace(/\D/g, ''), // Comment: Remove non-digits
+      phone: normalizedPhone,
     };
 
     // Comment: Update assigned_designer_id if provided
     if (assigned_designer_id !== undefined) {
       updateData.assigned_designer_id = assigned_designer_id ? Number(assigned_designer_id) : null;
+    }
+
+    const customerId = Number(id);
+    const { data: phoneConflictRows } = await supabase
+      .from('customers')
+      .select('id, name')
+      .eq('phone', normalizedPhone)
+      .neq('id', customerId)
+      .limit(1);
+    const phoneConflict = phoneConflictRows?.[0];
+    if (phoneConflict) {
+      return NextResponse.json(
+        {
+          error: '이미 다른 고객이 사용 중인 전화번호입니다.',
+          existingCustomerName: String(phoneConflict.name || '').trim(),
+        },
+        { status: 409 },
+      );
     }
 
     const { data, error } = await supabase
