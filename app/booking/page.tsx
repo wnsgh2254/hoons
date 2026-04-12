@@ -1134,6 +1134,24 @@ export default function BookingPage() {
                   Enter your card details below. Payment is secure and handled by Stripe. No card
                   details are stored on HAEYOOM servers.
                 </p>
+                <div className="bg-white/60 p-4 flex gap-3 items-start border border-black mb-6">
+                  <span className="material-symbols-outlined text-black mt-0.5 text-lg shrink-0">info</span>
+                  <div className="text-xs text-gray-700 leading-relaxed space-y-1.5">
+                    <p className="font-bold text-black uppercase tracking-wide">Cancellation Policy</p>
+                    <p>
+                      <span className="font-bold text-black">3+ days before</span> your appointment —{' '}
+                      <span className="font-bold text-black">100% refund</span>
+                    </p>
+                    <p>
+                      <span className="font-bold text-black">1–2 days before</span> your appointment —{' '}
+                      <span className="font-bold text-black">50% refund</span>
+                    </p>
+                    <p className="text-gray-500 pt-0.5">
+                      Deposits are non-refundable for same-day cancellations. Rescheduling is available up
+                      to 24 hours before your appointment.
+                    </p>
+                  </div>
+                </div>
                 {stripePublishableKey && checkoutClientSecret && showPaymentForm && stripePromise && paymentIntentBookingId != null && (
                   <Elements
                     key={checkoutClientSecret}
@@ -1267,15 +1285,6 @@ export default function BookingPage() {
                       Remaining ${(totalPrice - depositAmount).toFixed(2)} will be paid on the day of your appointment.
                     </p>
                   </div>
-                </div>
-              </div>
-              <div className="bg-[#F4F4F4] p-4 flex gap-3 items-start border border-black">
-                <span className="material-symbols-outlined text-black mt-0.5 text-lg shrink-0">info</span>
-                <div className="text-xs text-gray-700 leading-relaxed space-y-1.5">
-                  <p className="font-bold text-black uppercase tracking-wide">Cancellation Policy</p>
-                  <p><span className="font-bold text-black">3+ days before</span> your appointment — <span className="font-bold text-black">100% refund</span></p>
-                  <p><span className="font-bold text-black">1–2 days before</span> your appointment — <span className="font-bold text-black">50% refund</span></p>
-                  <p className="text-gray-500 pt-0.5">Deposits are non-refundable for same-day cancellations. Rescheduling is available up to 24 hours before your appointment.</p>
                 </div>
               </div>
             </aside>
