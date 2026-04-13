@@ -13,8 +13,7 @@ import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import FormAlert from '@/components/ui/FormAlert';
 import { Z } from '@/lib/constants';
-import BookingItemPickerModal from './BookingItemPickerModal';
-import type { NewBookingTimeSlot, NewBookingTimeSlotSelectedItem } from '@/lib/types';
+import type { NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 
 interface NewBookingModalProps {
@@ -27,7 +26,10 @@ interface NewBookingModalProps {
   newBookingDirectVisit: boolean;
   newBookingTimeSlots: NewBookingTimeSlot[];
   newBookingDesigners: any[];
-  newBookingServices: { id: number; name: string; duration_minutes: number }[];
+  newBookingServices: {
+    id: number;
+    name: string;
+  }[];
   newBookingMemo: string;
   newBookingSubmitting: boolean;
   newBookingLoadingOptions: boolean;
@@ -110,10 +112,8 @@ export default function NewBookingModal({
   const [unregisteredCustomerError, setUnregisteredCustomerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Booking item picker state
-  const [isBookingItemPickerOpen, setIsBookingItemPickerOpen] = useState(false);
-  const [bookingItemPickerInitialTab, setBookingItemPickerInitialTab] = useState<'service' | 'booking_item'>('service');
-  const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
+  // Comment: Service selections are managed per slot index (multi-select checklist).
+  const [slotServiceSelections, setSlotServiceSelections] = useState<number[][]>([[]]);
 
   const [shops, setShops] = useState<any[]>([]);
   const [shopId, setShopId] = useState<number | null>(null);
@@ -155,6 +155,14 @@ export default function NewBookingModal({
 
     if (newBookingShopId != null) setShopId(newBookingShopId);
   }, [isOpen, newBookingDate, selectedDate, newBookingShopId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSlotServiceSelections((prev) => {
+      const next = newBookingTimeSlots.map((_, idx) => prev[idx] || []);
+      return next.length > 0 ? next : [[]];
+    });
+  }, [isOpen, newBookingTimeSlots.length]);
 
   // Debounced customer search - call API when user types
   // Comment: Skip search when customer is selected to avoid overwriting results and losing selectedCustomerDetail
@@ -265,34 +273,19 @@ export default function NewBookingModal({
     return () => { cancelled = true; };
   }, [isOpen, selectedCustomerId]);
 
-  // Duration options in 30-min steps only
-  const durationOptions = [30, 60, 90, 120, 150, 180];
+  // Comment: Duration options from 30 to 120 minutes in 15-minute steps.
+  const durationOptions = [30, 45, 60, 75, 90, 105, 120];
 
   const formatDurationLabel = (min: number) => `${min}분`;
 
-  const handleRemoveBookingItem = (slotIndex: number, itemId: number, itemType: string) => {
-    const next = newBookingTimeSlots.map((slot: NewBookingTimeSlot, i: number) =>
-      i === slotIndex
-        ? { ...slot, selectedItems: slot.selectedItems.filter((it: NewBookingTimeSlotSelectedItem) => it.id !== itemId || it.type !== itemType) }
-        : slot
-    );
-    setNewBookingTimeSlots(next);
-  };
+  const getServiceNameSummary = (serviceIds: number[]): string =>
+    serviceIds
+      .map((serviceId) => categoryServices.find((s) => s.id === serviceId)?.name)
+      .filter((name): name is string => Boolean(name))
+      .join(' / ');
 
-  const handleBookingItemsSelected = (items: NewBookingTimeSlotSelectedItem[]) => {
-    if (activeSlotIndex === null) return;
-    const next = newBookingTimeSlots.map((slot: NewBookingTimeSlot, i: number) =>
-      i === activeSlotIndex ? { ...slot, selectedItems: [...slot.selectedItems, ...items] } : slot
-    );
-    setNewBookingTimeSlots(next);
-    setIsBookingItemPickerOpen(false);
-  };
-
-  // Comment: 7 category services (must exist in services table) - only these appear in dropdown
-  const CATEGORY_NAMES = ['커트', '드라이', '펌', '매직', '핫펌', '염색', '클리닉'] as const;
-  const categoryServices = Array.isArray(newBookingServices)
-    ? newBookingServices.filter((s) => CATEGORY_NAMES.includes(s.name as any))
-    : [];
+  // Comment: Service list for admin booking modal comes from booking_modal_services table.
+  const categoryServices = Array.isArray(newBookingServices) ? newBookingServices : [];
 
   const handleCancel = () => {
     onClose();
@@ -312,6 +305,7 @@ export default function NewBookingModal({
     setUnregisteredName('');
     setUnregisteredPhone('');
     setUnregisteredCustomerError(null);
+    setSlotServiceSelections([[]]);
   };
 
   const handleSubmit = async () => {
@@ -385,6 +379,10 @@ export default function NewBookingModal({
       alert('디자이너, 날짜, 시작 시간을 모두 선택해주세요.');
       return;
     }
+    if (slots.some((_, idx) => (slotServiceSelections[idx] || []).length === 0)) {
+      alert('각 예약 행에서 최소 1개의 서비스를 선택해주세요.');
+      return;
+    }
 
     try {
       // Comment: Overlap check needs minutes; check each slot before creating.
@@ -420,7 +418,11 @@ export default function NewBookingModal({
             const [bh, bm] = String(b.booking_time).split(':');
             const existStart = Number(bh) * 60 + Number(bm);
             const existDuration =
-              b.service?.duration_minutes && b.service.duration_minutes > 0 ? b.service.duration_minutes : 60;
+              b.service?.duration_minutes && b.service.duration_minutes > 0
+                ? b.service.duration_minutes
+                : (b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
+                  ? Number((b as any).custom_service_duration)
+                  : 60;
             const existEnd = existStart + existDuration;
             const overlap = Math.max(newStartMinutes, existStart) < Math.min(newEndMinutes, existEnd);
             if (overlap) maxOverlap += 1;
@@ -441,19 +443,23 @@ export default function NewBookingModal({
     setSubmitting(true);
     try {
       // Comment: Create one booking per slot.
-      for (const slot of slots) {
+      for (const [slotIndex, slot] of slots.entries()) {
+        const selectedServiceIds = slotServiceSelections[slotIndex] || [];
+        const serviceSummary = getServiceNameSummary(selectedServiceIds);
         const resCreate = await fetch('/api/appointment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             shopId,
             designerId: slot.designerId,
-            serviceId: slot.serviceId ?? null,
+            serviceId: null,
             day: Number(bookingDate.split('-')[2]),
             timeLabel: slot.time,
             totalAmount: null,
             depositAmount: null,
             fullDate: bookingDate,
+            serviceCategory: serviceSummary || null,
+            customServiceDuration: slot.duration || null,
             memo,
             colorLabel,
             customerName: isUnregisteredBooking ? unregisteredName.trim() : (selectedCustomer?.name ?? null),
@@ -482,12 +488,13 @@ export default function NewBookingModal({
 
       onClose();
       setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
+      setSlotServiceSelections([[]]);
 
       // Comment: Refetch full week range (same as main schedule) so UI shows correct data
       const weekStart = getWeekStart(selectedDate);
       const weekEnd = getWeekEnd(selectedDate);
       const res = await fetch(
-        `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+        `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
       );
       const data = await res.json();
       if (res.ok) {
@@ -554,11 +561,12 @@ export default function NewBookingModal({
               !shopId ||
               !bookingDate ||
               newBookingTimeSlots.length === 0 ||
-              newBookingTimeSlots.some((s) => !s.designerId || !s.time)
+              newBookingTimeSlots.some((s) => !s.designerId || !s.time) ||
+              newBookingTimeSlots.some((_, idx) => (slotServiceSelections[idx] || []).length === 0)
             }
             onClick={handleSubmit}
           >
-            저장
+            {submitting ? '저장중...' : '저장'}
           </Button>
         </>
       }
@@ -909,9 +917,62 @@ export default function NewBookingModal({
 
           {/* Single block 내부에 service/designer 선택 행만 추가 */}
           <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
-            {/* Top row: 시작시간 + 추가 */}
-            <div className="flex items-end gap-2">
-              <div className="flex-1 min-w-0">
+            {/* Top row: 디자이너 + 시작시간 + 소요시간 + 추가 */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="min-w-0 md:col-span-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
+                <div className="flex items-end gap-2">
+                  <select
+                    disabled={newBookingLoadingOptions}
+                    value={newBookingTimeSlots[0]?.designerId ?? ''}
+                    onChange={(e) => {
+                      const newDesignerId = e.target.value ? Number(e.target.value) : null;
+                      setNewBookingTimeSlots((prev) =>
+                        prev.map((s, i) => (i === 0 ? { ...s, designerId: newDesignerId } : s)),
+                      );
+                      if (newDesignerId && !shopManuallySet.current) {
+                        const designer = newBookingDesigners.find((d: any) => d.id === newDesignerId);
+                        if (designer?.shop_id) setShopId(designer.shop_id);
+                      }
+                    }}
+                    className="flex-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
+                  >
+                    <option value="">
+                      {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
+                    </option>
+                    {!newBookingLoadingOptions &&
+                      newBookingDesigners.map((d: any) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Comment: + button adds one booking row with same time/duration as first row.
+                      const base = newBookingTimeSlots[0] ?? { ...DEFAULT_NEW_BOOKING_TIME_SLOT };
+                      const nextSlot: NewBookingTimeSlot = {
+                        ...DEFAULT_NEW_BOOKING_TIME_SLOT,
+                        time: base.time,
+                        duration: base.duration,
+                        selectedItems: [],
+                        serviceId: null,
+                        designerId: null,
+                      };
+                      const next = [...newBookingTimeSlots, nextSlot];
+                      setNewBookingTimeSlots(next);
+                      setSlotServiceSelections((prev) => [...prev, []]);
+                    }}
+                    className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                    title="추가"
+                  >
+                    <span className="material-symbols-outlined text-base">add</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="min-w-0 md:col-span-4">
                 <Select
                   label="시작시간"
                   options={timeOptions}
@@ -926,32 +987,23 @@ export default function NewBookingModal({
                 />
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  // Comment: + 버튼은 "행(row)"만 추가해야 하며,
-                  // setNewBookingTimeSlots 업데이터 함수 안에서 다른 setState를 호출하지 않도록 분리합니다.
-                  const base = newBookingTimeSlots[0] ?? { ...DEFAULT_NEW_BOOKING_TIME_SLOT };
-                  const nextSlot: NewBookingTimeSlot = {
-                    ...DEFAULT_NEW_BOOKING_TIME_SLOT,
-                    time: base.time,
-                    duration: base.duration,
-                    selectedItems: [],
-                    serviceId: null,
-                    designerId: null,
-                  };
-                  const next = [...newBookingTimeSlots, nextSlot];
-                  setNewBookingTimeSlots(next);
-                  setActiveSlotIndex(next.length - 1);
-                }}
-                className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-                title="추가"
-              >
-                <span className="material-symbols-outlined text-base">add</span>
-              </button>
+              <div className="min-w-0 md:col-span-3">
+                <Select
+                  label="소요시간"
+                  options={durationSelectOptions}
+                  value={newBookingTimeSlots[0]?.duration ?? 30}
+                  onChange={(e) => {
+                    const nextDuration = Number(e.target.value);
+                    setNewBookingTimeSlots((prev) =>
+                      prev.map((s, i) => (i === 0 ? { ...s, duration: nextDuration } : s)),
+                    );
+                  }}
+                  wrapperClassName="min-w-0"
+                />
+              </div>
             </div>
 
-            {/* Rows: 서비스 + 디자이너 (행 단위로만 추가) */}
+            {/* Rows: 서비스 only (designer/duration are managed in top row) */}
             {newBookingTimeSlots.map((slot, idx) => (
               <div
                 key={idx}
@@ -961,144 +1013,62 @@ export default function NewBookingModal({
                     : 'space-y-4 pt-4 border-t border-gray-200'
                 }
               >
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
-                  <div className="min-w-0">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="min-w-0 md:col-span-10">
                     <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
-                    <select
-                      disabled={newBookingLoadingOptions}
-                      value={slot.serviceId != null ? String(slot.serviceId) : ''}
-                      onChange={(e) => {
-                        const updated = [...newBookingTimeSlots];
-                        const val = e.target.value;
-                        updated[idx].serviceId = val ? Number(val) : null;
-                        if (val) {
-                          const svc = categoryServices.find((s) => s.id === Number(val));
-                          if (svc?.duration_minutes) {
-                            const rounded = Math.round(svc.duration_minutes / 30) * 30;
-                            updated[idx].duration = Math.min(180, Math.max(30, rounded));
-                          }
-                        }
-                        setNewBookingTimeSlots(updated);
-                      }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
-                    >
-                      <option value="">
-                        {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
-                      </option>
-                      {!newBookingLoadingOptions &&
-                        categoryServices.map((s) => (
-                          <option key={s.id} value={String(s.id)}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  <div className="min-w-0 md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
-                    <div className="flex items-end gap-2">
-                      <select
-                        disabled={newBookingLoadingOptions}
-                        value={slot.designerId ?? ''}
-                        onChange={(e) => {
-                          const newDesignerId = e.target.value ? Number(e.target.value) : null;
-                          const updated = [...newBookingTimeSlots];
-                          updated[idx] = { ...updated[idx], designerId: newDesignerId };
-                          setNewBookingTimeSlots(updated);
-
-                          // 첫 행 디자이너 선택 시 지점 자동 세팅
-                          if (idx === 0 && newDesignerId && !shopManuallySet.current) {
-                            const designer = newBookingDesigners.find((d: any) => d.id === newDesignerId);
-                            if (designer?.shop_id) setShopId(designer.shop_id);
-                          }
-                        }}
-                        className="flex-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
-                      >
-                        <option value="">
-                          {newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
-                        </option>
-                        {!newBookingLoadingOptions &&
-                          newBookingDesigners.map((d: any) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))}
-                      </select>
-
-                      {idx > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNewBookingTimeSlots((prev) => prev.filter((_, i) => i !== idx));
-                            setActiveSlotIndex((prev) => {
-                              if (prev == null) return prev;
-                              if (prev === idx) return Math.max(0, idx - 1);
-                              if (prev > idx) return prev - 1;
-                              return prev;
-                            });
-                          }}
-                          className="w-8 h-8 flex items-center justify-center border border-gray-300 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors"
-                          title="삭제"
-                        >
-                          <span className="material-symbols-outlined text-base">close</span>
-                        </button>
+                    <div className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white max-h-36 overflow-y-auto space-y-2">
+                      {newBookingLoadingOptions ? (
+                        <p className="text-gray-500">로딩 중...</p>
+                      ) : (
+                        categoryServices.map((s) => {
+                          const isChecked = (slotServiceSelections[idx] || []).includes(s.id);
+                          return (
+                            <label key={s.id} className="flex items-center gap-2 text-gray-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSlotServiceSelections((prev) => {
+                                    const next = [...prev];
+                                    const current = [...(next[idx] || [])];
+                                    next[idx] = checked
+                                      ? [...current, s.id]
+                                      : current.filter((serviceId) => serviceId !== s.id);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black accent-black"
+                              />
+                              <span>{s.name}</span>
+                            </label>
+                          );
+                        })
                       )}
                     </div>
+                    {slotServiceSelections[idx]?.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {getServiceNameSummary(slotServiceSelections[idx])}
+                      </p>
+                    )}
                   </div>
-                </div>
 
-                {/* 항목 선택 */}
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-gray-700">항목 선택</label>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      setActiveSlotIndex(idx);
-                      setBookingItemPickerInitialTab('service');
-                      setIsBookingItemPickerOpen(true);
-                    }}
-                  >
-                    서비스
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setActiveSlotIndex(idx);
-                      setBookingItemPickerInitialTab('booking_item');
-                      setIsBookingItemPickerOpen(true);
-                    }}
-                  >
-                    예약 항목
-                  </Button>
-                </div>
-
-                {/* 선택된 항목 */}
-                {slot.selectedItems.length > 0 && (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                    {slot.selectedItems.map((item) => (
-                      <div
-                        key={`${item.type}-${item.id}`}
-                        className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 last:border-b-0"
+                  <div className="min-w-0 md:col-span-2 flex justify-end">
+                    {idx > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewBookingTimeSlots((prev) => prev.filter((_, i) => i !== idx));
+                          setSlotServiceSelections((prev) => prev.filter((_, i) => i !== idx));
+                        }}
+                        className="w-8 h-8 flex items-center justify-center border border-gray-300 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors"
+                        title="삭제"
                       >
-                        <div>
-                          <span className="text-sm text-gray-900">{item.name}</span>
-                          <span className="text-xs text-gray-500 ml-2">
-                            {formatDurationLabel(item.durationMinutes ?? 0)}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBookingItem(idx, item.id, item.type)}
-                          className="text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-base">close</span>
-                        </button>
-                      </div>
-                    ))}
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             ))}
           </div>
@@ -1146,13 +1116,6 @@ export default function NewBookingModal({
         </div>
       </div>
 
-      {/* Booking Item Picker Modal */}
-      <BookingItemPickerModal
-        isOpen={isBookingItemPickerOpen}
-        initialTab={bookingItemPickerInitialTab}
-        onClose={() => setIsBookingItemPickerOpen(false)}
-        onSelect={handleBookingItemsSelected}
-      />
     </Modal>
   );
 }

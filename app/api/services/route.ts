@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, price, duration_minutes, shop_id, is_active, category, visible_to, description } =
+    const { name, price, duration_minutes, shop_id, is_active, category, visible_to, description, show_in_admin_booking_modal } =
       body;
 
     if (!name || price === undefined || !duration_minutes) {
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
         is_active: is_active !== undefined ? is_active : true,
         category: category || null,
         visible_to: visible_to || 'customer',
+        show_in_admin_booking_modal: show_in_admin_booking_modal === true,
       })
       .select()
       .single();

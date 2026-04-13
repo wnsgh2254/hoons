@@ -669,8 +669,9 @@ function InventorySubView({ view }: InventorySubViewProps) {
 
 // Comment: Internal usage list view (내부 소모 내역)
 function InternalUsageView() {
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-20');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
   const [type, setType] = useState('전체');
   const [productSearch, setProductSearch] = useState('');
   const [staff, setStaff] = useState('전체');
@@ -698,6 +699,7 @@ function InternalUsageView() {
   >([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Comment: Load internal usage rows from API
   useEffect(() => {
@@ -723,7 +725,7 @@ function InternalUsageView() {
     };
 
     fetchUsage();
-  }, [startDate, endDate, type, productSearch, staff]);
+  }, [startDate, endDate, type, productSearch, staff, reloadKey]);
 
   const usageColumns = [
     { key: 'used_at', header: '날짜', render: (row: typeof rows[number]) => formatDateTime(row.used_at) },
@@ -821,7 +823,19 @@ function InternalUsageView() {
         emptyMessage="내역이 없습니다."
       />
       {showRegisterModal && (
-        <InternalUsageRegisterModal onClose={() => setShowRegisterModal(false)} />
+        <InternalUsageRegisterModal
+          onClose={() => setShowRegisterModal(false)}
+          onSaved={(savedDates) => {
+            if (savedDates && savedDates.length > 0) {
+              const sorted = [...savedDates].sort();
+              const minDate = sorted[0];
+              const maxDate = sorted[sorted.length - 1];
+              if (startDate > minDate) setStartDate(minDate);
+              if (endDate < maxDate) setEndDate(maxDate);
+            }
+            setReloadKey((prev) => prev + 1);
+          }}
+        />
       )}
       {editingRow && (
         <InternalUsageEntryModal
@@ -1689,14 +1703,28 @@ function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailM
 
 type InternalUsageRegisterModalProps = {
   onClose: () => void;
+  onSaved?: (savedDates: string[]) => void;
 };
 
 // Comment: Modal for registering internal usage based on inventory items
-function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps) {
+function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterModalProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [staffOptions, setStaffOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [selectedRows, setSelectedRows] = useState<
+    Array<{
+      rowId: string;
+      inventoryItemId: number;
+      productName: string;
+      quantity: number;
+      staffName: string;
+      memo: string;
+      usedAt: string;
+      unitPrice: number;
+    }>
+  >([]);
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -1714,18 +1742,102 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
     };
 
     fetchInventory();
+
+    const fetchStaff = async () => {
+      try {
+        const res = await fetch('/api/staff');
+        const data = await res.json();
+        const names = Array.isArray(data.staff)
+          ? data.staff.map((s: any) => String(s.name || '')).filter(Boolean)
+          : [];
+        setStaffOptions(names);
+      } catch {
+        setStaffOptions([]);
+      }
+    };
+
+    fetchStaff();
   }, []);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const handleAddRow = (item: InventoryItem) => {
+    setSelectedRows((prev) => [
+      ...prev,
+      {
+        rowId: `${item.id}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        inventoryItemId: item.id,
+        productName: item.name,
+        quantity: 1,
+        staffName: '',
+        memo: '',
+        usedAt: todayStr,
+        unitPrice: Number((item as any).cost_price ?? item.price ?? 0),
+      },
+    ]);
+  };
+
+  const handleSaveAll = async () => {
+    if (selectedRows.length === 0) {
+      setError('추가된 항목이 없습니다.');
+      return;
+    }
+    const invalid = selectedRows.some((row) => !Number.isFinite(row.quantity) || row.quantity <= 0);
+    if (invalid) {
+      setError('수량은 1 이상이어야 합니다.');
+      return;
+    }
+    const missingStaff = selectedRows.some((row) => !row.staffName || !row.staffName.trim());
+    if (missingStaff) {
+      setError('직원을 선택해주세요.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      for (const row of selectedRows) {
+        const res = await fetch('/api/inventory-usage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inventoryItemId: row.inventoryItemId,
+            quantity: row.quantity,
+            staffName: row.staffName || null,
+            memo: row.memo || null,
+            usedAt: row.usedAt,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || '내부 소모 저장에 실패했습니다.');
+        }
+      }
+      onSaved?.(selectedRows.map((row) => row.usedAt));
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? '내부 소모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const registerColumns = [
     { key: 'sku', header: '제품코드', render: (item: InventoryItem) => item.sku ?? item.id },
     { key: 'name', header: '제품명', render: (item: InventoryItem) => item.name },
+    {
+      key: 'cost_price',
+      header: '입고가',
+      align: 'right' as const,
+      render: (item: InventoryItem) => Number((item as any).cost_price ?? item.price ?? 0).toLocaleString(),
+    },
     { key: 'stock', header: '현 재고', align: 'right' as const, render: (item: InventoryItem) => Number(item.stock ?? 0).toLocaleString() },
     {
       key: 'add',
       header: '추가',
       align: 'center' as const,
       render: (item: InventoryItem) => (
-        <Button variant="outline" size="sm" onClick={() => setSelectedItem(item)}>
+        <Button variant="outline" size="sm" onClick={() => handleAddRow(item)}>
           추가
         </Button>
       ),
@@ -1740,9 +1852,12 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
       maxWidth="max-w-5xl"
       scrollable
       footer={
-        <div className="flex justify-end w-full">
+        <div className="flex justify-end w-full gap-2">
           <Button variant="outline" onClick={onClose}>
             닫기
+          </Button>
+          <Button variant="primary" onClick={handleSaveAll} loading={saving} disabled={selectedRows.length === 0}>
+            {saving ? '저장 중...' : '저장'}
           </Button>
         </div>
       }
@@ -1776,16 +1891,107 @@ function InternalUsageRegisterModal({ onClose }: InternalUsageRegisterModalProps
         loading={loading}
         emptyMessage="등록된 재고가 없습니다."
       />
-      {selectedItem && (
-        <InternalUsageEntryModal
-          mode="create"
-          inventoryItemId={selectedItem.id}
-          productName={selectedItem.name}
-          defaultQuantity={1}
-          onSaved={undefined}
-          onClose={() => setSelectedItem(null)}
-        />
-      )}
+      <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+        <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+          <div className="col-span-3">제품명</div>
+          <div className="col-span-1 text-center">수량</div>
+          <div className="col-span-2">직원</div>
+          <div className="col-span-3">메모</div>
+          <div className="col-span-2">날짜</div>
+          <div className="col-span-1 text-center">삭제</div>
+        </div>
+        {selectedRows.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-gray-500">추가된 항목이 없습니다.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {selectedRows.map((row) => (
+              <div key={row.rowId} className="grid grid-cols-12 gap-2 px-4 py-2.5 items-center text-sm">
+                <div className="col-span-3 text-gray-900">{row.productName}</div>
+                <div className="col-span-1 flex items-center justify-center gap-1">
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 border border-gray-200 rounded"
+                    onClick={() =>
+                      setSelectedRows((prev) =>
+                        prev.map((r) =>
+                          r.rowId === row.rowId
+                            ? { ...r, quantity: Math.max(1, r.quantity - 1) }
+                            : r,
+                        ),
+                      )
+                    }
+                  >
+                    -
+                  </button>
+                  <span className="min-w-[18px] text-center">{row.quantity}</span>
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 border border-gray-200 rounded"
+                    onClick={() =>
+                      setSelectedRows((prev) =>
+                        prev.map((r) =>
+                          r.rowId === row.rowId ? { ...r, quantity: r.quantity + 1 } : r,
+                        ),
+                      )
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="col-span-2">
+                  <Select
+                    value={row.staffName}
+                    onChange={(e) =>
+                      setSelectedRows((prev) =>
+                        prev.map((r) =>
+                          r.rowId === row.rowId ? { ...r, staffName: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    options={[{ value: '', label: '선택' }, ...staffOptions.map((name) => ({ value: name, label: name }))]}
+                  />
+                </div>
+                <div className="col-span-3">
+                  <Input
+                    value={row.memo}
+                    onChange={(e) =>
+                      setSelectedRows((prev) =>
+                        prev.map((r) =>
+                          r.rowId === row.rowId ? { ...r, memo: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Input
+                    type="date"
+                    value={row.usedAt}
+                    onChange={(e) =>
+                      setSelectedRows((prev) =>
+                        prev.map((r) =>
+                          r.rowId === row.rowId ? { ...r, usedAt: e.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                </div>
+                <div className="col-span-1 flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSelectedRows((prev) => prev.filter((r) => r.rowId !== row.rowId))
+                    }
+                  >
+                    삭제
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }

@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const [designersRes, shopsRes, servicesRes, weekBookingsRes, monthBookingsRes, restrictionsRes, memoRes, designerShopsMap] =
+    const [designersRes, shopsRes, servicesRes, bookingModalServicesRes, weekBookingsRes, monthBookingsRes, restrictionsRes, memoRes, designerShopsMap] =
       await Promise.all([
         supabase
           .from('designers')
@@ -54,6 +54,12 @@ export async function GET(request: NextRequest) {
           .order('name', { ascending: true }),
         supabase.from('shops').select('*').order('name', { ascending: true }),
         supabase.from('services').select('*').order('name', { ascending: true }),
+        supabase
+          .from('booking_modal_services')
+          .select('*')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true })
+          .order('id', { ascending: true }),
         supabase
           .from('bookings')
           .select(
@@ -83,11 +89,12 @@ export async function GET(request: NextRequest) {
         loadDesignerShopsMap(),
       ]);
 
-    if (designersRes.error || shopsRes.error || servicesRes.error || weekBookingsRes.error || monthBookingsRes.error || restrictionsRes.error || memoRes.error) {
+    if (designersRes.error || shopsRes.error || servicesRes.error || bookingModalServicesRes.error || weekBookingsRes.error || monthBookingsRes.error || restrictionsRes.error || memoRes.error) {
       console.error('Error loading appointments initial data:', {
         designers: designersRes.error,
         shops: shopsRes.error,
         services: servicesRes.error,
+        bookingModalServices: bookingModalServicesRes.error,
         weekBookings: weekBookingsRes.error,
         monthBookings: monthBookingsRes.error,
         restrictions: restrictionsRes.error,
@@ -143,6 +150,7 @@ export async function GET(request: NextRequest) {
         })),
         shops,
         services: servicesRes.data || [],
+        bookingModalServices: bookingModalServicesRes.data || [],
         bookings: weekBookings,
         bookingRestrictions: restrictionsRes.data || [],
         dayCounts,

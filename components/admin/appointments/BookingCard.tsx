@@ -96,6 +96,8 @@ function BookingCard({
   const durationMinutes =
     b.service?.duration_minutes && b.service.duration_minutes > 0
       ? b.service.duration_minutes
+      : (b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
+        ? Number((b as any).custom_service_duration)
       : 60;
 
   const serviceName =

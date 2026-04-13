@@ -51,6 +51,13 @@ interface BookingItem {
   isActive: boolean;
 }
 
+interface AdminBookingModalService {
+  id: number;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const ALL_DAYS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -75,6 +82,7 @@ const TABS = [
   { key: 'hours', label: '영업 시간' },
   { key: 'resources', label: '예약 자원' },
   { key: 'items', label: '예약 항목' },
+  { key: 'booking-modal', label: '예약 등록 모달' },
 ];
 
 
@@ -1215,7 +1223,6 @@ function BookingItemsTab() {
           }}
         />
       </div>
-
       <p className="text-sm text-red-500">* 순서를 변경하려면 항목을 드래그 하세요.</p>
 
       {isAdding && (
@@ -1236,6 +1243,225 @@ function BookingItemsTab() {
           initial={editingItem}
           title="항목 수정"
         />
+      )}
+    </div>
+  );
+}
+
+function BookingModalServicesTab() {
+  const [modalServices, setModalServices] = useState<AdminBookingModalService[]>([]);
+  const [modalServicesLoading, setModalServicesLoading] = useState(false);
+  const [creatingService, setCreatingService] = useState(false);
+  const [deletingServiceId, setDeletingServiceId] = useState<number | null>(null);
+  const [newServiceName, setNewServiceName] = useState('');
+  const [editingService, setEditingService] = useState<AdminBookingModalService | null>(null);
+  const [editServiceName, setEditServiceName] = useState('');
+  const [editingSaving, setEditingSaving] = useState(false);
+
+  const fetchModalServices = async () => {
+    setModalServicesLoading(true);
+    try {
+      const res = await fetch('/api/booking-modal-services');
+      const data = await res.json();
+      if (!res.ok) return;
+      const services = Array.isArray(data.services) ? data.services : [];
+      setModalServices(
+        services.map((s: any) => ({
+          id: Number(s.id),
+          name: String(s.name || ''),
+          isActive: s.is_active !== false,
+          sortOrder: Number(s.sort_order || 0),
+        })),
+      );
+    } catch (err) {
+      console.error('Error loading admin booking modal services:', err);
+    } finally {
+      setModalServicesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchModalServices();
+  }, []);
+
+  const handleAddService = async () => {
+    if (!newServiceName.trim()) return;
+    setCreatingService(true);
+    try {
+      const res = await fetch('/api/booking-modal-services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newServiceName.trim(),
+          is_active: true,
+          sort_order: modalServices.length,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '서비스 추가에 실패했습니다.');
+      }
+      setNewServiceName('');
+      await fetchModalServices();
+    } catch (err) {
+      console.error('Error creating booking modal service:', err);
+    } finally {
+      setCreatingService(false);
+    }
+  };
+
+  const handleRemoveService = async (id: number) => {
+    const shouldDelete = window.confirm('해당 항목을 삭제하시겠습니까?');
+    if (!shouldDelete) return;
+    setDeletingServiceId(id);
+    try {
+      await fetch(`/api/booking-modal-services?id=${id}`, { method: 'DELETE' });
+      await fetchModalServices();
+    } catch (err) {
+      console.error('Error deleting booking modal service:', err);
+    } finally {
+      setDeletingServiceId(null);
+    }
+  };
+
+  const handleOpenEdit = (service: AdminBookingModalService) => {
+    setEditingService(service);
+    setEditServiceName(service.name);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingService || !editServiceName.trim()) return;
+    setEditingSaving(true);
+    try {
+      await fetch('/api/booking-modal-services', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingService.id,
+          name: editServiceName.trim(),
+          is_active: true,
+          sort_order: editingService.sortOrder,
+        }),
+      });
+      setEditingService(null);
+      await fetchModalServices();
+    } catch (err) {
+      console.error('Error updating booking modal service:', err);
+    } finally {
+      setEditingSaving(false);
+    }
+  };
+
+  const handleDeleteFromEdit = async () => {
+    if (!editingService) return;
+    const shouldDelete = window.confirm('해당 항목을 삭제하시겠습니까?');
+    if (!shouldDelete) return;
+    setEditingSaving(true);
+    try {
+      await fetch(`/api/booking-modal-services?id=${editingService.id}`, { method: 'DELETE' });
+      setEditingService(null);
+      await fetchModalServices();
+    } catch (err) {
+      console.error('Error deleting booking modal service from edit modal:', err);
+    } finally {
+      setEditingSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="px-2 pb-2 flex items-center justify-between gap-3">
+        <h3 className="text-lg font-bold text-black">예약 등록 모달</h3>
+        <div className="flex items-center gap-2">
+          <Input
+            value={newServiceName}
+            onChange={(e) => setNewServiceName(e.target.value)}
+            placeholder="서비스명"
+            wrapperClassName="w-44"
+            disabled={creatingService || modalServicesLoading}
+          />
+          <Button
+            loading={creatingService}
+            disabled={modalServicesLoading || !newServiceName.trim()}
+            onClick={handleAddService}
+          >
+            {creatingService ? '추가중...' : '추가'}
+          </Button>
+        </div>
+      </div>
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+          <div className="col-span-9">서비스</div>
+          <div className="col-span-3 text-center">관리</div>
+        </div>
+        {modalServicesLoading ? (
+          <div className="px-4 py-6 text-sm text-gray-500">서비스 목록 불러오는 중...</div>
+        ) : modalServices.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-gray-500">표시할 서비스가 없습니다.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {modalServices.map((service) => (
+              <div key={service.id} className="grid grid-cols-12 gap-2 px-4 py-2.5 items-center text-sm">
+                <div className="col-span-9 text-gray-900">{service.name}</div>
+                <div className="col-span-3 flex justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={creatingService || editingSaving || deletingServiceId != null}
+                    onClick={() => handleOpenEdit(service)}
+                  >
+                    수정
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={deletingServiceId === service.id}
+                    disabled={creatingService || editingSaving || (deletingServiceId != null && deletingServiceId !== service.id)}
+                    onClick={() => handleRemoveService(service.id)}
+                  >
+                    {deletingServiceId === service.id ? '삭제중...' : '삭제'}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-sm text-gray-500">
+        * 여기서 추가/제거한 항목이 `admin/appointments`의 예약 등록 모달 `서비스` 목록에 표시됩니다.
+      </p>
+
+      {editingService && (
+        <Modal
+          isOpen
+          onClose={() => {
+            if (!editingSaving) setEditingService(null);
+          }}
+          title="예약 등록 모달 항목 수정"
+          zIndex={Z.MODAL_PRIMARY}
+          footer={
+            <>
+              <Button loading={editingSaving} onClick={handleSaveEdit}>
+                {editingSaving ? '저장중...' : '저장'}
+              </Button>
+              <Button variant="danger" loading={editingSaving} disabled={editingSaving} onClick={handleDeleteFromEdit}>
+                {editingSaving ? '진행중...' : '삭제'}
+              </Button>
+              <Button variant="outline" disabled={editingSaving} onClick={() => setEditingService(null)}>
+                취소
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <Input
+              label="서비스명"
+              value={editServiceName}
+              onChange={(e) => setEditServiceName(e.target.value)}
+              placeholder="서비스명을 입력하세요"
+            />
+          </div>
+        </Modal>
       )}
     </div>
   );
@@ -1262,6 +1488,7 @@ export default function ReservationSettingsPage() {
         {activeTab === 'hours' && <BusinessHoursTab shops={shops} />}
         {activeTab === 'resources' && <BookingResourcesTab shops={shops} />}
         {activeTab === 'items' && <BookingItemsTab />}
+        {activeTab === 'booking-modal' && <BookingModalServicesTab />}
       </div>
     </AdminPageLayout>
   );

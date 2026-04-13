@@ -408,7 +408,14 @@ export default function WeekViewGrid({
                 if (!b.booking_time) return false;
                 const [bHour, bMin] = b.booking_time.split(':').map(Number);
                 const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
-                const bDuration = b.service?.duration_minutes || 60;
+                const bDuration =
+                  (b.service?.duration_minutes && b.service.duration_minutes > 0
+                    ? b.service.duration_minutes
+                    : null) ??
+                  ((b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
+                    ? Number((b as any).custom_service_duration)
+                    : null) ??
+                  60;
                 const bEndMinutes = bStartMinutes + bDuration;
                 return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
               });
@@ -919,6 +926,8 @@ export default function WeekViewGrid({
               const durationMinutes =
                 b.service?.duration_minutes && b.service.duration_minutes > 0
                   ? b.service.duration_minutes
+                  : (b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
+                    ? Number((b as any).custom_service_duration)
                   : 60;
               const endMinutes = startMinutes + durationMinutes;
 
@@ -935,6 +944,8 @@ export default function WeekViewGrid({
                 const otherDuration =
                   other.service?.duration_minutes && other.service.duration_minutes > 0
                     ? other.service.duration_minutes
+                    : (other as any).custom_service_duration && Number((other as any).custom_service_duration) > 0
+                      ? Number((other as any).custom_service_duration)
                     : 60;
                 const otherEnd = otherStart + otherDuration;
                 const overlap =

@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       customerPhone, // Comment: Customer phone number from booking flow
       existingCustomerId, // Comment: Optional existing customer ID if already looked up
       serviceCategory, // Comment: Optional big category name from admin booking (e.g. 커트)
+      customServiceDuration, // Comment: Optional custom duration in minutes from admin booking
       memo, // Comment: Optional booking memo
       colorLabel, // Comment: Optional color label icon
       status, // Comment: Optional status override (e.g. 'BOOKED' for admin bookings)
@@ -94,7 +95,10 @@ export async function POST(request: NextRequest) {
         typeof serviceCategory === 'string' && serviceCategory.trim()
           ? serviceCategory.trim()
           : null,
-      customServiceDuration: null,
+      customServiceDuration:
+        typeof customServiceDuration === 'number' && customServiceDuration > 0
+          ? customServiceDuration
+          : null,
       memo: typeof memo === 'string' && memo.trim() ? memo.trim() : null,
       colorLabel: typeof colorLabel === 'string' && colorLabel.trim() ? colorLabel.trim() : null,
       status: typeof status === 'string' && status.trim() ? status.trim() : null,

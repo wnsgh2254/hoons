@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const unitPrice = Number(item.price ?? 0);
+    // Comment: Internal usage cost is based on cost price, not retail price.
+    const unitPrice = Number((item as any).cost_price ?? item.price ?? 0);
     const amount = unitPrice * quantity;
     const beforeStock = Number(item.stock ?? 0);
     const newStock = Math.max(0, beforeStock - quantity);

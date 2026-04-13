@@ -14,7 +14,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name, price, duration_minutes, is_active, visible_to, category, description } = body;
+    const { name, price, duration_minutes, is_active, visible_to, category, description, show_in_admin_booking_modal } = body;
 
     const updates: any = {};
     if (name !== undefined) updates.name = name;
@@ -26,6 +26,9 @@ export async function PATCH(
     if (description !== undefined) {
       updates.description =
         typeof description === 'string' && description.trim() ? description.trim() : null;
+    }
+    if (show_in_admin_booking_modal !== undefined) {
+      updates.show_in_admin_booking_modal = show_in_admin_booking_modal === true;
     }
 
     if (Object.keys(updates).length === 0) {

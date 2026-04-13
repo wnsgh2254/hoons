@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, size, sku, category, price, stock, icon, for_internal, for_retail } = body;
+    const { name, size, sku, category, price, cost_price, stock, icon, for_internal, for_retail } = body;
 
     if (!name || !category || price == null || stock == null) {
       return NextResponse.json(
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     }
 
     const numericPrice = Number(price);
+    const numericCostPrice = Number(cost_price ?? 0);
     const numericStock = Number(stock);
 
     const { data, error } = await supabase
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
         sku: sku ? String(sku).trim() : null,
         category: String(category).trim(),
         price: numericPrice,
+        cost_price: numericCostPrice,
         stock: numericStock,
         status: getInventoryStatus(numericStock),
         icon: icon ? String(icon).trim() : null,
@@ -107,6 +109,7 @@ export async function POST(request: NextRequest) {
     const item = {
       ...data,
       price: Number(data.price ?? 0),
+      cost_price: Number(data.cost_price ?? 0),
       stock: Number(data.stock ?? 0),
     };
 
@@ -159,7 +162,7 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, size, sku, category, price, icon, stock, for_internal, for_retail } = body;
+    const { id, name, size, sku, category, price, cost_price, icon, stock, for_internal, for_retail } = body;
 
     const numericId = Number(id);
     if (!numericId) {
@@ -172,6 +175,7 @@ export async function PATCH(request: NextRequest) {
     if (sku !== undefined) updates.sku = sku ? String(sku).trim() : null;
     if (category !== undefined) updates.category = String(category).trim();
     if (price !== undefined) updates.price = Number(price);
+    if (cost_price !== undefined) updates.cost_price = Number(cost_price);
     if (icon !== undefined) updates.icon = icon ? String(icon).trim() : null;
     if (stock !== undefined) updates.stock = Math.max(0, Number(stock));
     if (for_internal !== undefined) updates.for_internal = Boolean(for_internal);
@@ -191,6 +195,7 @@ export async function PATCH(request: NextRequest) {
     const item = {
       ...data,
       price: Number(data.price ?? 0),
+      cost_price: Number(data.cost_price ?? 0),
       stock: Number(data.stock ?? 0),
     };
 

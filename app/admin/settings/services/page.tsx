@@ -1491,7 +1491,7 @@ function ProductModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => void;
+  onSave: (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => void;
   onDelete?: () => void;
   initial?: InventoryItem;
   title: string;
@@ -1503,6 +1503,7 @@ function ProductModal({
   const [name, setName] = useState(initial?.name || '');
   const [size, setSize] = useState(initial?.size || '');
   const [price, setPrice] = useState(initial?.price ?? 0);
+  const [costPrice, setCostPrice] = useState((initial as any)?.cost_price ?? 0);
   const [stock, setStock] = useState(initial?.stock ?? 0);
   const [forInternal, setForInternal] = useState(initial?.for_internal ?? true);
   const [forRetail, setForRetail] = useState(initial?.for_retail ?? false);
@@ -1518,6 +1519,7 @@ function ProductModal({
       size: size || null,
       category: brand,
       price,
+      cost_price: costPrice,
       stock,
       brand,
       icon: initial?.icon || null,
@@ -1559,6 +1561,7 @@ function ProductModal({
         <Input label="제품명" value={name} onChange={(e) => setName(e.target.value)} required />
         <Input label="규격" value={size} onChange={(e) => setSize(e.target.value)} />
         <Input label="판매가 (AUD)" type="number" min={0} value={price} onChange={(e) => setPrice(Number(e.target.value))} />
+        <Input label="입고가 (AUD)" type="number" min={0} value={costPrice} onChange={(e) => setCostPrice(Number(e.target.value))} />
         <Input label="재고" type="number" min={0} value={stock} onChange={(e) => setStock(Number(e.target.value))} />
         <div>
           <p className="block text-sm font-medium text-gray-700 mb-2">용도</p>
@@ -1625,7 +1628,7 @@ function ProductsTab({
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  const handleAdd = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
+  const handleAdd = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
     try {
       const res = await fetch('/api/inventory', {
         method: 'POST',
@@ -1640,7 +1643,7 @@ function ProductsTab({
       console.error('Error creating product:', err);
     }
   };
-  const handleUpdate = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
+  const handleUpdate = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
     if (!editingProduct) return;
     try {
       const res = await fetch('/api/inventory', {
@@ -1689,6 +1692,7 @@ function ProductsTab({
     { key: 'name', header: '제품명', align: 'center' as const, render: (item: InventoryItem) => item.name },
     { key: 'size', header: '규격', align: 'center' as const, render: (item: InventoryItem) => item.size || '' },
     { key: 'price', header: '판매가', align: 'center' as const, render: (item: InventoryItem) => formatPrice(item.price) },
+    { key: 'cost_price', header: '입고가', align: 'center' as const, render: (item: InventoryItem) => formatPrice(Number((item as any).cost_price ?? 0)) },
     { key: 'stock', header: '재고', align: 'center' as const, render: (item: InventoryItem) => item.stock },
     {
       key: 'usage',

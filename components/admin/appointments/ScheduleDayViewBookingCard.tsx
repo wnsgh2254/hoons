@@ -78,6 +78,8 @@ function ScheduleDayViewBookingCard({
   const durationMinutes =
     booking.service?.duration_minutes && booking.service.duration_minutes > 0
       ? booking.service.duration_minutes
+      : (booking as any).custom_service_duration && Number((booking as any).custom_service_duration) > 0
+        ? Number((booking as any).custom_service_duration)
       : 60;
 
   const serviceName =

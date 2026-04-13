@@ -616,7 +616,7 @@ export default function AppointmentsManagementPage() {
         setMemo(data.memo || '');
         setAllDesigners(data.designers || []);
         setAllShops(data.shops || []);
-        setNewBookingServices(data.services || []);
+        setNewBookingServices(data.bookingModalServices || []);
         setBookingRestrictions(data.bookingRestrictions || []);
         setDayCounts(data.dayCounts || {});
         setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
@@ -2304,7 +2304,10 @@ export default function AppointmentsManagementPage() {
                                   : '—';
                                 const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
                                 const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
-                                const duration = (booking as any).service?.duration_minutes || (booking as any).duration_minutes;
+                                const duration =
+                                  (booking as any).service?.duration_minutes ||
+                                  (booking as any).custom_service_duration ||
+                                  (booking as any).duration_minutes;
                                 const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
                                 const statusLabel =
                                   status === 'confirmed' ? '확정' :
@@ -2359,7 +2362,10 @@ export default function AppointmentsManagementPage() {
                             : '—';
                           const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
                           const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
-                          const duration = (booking as any).service?.duration_minutes || (booking as any).duration_minutes;
+                          const duration =
+                            (booking as any).service?.duration_minutes ||
+                            (booking as any).custom_service_duration ||
+                            (booking as any).duration_minutes;
                           const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
                           const statusLabel =
                             status === 'confirmed' ? '확정' :
