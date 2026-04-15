@@ -11,6 +11,7 @@ import {
   GRID_30MIN_HEIGHT,
   DESIGNER_COLORS,
   resolveBookingCardStatusColor,
+  getBookingDurationMinutes,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 import BookingCard from './BookingCard';
@@ -408,14 +409,7 @@ export default function WeekViewGrid({
                 if (!b.booking_time) return false;
                 const [bHour, bMin] = b.booking_time.split(':').map(Number);
                 const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
-                const bDuration =
-                  (b.service?.duration_minutes && b.service.duration_minutes > 0
-                    ? b.service.duration_minutes
-                    : null) ??
-                  ((b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
-                    ? Number((b as any).custom_service_duration)
-                    : null) ??
-                  60;
+                const bDuration = getBookingDurationMinutes(b as any);
                 const bEndMinutes = bStartMinutes + bDuration;
                 return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
               });
@@ -923,12 +917,7 @@ export default function WeekViewGrid({
               const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
               if (startMinutes < 0) return null;
 
-              const durationMinutes =
-                b.service?.duration_minutes && b.service.duration_minutes > 0
-                  ? b.service.duration_minutes
-                  : (b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
-                    ? Number((b as any).custom_service_duration)
-                  : 60;
+              const durationMinutes = getBookingDurationMinutes(b as any);
               const endMinutes = startMinutes + durationMinutes;
 
               // Check overlap with other bookings for this day
@@ -941,12 +930,7 @@ export default function WeekViewGrid({
                 const om = Number(omStr);
                 if (Number.isNaN(oh) || Number.isNaN(om)) return;
                 const otherStart = (oh - GRID_START_HOUR) * 60 + om;
-                const otherDuration =
-                  other.service?.duration_minutes && other.service.duration_minutes > 0
-                    ? other.service.duration_minutes
-                    : (other as any).custom_service_duration && Number((other as any).custom_service_duration) > 0
-                      ? Number((other as any).custom_service_duration)
-                    : 60;
+                const otherDuration = getBookingDurationMinutes(other as any);
                 const otherEnd = otherStart + otherDuration;
                 const overlap =
                   Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);

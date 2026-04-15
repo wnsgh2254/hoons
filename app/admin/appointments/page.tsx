@@ -18,7 +18,6 @@ import SalesItemPickerModal from '@/components/admin/appointments/SalesItemPicke
 import AppointmentCalendar from '@/components/admin/appointments/AppointmentCalendar';
 import AdminMemo from '@/components/admin/appointments/AdminMemo';
 import BookingCard from '@/components/admin/appointments/BookingCard';
-import EditBookingModal from '@/components/admin/appointments/EditBookingModal';
 import AddCustomerModal from '@/components/admin/customers/AddCustomerModal';
 import DeleteBookingModal from '@/components/admin/appointments/DeleteBookingModal';
 import ScheduleHeaderControls from '@/components/admin/appointments/ScheduleHeaderControls';
@@ -56,6 +55,7 @@ import {
   bookingTimeToLabel,
   labelToDbTime,
   parseLocalDateString,
+  getBookingDurationMinutes,
 } from '@/lib/utils/appointment-utils';
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
@@ -171,14 +171,13 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Editing existing booking from Upcoming list
   const [editingBooking, setEditingBooking] = useState<BookingWithRelations | null>(null);
-  const [editDate, setEditDate] = useState<string>(selectedDate);
-  const [editTime, setEditTime] = useState<string>('10:00 AM');
-  const [editServiceId, setEditServiceId] = useState<number | null>(null);
-  // Services for edit modal are provided via newBookingServices state (loaded by initial-data)
-  const [isServicePickerOpen, setIsServicePickerOpen] = useState(false);
-  const [servicePickerCategory, setServicePickerCategory] = useState<string | null>(null);
-  const [editMemo, setEditMemo] = useState<string>('');
-  const [editSubmitting, setEditSubmitting] = useState(false);
+  const isBookingFormModalOpen = isNewBookingOpen || editingBooking != null;
+
+  useEffect(() => {
+    if (editingBooking?.shop_id != null && Number.isFinite(Number(editingBooking.shop_id))) {
+      setNewBookingShopId(Number(editingBooking.shop_id));
+    }
+  }, [editingBooking?.id]);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [isCancelBookingModalOpen, setIsCancelBookingModalOpen] = useState(false);
   const [bookingToCancel, setBookingToCancel] = useState<BookingWithRelations | null>(null);
@@ -1068,17 +1067,6 @@ export default function AppointmentsManagementPage() {
     return () => { isMounted = false; };
   }, [monthKey, initialDataReady, hydratedMonthKey]);
 
-  // Comment: Sync edit modal fields when opening edit (from detail or Upcoming)
-  useEffect(() => {
-    if (editingBooking) {
-      setEditDate(editingBooking.booking_date);
-      setEditTime(bookingTimeToLabel(editingBooking.booking_time));
-      setEditServiceId(editingBooking.service_id ?? editingBooking.service?.id ?? null);
-      setEditMemo(editingBooking.memo ?? '');
-    }
-  }, [editingBooking?.id]);
-
-
   // Comment: Load shops + designer availability together in one pass to avoid render waterfall.
   // Shops are fetched once on first run; subsequent runs (date change, refresh) reuse cached allShops.
   // availabilityRefreshKey is incremented after holiday/special-day saves to force a re-fetch.
@@ -1217,7 +1205,7 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Load New Booking options from already hydrated page data only (no extra API calls).
   useEffect(() => {
-    if (!isNewBookingOpen) return;
+    if (!isBookingFormModalOpen) return;
     setNewBookingLoadingOptions(true);
     // Shops/services are already hydrated at page load; just reflect them into modal state.
     const shopsList = allShops;
@@ -1247,7 +1235,7 @@ export default function AppointmentsManagementPage() {
 
     setNewBookingLoadingOptions(false);
   }, [
-    isNewBookingOpen,
+    isBookingFormModalOpen,
     newBookingShopId,
     selectedShopFilter,
     allShops,
@@ -1893,6 +1881,7 @@ export default function AppointmentsManagementPage() {
   const scheduleDayViewMenuHandlers: ScheduleDayViewMenuHandlers = useMemo(
     () => ({
       onNewBooking: (booking) => {
+        setEditingBooking(null);
         setNewBookingDate(booking.booking_date || selectedDate);
         const bookingCustomer = (booking as any)?.customer;
         if (bookingCustomer?.id) {
@@ -1943,6 +1932,8 @@ export default function AppointmentsManagementPage() {
         setBookingMenuOpen(null);
       },
       onEditBooking: (booking) => {
+        setIsNewBookingOpen(false);
+        setRegisteredCustomer(null);
         setEditingBooking(booking);
         setBookingMenuOpen(null);
       },
@@ -2304,10 +2295,7 @@ export default function AppointmentsManagementPage() {
                                   : '—';
                                 const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
                                 const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
-                                const duration =
-                                  (booking as any).service?.duration_minutes ||
-                                  (booking as any).custom_service_duration ||
-                                  (booking as any).duration_minutes;
+                                const duration = getBookingDurationMinutes(booking as any);
                                 const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
                                 const statusLabel =
                                   status === 'confirmed' ? '확정' :
@@ -2362,10 +2350,7 @@ export default function AppointmentsManagementPage() {
                             : '—';
                           const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
                           const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
-                          const duration =
-                            (booking as any).service?.duration_minutes ||
-                            (booking as any).custom_service_duration ||
-                            (booking as any).duration_minutes;
+                          const duration = getBookingDurationMinutes(booking as any);
                           const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
                           const statusLabel =
                             status === 'confirmed' ? '확정' :
@@ -2539,7 +2524,7 @@ export default function AppointmentsManagementPage() {
                           hoveredEmptySlot={hoveredEmptySlot}
                           emptySlotMenuOpen={emptySlotMenuOpen}
                           emptySlotMenuPosition={emptySlotMenuPosition}
-                          isNewBookingOpen={isNewBookingOpen}
+                          isNewBookingOpen={isBookingFormModalOpen}
                           hoveredBooking={hoveredBooking}
                           hoverCardPosition={hoverCardPosition}
                           hoverCardOriginalPositionRef={hoverCardOriginalPositionRef}
@@ -2550,6 +2535,7 @@ export default function AppointmentsManagementPage() {
                           menuCloseTimeoutRef={menuCloseTimeoutRef}
                           menuOriginalPositionRef={menuOriginalPositionRef}
                           onOpenNewBooking={(data) => {
+                            setEditingBooking(null);
                             setNewBookingDate(data.date);
                             if (data.customer?.id) {
                               const prefill = {
@@ -2588,7 +2574,11 @@ export default function AppointmentsManagementPage() {
                           setHoveredBooking={setHoveredBooking}
                           setBookingMenuOpen={setBookingMenuOpen}
                           setBookingMenuPosition={setBookingMenuPosition}
-                          setEditingBooking={(booking) => setEditingBooking(booking)}
+                          setEditingBooking={(booking) => {
+                            setIsNewBookingOpen(false);
+                            setRegisteredCustomer(null);
+                            setEditingBooking(booking);
+                          }}
                           setViewingBookingDetail={(booking) => setViewingBookingDetail(booking)}
                           weekViewAvailableDates={weekViewAvailableDates}
                           onBookingStatusChange={async (booking, newStatus) => {
@@ -2818,7 +2808,7 @@ export default function AppointmentsManagementPage() {
                                   if (!b.booking_time) return false;
                                   const [bHour, bMin] = b.booking_time.split(':').map(Number);
                                   const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
-                                  const bDuration = b.service?.duration_minutes || 60;
+                                  const bDuration = getBookingDurationMinutes(b as any);
                                   const bEndMinutes = bStartMinutes + bDuration;
                                   return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
                                 });
@@ -2892,6 +2882,7 @@ export default function AppointmentsManagementPage() {
                                           const displayHour = slotHour % 12 === 0 ? 12 : slotHour % 12;
                                           const timeStr = `${displayHour}:${String(slotMin).padStart(2, '0')} ${slotHour >= 12 ? 'PM' : 'AM'}`;
                                           setNewBookingTimeSlots([{ designerId: designerId, time: timeStr, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
+                                          setEditingBooking(null);
                                           setIsNewBookingOpen(true);
                                           setHoveredEmptySlot(null);
                                         }
@@ -3006,7 +2997,7 @@ export default function AppointmentsManagementPage() {
                                           </button>
                                           
                                           {/* Empty slot context menu - Portal로 렌더링 (빈 셀 슬롯 루프 내부) */}
-                                          {isMenuOpen && !isNewBookingOpen && emptySlotMenuPosition && emptySlotMenuOpen && typeof window !== 'undefined' && (() => {
+                                          {isMenuOpen && !isBookingFormModalOpen && emptySlotMenuPosition && emptySlotMenuOpen && typeof window !== 'undefined' && (() => {
                                             // emptySlotMenuOpen 상태를 기반으로 해당 슬롯의 restriction 정보 찾기
                                             const menuSlotTime = emptySlotMenuOpen.time;
                                             // emptySlotMenuOpen의 designerId와 date에 맞는 restrictions만 필터링
@@ -3190,6 +3181,7 @@ export default function AppointmentsManagementPage() {
                                                 }
                                                 setNewBookingTimeSlots([{ designerId: emptySlotMenuOpen.designerId, time: timeStr1, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
                                                 setNewBookingDirectVisit(false);
+                                                setEditingBooking(null);
                                                 setIsNewBookingOpen(true);
                                                 setEmptySlotMenuOpen(null);
                                                     setEmptySlotMenuPosition(null);
@@ -3213,6 +3205,7 @@ export default function AppointmentsManagementPage() {
                                                 }
                                                 setNewBookingTimeSlots([{ designerId: emptySlotMenuOpen.designerId, time: timeStr2, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
                                                 setNewBookingDirectVisit(true);
+                                                setEditingBooking(null);
                                                 setIsNewBookingOpen(true);
                                                 setEmptySlotMenuOpen(null);
                                                     setEmptySlotMenuPosition(null);
@@ -3281,7 +3274,7 @@ export default function AppointmentsManagementPage() {
                               })}
                               
                               {/* Empty slot context menu - Portal로 렌더링 (빈 셀 슬롯 루프 외부, 예약금지 셀 클릭 시) */}
-                              {!isNewBookingOpen && emptySlotMenuPosition && emptySlotMenuOpen && emptySlotMenuOpen.date === dateStr && emptySlotMenuOpen.designerId === (designerId || 0) && emptySlotMenuOpen.columnShopId === col.columnShopId && typeof window !== 'undefined' && (() => {
+                              {!isBookingFormModalOpen && emptySlotMenuPosition && emptySlotMenuOpen && emptySlotMenuOpen.date === dateStr && emptySlotMenuOpen.designerId === (designerId || 0) && emptySlotMenuOpen.columnShopId === col.columnShopId && typeof window !== 'undefined' && (() => {
                                 // emptySlotMenuOpen 상태를 기반으로 해당 슬롯의 restriction 정보 찾기
                                 const menuSlotTime = emptySlotMenuOpen.time;
                                 // emptySlotMenuOpen의 designerId와 date에 맞는 restrictions만 필터링
@@ -3440,10 +3433,7 @@ export default function AppointmentsManagementPage() {
 
                                 const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
                                 if (startMinutes < 0) return null;
-                                const durationMinutes =
-                                  b.service?.duration_minutes && b.service.duration_minutes > 0
-                                    ? b.service.duration_minutes
-                                    : 60;
+                                const durationMinutes = getBookingDurationMinutes(b as any);
                                 const endMinutes = startMinutes + durationMinutes;
 
                                 // Comment: Check overlap with other bookings for this designer (same date)
@@ -3456,10 +3446,7 @@ export default function AppointmentsManagementPage() {
                                   const om = Number(omStr);
                                   if (Number.isNaN(oh) || Number.isNaN(om)) return;
                                   const otherStart = (oh - GRID_START_HOUR) * 60 + om;
-                                  const otherDuration =
-                                    other.service?.duration_minutes && other.service.duration_minutes > 0
-                                      ? other.service.duration_minutes
-                                      : 60;
+                                  const otherDuration = getBookingDurationMinutes(other as any);
                                   const otherEnd = otherStart + otherDuration;
                                   const overlap =
                                     Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);
@@ -3491,7 +3478,7 @@ export default function AppointmentsManagementPage() {
                                     emptySlotMenuOpen={emptySlotMenuOpen}
                                     isMenuOpen={bookingMenuOpen === b.id}
                                     isHovered={hoveredBooking === b.id}
-                                    isNewBookingOpen={isNewBookingOpen}
+                                    isNewBookingOpen={isBookingFormModalOpen}
                                     hoverCardPosition={hoverCardPosition}
                                     bookingMenuPosition={bookingMenuPosition}
                                     onCardClick={handleDayViewCardClick}
@@ -3524,8 +3511,13 @@ export default function AppointmentsManagementPage() {
       </main>
       {/* New Booking Modal */}
       <NewBookingModal
-        isOpen={isNewBookingOpen}
-        onClose={() => { setIsNewBookingOpen(false); setRegisteredCustomer(null); }}
+        isOpen={isBookingFormModalOpen}
+        editingBooking={editingBooking}
+        onClose={() => {
+          setIsNewBookingOpen(false);
+          setEditingBooking(null);
+          setRegisteredCustomer(null);
+        }}
         selectedDate={selectedDate}
         newBookingCustomerSearch={newBookingCustomerSearch}
         newBookingDate={newBookingDate}
@@ -3554,6 +3546,11 @@ export default function AppointmentsManagementPage() {
         setNewBookingCustomerSearchResults={setNewBookingCustomerSearchResults}
         setNewBookingIsCustomerSearching={setNewBookingIsCustomerSearching}
         registeredCustomer={registeredCustomer}
+        onBookingsRefresh={() => {
+          if (isReservationHistoryOpen) {
+            setReservationHistoryRefreshTrigger((prev) => prev + 1);
+          }
+        }}
       />
 
       {/* Appointment Detail Modal */}
@@ -3583,6 +3580,8 @@ export default function AppointmentsManagementPage() {
             relatedBookings={relatedBookingsForDetail}
             onClose={() => setViewingBookingDetail(null)}
             onEdit={(booking: BookingWithRelations) => {
+              setIsNewBookingOpen(false);
+              setRegisteredCustomer(null);
               setEditingBooking(booking);
               setViewingBookingDetail(null);
             }}
@@ -3591,33 +3590,6 @@ export default function AppointmentsManagementPage() {
         );
       })()}
 
-
-      {/* Edit Booking Modal */}
-      {editingBooking && (
-        <EditBookingModal
-          booking={editingBooking}
-          selectedDate={selectedDate}
-          onClose={() => setEditingBooking(null)}
-          onSave={async (bookingId, updates) => {
-            await fetch(`/api/appointment/${bookingId}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(updates),
-            });
-            const res = await fetch(
-              `/api/appointment?date=${encodeURIComponent(selectedDate)}`
-            );
-            const data = await res.json();
-            if (res.ok) {
-              setBookings(data.bookings || []);
-            }
-            // 예약 내역 모달이 열려있으면 데이터 새로고침
-            if (isReservationHistoryOpen) {
-              setReservationHistoryRefreshTrigger((prev) => prev + 1);
-            }
-          }}
-        />
-      )}
 
       {/* Delete Booking Confirm Modal */}
       {bookingToDelete && (
@@ -3817,16 +3789,9 @@ export default function AppointmentsManagementPage() {
           }
         }}
         onEditBooking={(booking) => {
-          // 예약 내역 모달은 닫지 않고 그대로 유지
+          setIsNewBookingOpen(false);
+          setRegisteredCustomer(null);
           setEditingBooking(booking);
-          setEditDate(booking.booking_date || selectedDate);
-          if (booking.booking_time) {
-            const [hour, minute] = booking.booking_time.split(':');
-            const hourNum = Number(hour);
-            const ampm = hourNum >= 12 ? 'PM' : 'AM';
-            const displayHour = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum;
-            setEditTime(`${displayHour}:${minute} ${ampm}`);
-          }
         }}
         onCancelBooking={(booking) => {
           setBookingToCancel(booking);

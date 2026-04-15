@@ -7,19 +7,56 @@ import {
   getWeekEnd,
   COLOR_LABEL_OPTIONS,
   labelToDbTime,
+  bookingTimeToLabel,
+  getBookingDurationMinutes,
 } from '@/lib/utils/appointment-utils';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import FormAlert from '@/components/ui/FormAlert';
 import { Z } from '@/lib/constants';
-import type { NewBookingTimeSlot } from '@/lib/types';
+import type { BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
+
+function resolveEditModalServiceIds(
+  booking: BookingWithRelations,
+  categoryServices: { id: number; name: string }[],
+): number[] {
+  const normalize = (n: string) =>
+    n.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim().toLowerCase();
+  const ids: number[] = [];
+  const seen = new Set<number>();
+  const tryAdd = (serviceId: number | null | undefined) => {
+    if (serviceId == null || !Number.isFinite(Number(serviceId))) return;
+    const n = Number(serviceId);
+    if (seen.has(n) || !categoryServices.some((s) => s.id === n)) return;
+    seen.add(n);
+    ids.push(n);
+  };
+  tryAdd(booking.service?.id ?? (booking as { service_id?: number | null }).service_id);
+  const raw = String((booking as { custom_service_name?: string | null }).custom_service_name || '').trim();
+  if (raw) {
+    const parts = raw.split(/\s*(?:\/|,)\s*/).map((p) => p.trim()).filter(Boolean);
+    for (const part of parts) {
+      const pLow = part.toLowerCase();
+      const found = categoryServices.find(
+        (s) =>
+          normalize(s.name) === pLow ||
+          normalize(s.name).includes(pLow) ||
+          pLow.includes(normalize(s.name)),
+      );
+      if (found) tryAdd(found.id);
+    }
+  }
+  return ids;
+}
 
 interface NewBookingModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedDate: string;
+  /** When set, modal saves via PATCH and pre-fills from this booking */
+  editingBooking?: BookingWithRelations | null;
   // State values
   newBookingCustomerSearch: string;
   newBookingDate: string;
@@ -57,6 +94,8 @@ interface NewBookingModalProps {
   onSuccess?: (message: string) => void;
   /** Pre-fill customer when opening from customer list */
   registeredCustomer?: { id: number; name: string; phone: string } | null;
+  /** e.g. refresh reservation history panel after create/edit */
+  onBookingsRefresh?: () => void;
 }
 
 export default function NewBookingModal({
@@ -93,6 +132,8 @@ export default function NewBookingModal({
   onOpenCustomerRegistration,
   onSuccess,
   registeredCustomer,
+  editingBooking = null,
+  onBookingsRefresh,
 }: NewBookingModalProps) {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
@@ -118,6 +159,7 @@ export default function NewBookingModal({
   const [shops, setShops] = useState<any[]>([]);
   const [shopId, setShopId] = useState<number | null>(null);
   const shopManuallySet = useRef(false);
+  const editPrefillDoneForIdRef = useRef<number | null>(null);
   // Services are provided via the newBookingServices prop (loaded by initial-data on the parent page)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(() => {
@@ -126,9 +168,15 @@ export default function NewBookingModal({
   });
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
 
+  // Latest booking for edit — avoids stale closures while keeping dependency lists small
+  const editingBookingRef = useRef(editingBooking);
+  editingBookingRef.current = editingBooking;
+
   // Sync from parent when modal opens with pre-filled customer (e.g. from customers page)
   useEffect(() => {
     if (!isOpen) return;
+    // Do not override customer when editing an existing booking (edit mode has its own pre-fill)
+    if (editingBooking?.id) return;
     if (registeredCustomer) {
       setSelectedCustomerId(registeredCustomer.id);
       setNewBookingSelectedCustomerId(registeredCustomer.id);
@@ -136,7 +184,126 @@ export default function NewBookingModal({
       setCustomerSearchResults([registeredCustomer]);
       setSelectedCustomerSnapshot(registeredCustomer);
     }
-  }, [isOpen, registeredCustomer?.id]);
+  }, [isOpen, registeredCustomer?.id, editingBooking?.id]);
+
+  // Comment: Pre-fill form when opening in edit mode (same layout as new booking)
+  useEffect(() => {
+    if (!isOpen) {
+      editPrefillDoneForIdRef.current = null;
+      return;
+    }
+    if (!editingBooking?.id) {
+      editPrefillDoneForIdRef.current = null;
+      return;
+    }
+    if (editPrefillDoneForIdRef.current === editingBooking.id) return;
+    editPrefillDoneForIdRef.current = editingBooking.id;
+
+    const b = editingBooking;
+    const cid = b.customer_id ?? b.customer?.id ?? null;
+
+    let cancelled = false;
+
+    const applyCustomerSnapshot = (snap: { id: number; name: string; phone: string | null }) => {
+      setSelectedCustomerId(snap.id);
+      setNewBookingSelectedCustomerId(snap.id);
+      setSelectedCustomerSnapshot(snap);
+      setCustomerSearch(
+        `${snap.name || ''}${snap.phone ? ` (${snap.phone})` : ''}`.trim(),
+      );
+      setCustomerSearchResults([{ ...snap, customer_number: (snap as any).customer_number }]);
+      setIsCustomerDropdownOpen(false);
+    };
+
+    (async () => {
+      if (cid) {
+        const fromJoin = b.customer;
+        let snap: { id: number; name: string; phone: string | null } = {
+          id: cid,
+          name: String(fromJoin?.name ?? (b as { customer_name?: string | null }).customer_name ?? ''),
+          phone: (fromJoin?.phone ?? (b as { customer_phone?: string | null }).customer_phone) ?? null,
+        };
+        if (!snap.name.trim() && !snap.phone) {
+          try {
+            const res = await fetch(`/api/customers/${cid}`);
+            const data = await res.json();
+            if (cancelled) return;
+            if (res.ok && data.customer) {
+              snap = {
+                id: cid,
+                name: String(data.customer.name || ''),
+                phone: data.customer.phone ?? null,
+              };
+            }
+          } catch {
+            /* keep snap from booking row */
+          }
+        }
+        if (!cancelled) applyCustomerSnapshot(snap);
+      } else {
+        setSelectedCustomerId(null);
+        setNewBookingSelectedCustomerId(null);
+        setSelectedCustomerSnapshot(null);
+        setCustomerSearch('');
+        setCustomerSearchResults([]);
+      }
+    })();
+
+    setIsUnregisteredBooking(false);
+
+    const bd = b.booking_date || selectedDate;
+    setBookingDate(bd);
+    setNewBookingDate(bd);
+    if (b.shop_id != null) {
+      setShopId(b.shop_id);
+    }
+
+    const timeLabel =
+      b.booking_time != null && String(b.booking_time).length > 0
+        ? bookingTimeToLabel(b.booking_time)
+        : '10:00 AM';
+    const dur = getBookingDurationMinutes(b as any);
+    const designerId = (b as { designer_id?: number | null }).designer_id ?? b.designer?.id ?? null;
+    setNewBookingTimeSlots([
+      {
+        ...DEFAULT_NEW_BOOKING_TIME_SLOT,
+        designerId,
+        time: timeLabel,
+        duration: dur,
+        serviceTab: 'service',
+        serviceId: null,
+        selectedItems: [],
+      },
+    ]);
+    // Comment: Clear service checkboxes until newBookingServices effect resolves IDs from custom_service_name / service_id
+    setSlotServiceSelections([[]]);
+
+    const note = (b as { memo?: string | null; note?: string | null }).memo ?? (b as { note?: string | null }).note ?? '';
+    setMemo(note || '');
+    setNewBookingMemo(note || '');
+    setColorLabel(((b as { color_label?: string | null }).color_label as string | null) ?? null);
+    setDirectVisit(false);
+    setNewBookingDirectVisit(false);
+
+    return () => {
+      cancelled = true;
+      editPrefillDoneForIdRef.current = null;
+    };
+  }, [isOpen, editingBooking?.id, editingBooking, selectedDate, setNewBookingDate, setNewBookingMemo, setNewBookingSelectedCustomerId, setNewBookingTimeSlots]);
+
+  // Comment: Resolve service checkboxes when booking_modal_services (newBookingServices) loads after open
+  useEffect(() => {
+    if (!isOpen || !editingBooking?.id) return;
+    const services = Array.isArray(newBookingServices) ? newBookingServices : [];
+    if (services.length === 0) return;
+    const b = editingBookingRef.current;
+    if (!b?.id) return;
+    const svcIds = resolveEditModalServiceIds(b, services);
+    setSlotServiceSelections((prev) => {
+      if ((prev[0] || []).length > 0) return prev;
+      return svcIds.length > 0 ? [svcIds] : prev;
+    });
+  }, [isOpen, editingBooking?.id, newBookingServices]);
 
   // Comment: Sync booking date from parent when modal opens — respects the slot-click date
   const prevIsOpenRef = useRef(false);
@@ -144,6 +311,7 @@ export default function NewBookingModal({
     const justOpened = isOpen && !prevIsOpenRef.current;
     prevIsOpenRef.current = isOpen;
     if (!justOpened) return;
+    if (editingBooking?.id) return;
 
     // Comment: Use the pre-filled date from the clicked slot (newBookingDate), fall back to selectedDate
     const dateToUse = newBookingDate || selectedDate;
@@ -154,15 +322,16 @@ export default function NewBookingModal({
     }
 
     if (newBookingShopId != null) setShopId(newBookingShopId);
-  }, [isOpen, newBookingDate, selectedDate, newBookingShopId]);
+  }, [isOpen, newBookingDate, selectedDate, newBookingShopId, editingBooking?.id]);
 
   useEffect(() => {
     if (!isOpen) return;
+    if (editingBooking?.id) return;
     setSlotServiceSelections((prev) => {
       const next = newBookingTimeSlots.map((_, idx) => prev[idx] || []);
       return next.length > 0 ? next : [[]];
     });
-  }, [isOpen, newBookingTimeSlots.length]);
+  }, [isOpen, newBookingTimeSlots.length, editingBooking?.id]);
 
   // Debounced customer search - call API when user types
   // Comment: Skip search when customer is selected to avoid overwriting results and losing selectedCustomerDetail
@@ -273,8 +442,18 @@ export default function NewBookingModal({
     return () => { cancelled = true; };
   }, [isOpen, selectedCustomerId]);
 
-  // Comment: Duration options from 30 to 120 minutes in 15-minute steps.
-  const durationOptions = [30, 45, 60, 75, 90, 105, 120];
+  // Comment: Duration options — 15-minute steps up to 8h; always include current slot values for edit/long bookings.
+  const ADMIN_BOOKING_DURATION_CHOICES = React.useMemo(
+    () => Array.from({ length: 31 }, (_, i) => 30 + i * 15),
+    [],
+  );
+  const durationOptions = React.useMemo(() => {
+    const fromSlots = newBookingTimeSlots
+      .map((s) => s.duration)
+      .filter((d): d is number => d != null && Number(d) > 0);
+    const merged = new Set([...ADMIN_BOOKING_DURATION_CHOICES, ...fromSlots]);
+    return Array.from(merged).sort((a, b) => a - b);
+  }, [newBookingTimeSlots, ADMIN_BOOKING_DURATION_CHOICES]);
 
   const formatDurationLabel = (min: number) => `${min}분`;
 
@@ -384,6 +563,8 @@ export default function NewBookingModal({
       return;
     }
 
+    const isEditMode = Boolean(editingBooking?.id);
+
     try {
       // Comment: Overlap check needs minutes; check each slot before creating.
       for (const slot of slots) {
@@ -415,14 +596,10 @@ export default function NewBookingModal({
           let maxOverlap = 0;
           for (const b of dataExisting.bookings) {
             if (!b.booking_time) continue;
+            if (isEditMode && editingBooking && (b as { id?: number }).id === editingBooking.id) continue;
             const [bh, bm] = String(b.booking_time).split(':');
             const existStart = Number(bh) * 60 + Number(bm);
-            const existDuration =
-              b.service?.duration_minutes && b.service.duration_minutes > 0
-                ? b.service.duration_minutes
-                : (b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
-                  ? Number((b as any).custom_service_duration)
-                  : 60;
+            const existDuration = getBookingDurationMinutes(b as any);
             const existEnd = existStart + existDuration;
             const overlap = Math.max(newStartMinutes, existStart) < Math.min(newEndMinutes, existEnd);
             if (overlap) maxOverlap += 1;
@@ -442,6 +619,61 @@ export default function NewBookingModal({
 
     setSubmitting(true);
     try {
+      if (isEditMode && editingBooking) {
+        const slot = slots[0];
+        const selectedServiceIds = slotServiceSelections[0] || [];
+        const serviceSummary = getServiceNameSummary(selectedServiceIds);
+        const dbTime = labelToDbTime(slot.time);
+        if (!dbTime) {
+          alert('시간 형식 오류가 발생했습니다.');
+          return;
+        }
+        const resPatch = await fetch(`/api/appointment/${editingBooking.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            booking_date: bookingDate,
+            booking_time: dbTime,
+            designer_id: slot.designerId,
+            shop_id: shopId,
+            service_id: null,
+            custom_service_name: serviceSummary || null,
+            custom_service_duration: slot.duration || null,
+            memo,
+            color_label: colorLabel,
+          }),
+        });
+        if (!resPatch.ok) {
+          const errorText = await resPatch.text();
+          try {
+            const parsed = JSON.parse(errorText);
+            alert(parsed.error || '예약 수정에 실패했습니다.');
+          } catch {
+            alert('예약 수정에 실패했습니다.');
+          }
+          return;
+        }
+        const editSuccessMessage = '예약이 수정되었습니다.';
+        setBookingSuccessMessage(editSuccessMessage);
+        onSuccess?.(editSuccessMessage);
+        onClose();
+        setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
+        setSlotServiceSelections([[]]);
+        const weekStart = getWeekStart(selectedDate);
+        const weekEnd = getWeekEnd(selectedDate);
+        const res = await fetch(
+          `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`,
+        );
+        const data = await res.json();
+        if (res.ok) {
+          const bookings = Array.isArray(data.bookings) ? data.bookings : [];
+          setBookings(bookings);
+          setFilteredBookings(bookings);
+        }
+        onBookingsRefresh?.();
+        return;
+      }
+
       // Comment: Create one booking per slot.
       for (const [slotIndex, slot] of slots.entries()) {
         const selectedServiceIds = slotServiceSelections[slotIndex] || [];
@@ -504,6 +736,7 @@ export default function NewBookingModal({
         setBookings(updatedBookings);
         setFilteredBookings(updatedBookings);
       }
+      onBookingsRefresh?.();
     } finally {
       setSubmitting(false);
     }
@@ -546,7 +779,7 @@ export default function NewBookingModal({
     <Modal
       isOpen={isOpen}
       onClose={handleCancel}
-      title="예약 등록"
+      title={editingBooking ? '예약 수정' : '예약 등록'}
       zIndex={Z.MODAL_PRIMARY}
       maxWidth="max-w-6xl"
       scrollable
@@ -566,7 +799,7 @@ export default function NewBookingModal({
             }
             onClick={handleSubmit}
           >
-            {submitting ? '저장중...' : '저장'}
+            {submitting ? '저장중...' : editingBooking ? '변경 저장' : '저장'}
           </Button>
         </>
       }
@@ -947,28 +1180,30 @@ export default function NewBookingModal({
                         </option>
                       ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Comment: + button adds one booking row with same time/duration as first row.
-                      const base = newBookingTimeSlots[0] ?? { ...DEFAULT_NEW_BOOKING_TIME_SLOT };
-                      const nextSlot: NewBookingTimeSlot = {
-                        ...DEFAULT_NEW_BOOKING_TIME_SLOT,
-                        time: base.time,
-                        duration: base.duration,
-                        selectedItems: [],
-                        serviceId: null,
-                        designerId: null,
-                      };
-                      const next = [...newBookingTimeSlots, nextSlot];
-                      setNewBookingTimeSlots(next);
-                      setSlotServiceSelections((prev) => [...prev, []]);
-                    }}
-                    className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-                    title="추가"
-                  >
-                    <span className="material-symbols-outlined text-base">add</span>
-                  </button>
+                  {!editingBooking ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Comment: + button adds one booking row with same time/duration as first row.
+                        const base = newBookingTimeSlots[0] ?? { ...DEFAULT_NEW_BOOKING_TIME_SLOT };
+                        const nextSlot: NewBookingTimeSlot = {
+                          ...DEFAULT_NEW_BOOKING_TIME_SLOT,
+                          time: base.time,
+                          duration: base.duration,
+                          selectedItems: [],
+                          serviceId: null,
+                          designerId: null,
+                        };
+                        const next = [...newBookingTimeSlots, nextSlot];
+                        setNewBookingTimeSlots(next);
+                        setSlotServiceSelections((prev) => [...prev, []]);
+                      }}
+                      className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                      title="추가"
+                    >
+                      <span className="material-symbols-outlined text-base">add</span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
 

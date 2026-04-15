@@ -5,7 +5,7 @@
 // alerts and confirmations always sit on top.
 export const Z = {
   MODAL_BASE: 'z-[100000]',       // HolidayCalendarModal, ReservationHistoryModal
-  MODAL_PRIMARY: 'z-[100001]',    // CancelBookingModal, EditBookingModal, AttendanceModal
+  MODAL_PRIMARY: 'z-[100001]',    // CancelBookingModal, NewBookingModal (create/edit), AttendanceModal
   MODAL_PICKER: 'z-[100002]',     // ServicePickerModal
   MODAL_DRAWER: 'z-[100003]',     // CustomerInfoDrawer
   MODAL_SALES: 'z-[100004]',      // SalesRegistrationModal

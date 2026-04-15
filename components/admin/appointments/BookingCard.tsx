@@ -8,6 +8,7 @@ import {
   GRID_START_HOUR,
   GRID_30MIN_HEIGHT,
   COLOR_LABEL_MAP,
+  getBookingDurationMinutes,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 
@@ -93,12 +94,7 @@ function BookingCard({
   const minutes = Number(minuteStr);
   if (Number.isNaN(hour) || Number.isNaN(minutes)) return null;
 
-  const durationMinutes =
-    b.service?.duration_minutes && b.service.duration_minutes > 0
-      ? b.service.duration_minutes
-      : (b as any).custom_service_duration && Number((b as any).custom_service_duration) > 0
-        ? Number((b as any).custom_service_duration)
-      : 60;
+  const durationMinutes = getBookingDurationMinutes(b as any);
 
   const serviceName =
     (booking as any).service_for_display ||

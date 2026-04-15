@@ -1,3 +1,22 @@
+/**
+ * Effective booking length in minutes for admin grid / overlap checks.
+ * Prefer custom_service_duration (public booking total or admin override), then catalog service.
+ */
+export function getBookingDurationMinutes(booking: {
+  service?: { duration_minutes?: number | null } | null;
+  custom_service_duration?: number | null;
+}): number {
+  const custom = (booking as { custom_service_duration?: unknown }).custom_service_duration;
+  if (custom != null && Number.isFinite(Number(custom)) && Number(custom) > 0) {
+    return Math.round(Number(custom));
+  }
+  const dm = booking.service?.duration_minutes;
+  if (dm != null && Number.isFinite(Number(dm)) && Number(dm) > 0) {
+    return Math.round(Number(dm));
+  }
+  return 60;
+}
+
 // Comment: Grid configuration for full schedule view
 export const GRID_START_HOUR = 8; // 08:00
 export const GRID_END_HOUR = 21; // 21:00 (exclusive upper bound, last label 20:00)

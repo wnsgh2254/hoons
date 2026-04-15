@@ -389,17 +389,13 @@ test.describe('[UI] 예약 상태 관리 — pending → confirmed → noshow/ca
       await editBtn.click();
       await page.waitForTimeout(500);
 
-      // Edit modal should have date and time inputs
-      const editDialog = page.getByRole('dialog').last();
-      const dateInput = editDialog.locator('input[type="date"]').first();
-      const timeSelect = editDialog.locator('select').first();
-
-      const hasDateInput = await dateInput.isVisible().catch(() => false);
-      const hasTimeSelect = await timeSelect.isVisible().catch(() => false);
-
-      expect(hasDateInput || hasTimeSelect).toBe(true);
+      // Edit uses same modal as new booking — heading "예약 수정"
+      await expect(page.getByRole('heading', { name: '예약 수정' })).toBeVisible({ timeout: 5000 });
+      const hasTimeSelect = await page.getByText('시작시간', { exact: false }).first().isVisible().catch(() => false);
+      expect(hasTimeSelect).toBe(true);
 
       // Close without saving
+      const editDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: '예약 수정' }) });
       const closeBtn = editDialog.getByRole('button', { name: /취소|Cancel|닫기|Close/i }).first();
       if (await closeBtn.isVisible()) await closeBtn.click();
     }

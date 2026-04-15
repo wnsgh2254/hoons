@@ -3,7 +3,11 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
-import { resolveBookingCardStatusColor, COLOR_LABEL_MAP } from '@/lib/utils/appointment-utils';
+import {
+  resolveBookingCardStatusColor,
+  COLOR_LABEL_MAP,
+  getBookingDurationMinutes,
+} from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 
 export interface ScheduleDayViewMenuHandlers {
@@ -75,12 +79,7 @@ function ScheduleDayViewBookingCard({
   const [hourStr, minuteStr] = (booking.booking_time || '').split(':');
   const hour = Number(hourStr);
   const minutes = Number(minuteStr);
-  const durationMinutes =
-    booking.service?.duration_minutes && booking.service.duration_minutes > 0
-      ? booking.service.duration_minutes
-      : (booking as any).custom_service_duration && Number((booking as any).custom_service_duration) > 0
-        ? Number((booking as any).custom_service_duration)
-      : 60;
+  const durationMinutes = getBookingDurationMinutes(booking as any);
 
   const serviceName =
     (booking as any).service_for_display ||

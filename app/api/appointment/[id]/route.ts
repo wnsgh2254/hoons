@@ -114,6 +114,13 @@ export async function PATCH(
         updates.shop_id = Number(body.shop_id);
       }
     }
+    if (body.designer_id !== undefined) {
+      if (body.designer_id === null) {
+        updates.designer_id = null;
+      } else if (typeof body.designer_id === 'number' || typeof body.designer_id === 'string') {
+        updates.designer_id = Number(body.designer_id);
+      }
+    }
 
     // Comment: Optional Stripe refund when admin cancels a booking with a paid card deposit
     const refundStripeDeposit =

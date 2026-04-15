@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       fullDate: typeof fullDate === "string" ? fullDate : undefined,
       customerId: customerId,
       customServiceName: serviceName,
-      customServiceDuration: null,
+      customServiceDuration: durationMinutes > 0 ? durationMinutes : null,
     });
 
     const amountInCents =
