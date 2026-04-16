@@ -68,7 +68,6 @@ interface WeekViewGridProps {
     designerId: number;
     time: string;
     shopId?: number | null;
-    directVisit?: boolean;
     customer?: { id: number; name: string; phone?: string | null } | null;
   }) => void;
   setBookingRestrictions: React.Dispatch<React.SetStateAction<any[]>>;
@@ -813,24 +812,6 @@ export default function WeekViewGrid({
                                       className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
                                     >
                                       예약 등록
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        // 바로 방문: 예약 등록 모달에 "바로 방문" 체크박스 체크된 상태로 열기
-                                        const displayHour = slotHour % 12 === 0 ? 12 : slotHour % 12;
-                                        const timeStr = `${displayHour}:${String(slotMin).padStart(2, '0')} ${
-                                          slotHour >= 12 ? 'PM' : 'AM'
-                                        }`;
-                                        onOpenNewBooking({ date: dateStr, designerId: weekViewDesignerId || 0, time: timeStr, directVisit: true });
-                                        setEmptySlotMenuOpen(null);
-                                        setEmptySlotMenuPosition(null);
-                                        setHoveredEmptySlot(null);
-                                      }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                    >
-                                      바로 방문
                                     </button>
                                     <button
                                       type="button"

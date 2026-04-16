@@ -60,7 +60,6 @@ interface NewBookingModalProps {
   // State values
   newBookingCustomerSearch: string;
   newBookingDate: string;
-  newBookingDirectVisit: boolean;
   newBookingTimeSlots: NewBookingTimeSlot[];
   newBookingDesigners: any[];
   newBookingServices: {
@@ -77,7 +76,6 @@ interface NewBookingModalProps {
   // State setters
   setNewBookingCustomerSearch: (value: string) => void;
   setNewBookingDate: (value: string) => void;
-  setNewBookingDirectVisit: (value: boolean) => void;
   setNewBookingTimeSlots: React.Dispatch<React.SetStateAction<NewBookingTimeSlot[]>>;
   setNewBookingMemo: (value: string) => void;
   setNewBookingSubmitting: (value: boolean) => void;
@@ -104,7 +102,6 @@ export default function NewBookingModal({
   selectedDate,
   newBookingCustomerSearch,
   newBookingDate,
-  newBookingDirectVisit,
   newBookingTimeSlots,
   newBookingDesigners,
   newBookingServices,
@@ -117,7 +114,6 @@ export default function NewBookingModal({
   newBookingIsCustomerSearching,
   setNewBookingCustomerSearch,
   setNewBookingDate,
-  setNewBookingDirectVisit,
   setNewBookingTimeSlots,
   setNewBookingMemo,
   setNewBookingSubmitting,
@@ -141,7 +137,6 @@ export default function NewBookingModal({
   // Comment: Persist selected customer snapshot so past records section never disappears when search results change
   const [selectedCustomerSnapshot, setSelectedCustomerSnapshot] = useState<any | null>(null);
   const [isCustomerSearching, setIsCustomerSearching] = useState(false);
-  const [directVisit, setDirectVisit] = useState(false);
   const [bookingDate, setBookingDate] = useState(selectedDate);
   const [memo, setMemo] = useState('');
   const [colorLabel, setColorLabel] = useState<string | null>(null);
@@ -282,8 +277,6 @@ export default function NewBookingModal({
     setMemo(note || '');
     setNewBookingMemo(note || '');
     setColorLabel(((b as { color_label?: string | null }).color_label as string | null) ?? null);
-    setDirectVisit(false);
-    setNewBookingDirectVisit(false);
 
     return () => {
       cancelled = true;
@@ -1120,15 +1113,6 @@ export default function NewBookingModal({
                 )}
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={directVisit}
-                onChange={(e) => setDirectVisit(e.target.checked)}
-                className="w-4 h-4"
-              />
-              바로 방문
-            </label>
           </div>
 
           {/* Shop Select */}

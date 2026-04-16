@@ -40,7 +40,6 @@ export default function CustomersPage() {
   // NewBookingModal state (same shape as admin/appointments page)
   const [newBookingCustomerSearch, setNewBookingCustomerSearch] = useState('');
   const [newBookingDate, setNewBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [newBookingDirectVisit, setNewBookingDirectVisit] = useState(false);
   const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<NewBookingTimeSlot[]>([
     { ...DEFAULT_NEW_BOOKING_TIME_SLOT },
   ]);
@@ -406,7 +405,6 @@ export default function CustomersPage() {
         selectedDate={new Date().toISOString().split('T')[0]}
         newBookingCustomerSearch={newBookingCustomerSearch}
         newBookingDate={newBookingDate}
-        newBookingDirectVisit={newBookingDirectVisit}
         newBookingTimeSlots={newBookingTimeSlots}
         newBookingDesigners={newBookingDesigners}
         newBookingServices={newBookingServices}
@@ -419,7 +417,6 @@ export default function CustomersPage() {
         newBookingIsCustomerSearching={newBookingIsCustomerSearching}
         setNewBookingCustomerSearch={setNewBookingCustomerSearch}
         setNewBookingDate={setNewBookingDate}
-        setNewBookingDirectVisit={setNewBookingDirectVisit}
         setNewBookingTimeSlots={setNewBookingTimeSlots}
         setNewBookingMemo={setNewBookingMemo}
         setNewBookingSubmitting={setNewBookingSubmitting}

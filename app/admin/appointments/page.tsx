@@ -142,7 +142,6 @@ export default function AppointmentsManagementPage() {
   const [newBookingServiceId, setNewBookingServiceId] = useState<number | null>(null);
   const [newBookingDate, setNewBookingDate] = useState<string>(selectedDate);
   const [newBookingCustomerSearch, setNewBookingCustomerSearch] = useState('');
-  const [newBookingDirectVisit, setNewBookingDirectVisit] = useState(false);
   const [newBookingMemo, setNewBookingMemo] = useState('');
   const [newBookingSelectedCustomerId, setNewBookingSelectedCustomerId] = useState<number | null>(null);
   const [newBookingCustomerSearchResults, setNewBookingCustomerSearchResults] = useState<any[]>([]);
@@ -3055,14 +3054,22 @@ export default function AppointmentsManagementPage() {
                                               return null;
                                             }
                                             
+                                            // Comment: Flip dropdown upward if not enough space below viewport
+                                            const menuEstimatedHeight = isSlotRestricted ? 88 : 132;
+                                            const spaceBelow = window.innerHeight - emptySlotMenuPosition.top;
+                                            const flipUp = spaceBelow < menuEstimatedHeight;
+                                            const menuTop = flipUp
+                                              ? emptySlotMenuPosition.top - menuEstimatedHeight
+                                              : emptySlotMenuPosition.top;
+
                                             return createPortal(
-                                            <div 
-                                              data-empty-slot-menu 
+                                            <div
+                                              data-empty-slot-menu
                                                 className="fixed bg-white rounded-lg shadow-lg z-[99999] flex flex-col"
                                                 style={{
                                                   pointerEvents: 'auto',
                                                   border: 'none',
-                                                  top: `${emptySlotMenuPosition.top}px`,
+                                                  top: `${menuTop}px`,
                                                   left: `${emptySlotMenuPosition.left}px`,
                                                   width: `${emptySlotMenuPosition.width}px`,
                                                   height: 'auto',
@@ -3180,7 +3187,6 @@ export default function AppointmentsManagementPage() {
                                                   setNewBookingShopId(emptySlotMenuOpen.columnShopId);
                                                 }
                                                 setNewBookingTimeSlots([{ designerId: emptySlotMenuOpen.designerId, time: timeStr1, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
-                                                setNewBookingDirectVisit(false);
                                                 setEditingBooking(null);
                                                 setIsNewBookingOpen(true);
                                                 setEmptySlotMenuOpen(null);
@@ -3190,30 +3196,6 @@ export default function AppointmentsManagementPage() {
                                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-lg"
                                             >
                                               예약 등록
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                // 바로 방문: 예약 등록 모달에 "바로 방문" 체크박스 체크된 상태로 열기
-                                                const [menuSlotHour2, menuSlotMin2] = menuSlotTime.split(':').map(Number);
-                                                const displayHour2 = menuSlotHour2 % 12 === 0 ? 12 : menuSlotHour2 % 12;
-                                                const timeStr2 = `${displayHour2}:${String(menuSlotMin2).padStart(2, '0')} ${menuSlotHour2 >= 12 ? 'PM' : 'AM'}`;
-                                                setNewBookingDate(emptySlotMenuOpen.date);
-                                                if (emptySlotMenuOpen.columnShopId !== 0) {
-                                                  setNewBookingShopId(emptySlotMenuOpen.columnShopId);
-                                                }
-                                                setNewBookingTimeSlots([{ designerId: emptySlotMenuOpen.designerId, time: timeStr2, duration: 30, serviceTab: 'service', serviceId: null, selectedItems: [] }]);
-                                                setNewBookingDirectVisit(true);
-                                                setEditingBooking(null);
-                                                setIsNewBookingOpen(true);
-                                                setEmptySlotMenuOpen(null);
-                                                    setEmptySlotMenuPosition(null);
-                                                setHoveredEmptySlot(null);
-                                              }}
-                                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                            >
-                                              바로 방문
                                             </button>
                                             <button
                                               type="button"
@@ -3521,7 +3503,6 @@ export default function AppointmentsManagementPage() {
         selectedDate={selectedDate}
         newBookingCustomerSearch={newBookingCustomerSearch}
         newBookingDate={newBookingDate}
-        newBookingDirectVisit={newBookingDirectVisit}
         newBookingTimeSlots={newBookingTimeSlots}
         newBookingDesigners={newBookingDesigners}
         newBookingServices={newBookingServices}
@@ -3531,7 +3512,6 @@ export default function AppointmentsManagementPage() {
         newBookingShopId={newBookingShopId}
         setNewBookingCustomerSearch={setNewBookingCustomerSearch}
         setNewBookingDate={setNewBookingDate}
-        setNewBookingDirectVisit={setNewBookingDirectVisit}
         setNewBookingTimeSlots={setNewBookingTimeSlots}
         setNewBookingMemo={setNewBookingMemo}
         setNewBookingSubmitting={setNewBookingSubmitting}
@@ -3906,9 +3886,10 @@ export default function AppointmentsManagementPage() {
         isOpen={isHolidayCalendarModalOpen}
         onClose={() => setIsHolidayCalendarModalOpen(false)}
         allDesigners={allDesigners}
+        allShops={allShops}
         refreshKey={holidayCalendarRefreshKey}
-        onOpenHolidayModal={(designerId, designerName) => {
-          setHolidayModalShopId(null);
+        onOpenHolidayModal={(designerId, designerName, shopId) => {
+          setHolidayModalShopId(shopId ?? null);
           if (designerId === null) {
             setHolidayDesignerId(null);
             setHolidayDesignerName('전체');

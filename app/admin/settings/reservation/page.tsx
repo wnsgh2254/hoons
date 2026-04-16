@@ -36,6 +36,9 @@ interface BookingResource {
   isActive: boolean;
   shopId: number | null;
   schedules: BusinessHour[];
+  /** Shop IDs this designer is allowed at (primary + designer_shops) */
+  allowedShopIds: number[];
+  role: string;
 }
 
 type ShopOption = { id: number; name: string };
@@ -127,6 +130,7 @@ function BusinessHourModal({
   title,
   shops,
   showShopSelector = false,
+  businessHours = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -136,12 +140,32 @@ function BusinessHourModal({
   title: string;
   shops?: ShopOption[];
   showShopSelector?: boolean;
+  /** Business hours for constraining time selection */
+  businessHours?: { shopId: number | null; startTime: string; endTime: string; days: string[] }[];
 }) {
   const [shopId, setShopId] = useState<number | null>(initial?.shopId ?? (shops?.[0]?.id ?? null));
   const [startTime, setStartTime] = useState(initial?.startTime || '07:00');
   const [endTime, setEndTime] = useState(initial?.endTime || '22:00');
   const [days, setDays] = useState<string[]>(initial?.days || [...ALL_DAYS]);
   const [error, setError] = useState<string | null>(null);
+
+  // Comment: Filter TIME_OPTIONS to business hours range for selected shop
+  const filteredTimeOptions = useMemo(() => {
+    if (businessHours.length === 0) return TIME_OPTIONS;
+    // Find business hours that match the selected shop (or have null shopId = all shops)
+    const matching = businessHours.filter(
+      (bh) => bh.shopId === null || bh.shopId === shopId,
+    );
+    if (matching.length === 0) return TIME_OPTIONS;
+    // Use widest range: earliest start, latest end
+    let earliest = '23:30';
+    let latest = '00:00';
+    for (const bh of matching) {
+      if (bh.startTime < earliest) earliest = bh.startTime;
+      if (bh.endTime > latest) latest = bh.endTime;
+    }
+    return TIME_OPTIONS.filter((opt) => opt.value >= earliest && opt.value <= latest);
+  }, [businessHours, shopId]);
 
   const toggleDay = (day: string) => {
     setDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
@@ -189,13 +213,13 @@ function BusinessHourModal({
           label="시작시간"
           value={startTime}
           onChange={(e) => setStartTime(e.target.value)}
-          options={TIME_OPTIONS}
+          options={filteredTimeOptions}
         />
         <Select
           label="종료시간"
           value={endTime}
           onChange={(e) => setEndTime(e.target.value)}
-          options={TIME_OPTIONS}
+          options={filteredTimeOptions}
         />
         <div>
           <p className="block text-sm font-medium text-gray-700 mb-2">요일</p>
@@ -375,6 +399,7 @@ function ResourceModal({
   shops,
   staffList,
   saveInProgress = false,
+  businessHours = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -385,6 +410,8 @@ function ResourceModal({
   staffList: { id: number; name: string }[];
   /** When true, save/cancel reflect an async save (edit flow). */
   saveInProgress?: boolean;
+  /** Business hours for filtering time options */
+  businessHours?: { shopId: number | null; startTime: string; endTime: string; days: string[] }[];
 }) {
   const [isLinked, setIsLinked] = useState(initial?.isLinked ?? true);
   const [linkedStaff, setLinkedStaff] = useState(initial?.linkedStaff || '');
@@ -397,13 +424,29 @@ function ResourceModal({
   const [isAddingSchedule, setIsAddingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Comment: Filter shops to only those the designer is allowed at (directors see all)
+  const isDirector = String(initial?.role || '').toLowerCase().includes('director');
+  const allowedShops = isDirector || !initial?.allowedShopIds?.length
+    ? shops
+    : shops.filter((s) => initial.allowedShopIds.includes(s.id));
+  const showShopSelector = allowedShops.length > 1;
+
   const handleSave = () => {
     if (saveInProgress) return;
     if (!name.trim()) {
       setError('자원명을 입력해주세요.');
       return;
     }
-    onSave({ name, linkedStaff: isLinked ? linkedStaff : '', isLinked, isActive, shopId, schedules });
+    onSave({
+      name,
+      linkedStaff: isLinked ? linkedStaff : '',
+      isLinked,
+      isActive,
+      shopId,
+      schedules,
+      allowedShopIds: initial?.allowedShopIds ?? [],
+      role: initial?.role ?? '',
+    });
   };
 
   const scheduleColumns = [
@@ -544,9 +587,10 @@ function ResourceModal({
             setIsAddingSchedule(false);
           }}
           title="시간 추가"
-          shops={shops}
-          showShopSelector={shops.length > 0}
-          initial={{ id: 0, shopId: shopId, startTime: '10:00', endTime: '19:00', days: [] }}
+          shops={allowedShops}
+          showShopSelector={showShopSelector}
+          businessHours={businessHours}
+          initial={{ id: 0, shopId: allowedShops.length === 1 ? allowedShops[0].id : shopId, startTime: '10:00', endTime: '19:00', days: [] }}
         />
       )}
       {editingSchedule && (
@@ -565,8 +609,9 @@ function ResourceModal({
           }}
           initial={editingSchedule}
           title="시간 수정"
-          shops={shops}
-          showShopSelector={shops.length > 0}
+          shops={allowedShops}
+          showShopSelector={showShopSelector}
+          businessHours={businessHours}
         />
       )}
     </Modal>
@@ -574,6 +619,16 @@ function ResourceModal({
 }
 
 function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
+  const { hours: rawBusinessHours } = useBusinessHours();
+  const businessHoursForModal = useMemo(() =>
+    rawBusinessHours.map((bh) => ({
+      shopId: bh.shop_id,
+      startTime: bh.start_time?.slice(0, 5) || '00:00',
+      endTime: bh.end_time?.slice(0, 5) || '23:30',
+      days: bh.days || [],
+    })),
+    [rawBusinessHours],
+  );
   const [resources, setResources] = useState<BookingResource[]>([]);
   const [staffList, setStaffList] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -589,16 +644,23 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
   const fetchResources = async () => {
     setLoading(true);
     try {
-      const [staffRes, schedulesRes, defaultsRes] = await Promise.all([
+      const [staffRes, schedulesRes, defaultsRes, designersRes] = await Promise.all([
         fetch('/api/staff'),
         fetch('/api/designer-schedules?all=true'),
         fetch('/api/designer-weekday-defaults'),
+        fetch('/api/designers'),
       ]);
       const staffData = await staffRes.json();
       const schedulesData = await schedulesRes.json();
       const defaultsData = await defaultsRes.json();
+      const designersData = await designersRes.json();
 
       const staff: any[] = staffData.staff || [];
+      // Comment: Map designer id → { shop_ids_at, role } for allowed shop filtering
+      const designerInfoMap = new Map<number, { shopIdsAt: number[]; role: string }>();
+      for (const d of designersData.designers || []) {
+        designerInfoMap.set(d.id, { shopIdsAt: d.shop_ids_at || [], role: d.role || '' });
+      }
       const allSchedules: any[] = schedulesData.schedules || [];
       const allDefaults: { designer_id: number; weekday: number; shop_id: number }[] =
         defaultsData.defaults || [];
@@ -655,6 +717,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           days: g.days.sort((a, b) => (KOREAN_TO_WEEKDAY[a] ?? 99) - (KOREAN_TO_WEEKDAY[b] ?? 99)),
         }));
 
+        const info = designerInfoMap.get(member.id);
         return {
           id: member.id,
           name: member.name,
@@ -663,6 +726,8 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           isActive: member.is_active ?? true,
           shopId: member.shop_id ?? null,
           schedules: sortedSchedules,
+          allowedShopIds: info?.shopIdsAt ?? (member.shop_id != null ? [member.shop_id] : []),
+          role: info?.role ?? member.role ?? '',
         };
       });
 
@@ -865,6 +930,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           title="자원 등록"
           shops={shops}
           staffList={staffList}
+          businessHours={businessHoursForModal}
         />
       )}
 
@@ -880,6 +946,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           shops={shops}
           staffList={staffList}
           saveInProgress={resourceSavePending}
+          businessHours={businessHoursForModal}
         />
       )}
     </div>

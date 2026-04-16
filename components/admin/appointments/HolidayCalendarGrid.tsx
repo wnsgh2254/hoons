@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { HolidayType, DayEntry } from '@/lib/types';
 
 interface HolidayCalendarGridProps {
   currentMonth: Date;
   calendarData: Record<string, DayEntry[]>;
+  allDesignerCount: number;
   onDesignerClick?: (designerName: string) => void;
 }
 
@@ -14,6 +15,7 @@ const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 export default function HolidayCalendarGrid({
   currentMonth,
   calendarData,
+  allDesignerCount,
   onDesignerClick,
 }: HolidayCalendarGridProps) {
   const year = currentMonth.getFullYear();
@@ -27,7 +29,7 @@ export default function HolidayCalendarGrid({
 
   // Generate calendar days
   const calendarDays: Array<{ date: number; dateStr: string }> = [];
-  
+
   // Add empty cells for days before the first day of the month
   for (let i = 0; i < startingDayOfWeek; i++) {
     calendarDays.push({ date: 0, dateStr: '' });
@@ -38,6 +40,21 @@ export default function HolidayCalendarGrid({
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     calendarDays.push({ date: day, dateStr });
   }
+
+  // Precompute which dates have all designers off (arbitrary holiday for everyone)
+  const allOffDates = useMemo(() => {
+    if (allDesignerCount <= 0) return new Set<string>();
+    const result = new Set<string>();
+    for (const [dateStr, entries] of Object.entries(calendarData)) {
+      const uniqueArbitraryNames = new Set(
+        entries.filter((e) => e.type === 'arbitrary').map((e) => e.name),
+      );
+      if (uniqueArbitraryNames.size >= allDesignerCount) {
+        result.add(dateStr);
+      }
+    }
+    return result;
+  }, [calendarData, allDesignerCount]);
 
   const getHolidayIcon = (type: HolidayType) => {
     switch (type) {
@@ -77,7 +94,7 @@ export default function HolidayCalendarGrid({
                 {Array.from({ length: 7 }).map((_, dayIndex) => {
                   const dayIndexInMonth = weekIndex * 7 + dayIndex;
                   const dayData = calendarDays[dayIndexInMonth];
-                  
+
                   if (!dayData || dayData.date === 0) {
                     return (
                       <td
@@ -88,6 +105,42 @@ export default function HolidayCalendarGrid({
                   }
 
                   const entries = calendarData[dayData.dateStr] || [];
+                  const isAllOff = allOffDates.has(dayData.dateStr);
+
+                  // When all designers have 임의 휴일: show date with red circle, no names
+                  if (isAllOff) {
+                    const nonArbitraryEntries = entries.filter((e) => e.type !== 'arbitrary');
+                    return (
+                      <td
+                        key={dayIndex}
+                        className={`px-3 py-2 ${dayIndex < 6 ? 'border-r border-gray-200' : ''} min-h-[100px] align-top`}
+                      >
+                        <div className="flex justify-end mb-2">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full border-2 border-red-500 text-sm font-semibold text-red-500">
+                            {dayData.date}
+                          </span>
+                        </div>
+                        {nonArbitraryEntries.length > 0 && (
+                          <div className="space-y-1">
+                            {nonArbitraryEntries.map((entry, idx) => (
+                              <div
+                                key={idx}
+                                className={`flex items-center gap-1.5 text-sm font-medium text-gray-900 ${
+                                  onDesignerClick ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''
+                                }`}
+                                onClick={() => {
+                                  if (onDesignerClick) onDesignerClick(entry.name);
+                                }}
+                              >
+                                {getHolidayIcon(entry.type)}
+                                <span className="leading-tight">{entry.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  }
 
                   return (
                     <td
@@ -99,8 +152,8 @@ export default function HolidayCalendarGrid({
                       </div>
                       <div className="space-y-1">
                         {entries.map((entry, idx) => (
-                          <div 
-                            key={idx} 
+                          <div
+                            key={idx}
                             className={`flex items-center gap-1.5 text-sm font-medium text-gray-900 ${
                               onDesignerClick ? 'cursor-pointer hover:text-blue-600 hover:underline' : ''
                             }`}
@@ -134,6 +187,41 @@ export default function HolidayCalendarGrid({
         ) : (
           nonEmptyDays.map((day) => {
             const entries = calendarData[day.dateStr] || [];
+            const isAllOff = allOffDates.has(day.dateStr);
+
+            if (isAllOff) {
+              const nonArbitraryEntries = entries.filter((e) => e.type !== 'arbitrary');
+              return (
+                <div key={day.dateStr} className="border border-red-300 rounded-xl p-3 bg-red-50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border-2 border-red-500 text-xs font-semibold text-red-500">
+                      {day.date}
+                    </span>
+                    <span className="text-sm font-semibold text-red-500">전체 휴무</span>
+                  </div>
+                  {nonArbitraryEntries.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      {nonArbitraryEntries.map((entry, idx) => (
+                        <button
+                          key={`${day.dateStr}-${entry.name}-${idx}`}
+                          type="button"
+                          className={`w-full text-left flex items-center gap-2 text-sm text-gray-900 ${
+                            onDesignerClick ? 'hover:text-blue-600' : ''
+                          }`}
+                          onClick={() => {
+                            if (onDesignerClick) onDesignerClick(entry.name);
+                          }}
+                        >
+                          {getHolidayIcon(entry.type)}
+                          <span>{entry.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <div key={day.dateStr} className="border border-gray-200 rounded-xl p-3 bg-white">
                 <div className="text-sm font-semibold text-gray-900 mb-2">{day.date}일</div>

@@ -130,40 +130,45 @@ export default function HolidaySettingModal({
   }, [isOpen, initialDesignerId, initialDesignerName, defaultTargetShopId, shops]);
 
   // Comment: Load weekday schedule + venue time-offs together; ignore stale responses when designer or open state changes.
+  // When designerId is null ("전체"), fetch ALL time-off records so we can show dates where all designers have 임의 휴일.
   useEffect(() => {
     if (!isOpen) return;
 
-    if (designerId === null) {
-      setRegularSchedule([]);
-      setAllDesignerTimeOffs([]);
-      setScheduleLoading(false);
-      setSelectedDates([]);
-      return;
-    }
-
-    const loadDesignerId = designerId;
     let cancelled = false;
-
     setScheduleLoading(true);
+
     void (async () => {
       try {
-        const [scheduleRes, timeOffRes] = await Promise.all([
-          fetch(`/api/designer-schedules?designer_id=${loadDesignerId}`),
-          fetch(`/api/designer-time-off?designer_id=${loadDesignerId}`),
-        ]);
-
-        const [scheduleData, timeOffData] = await Promise.all([scheduleRes.json(), timeOffRes.json()]);
-
-        if (cancelled) return;
-
-        setRegularSchedule(scheduleRes.ok ? scheduleData.schedules || [] : []);
-        if (timeOffRes.ok) {
-          const raw = (timeOffData.timeOffs || []).filter(
-            (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일',
-          );
-          setAllDesignerTimeOffs(raw);
+        if (designerId === null) {
+          // "전체" mode: fetch all designers' time-off records (no designer_id filter)
+          const timeOffRes = await fetch('/api/designer-time-off');
+          const timeOffData = await timeOffRes.json();
+          if (cancelled) return;
+          setRegularSchedule([]);
+          if (timeOffRes.ok) {
+            const raw = (timeOffData.timeOffs || []).filter(
+              (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일',
+            );
+            setAllDesignerTimeOffs(raw);
+          } else {
+            setAllDesignerTimeOffs([]);
+          }
         } else {
-          setAllDesignerTimeOffs([]);
+          const [scheduleRes, timeOffRes] = await Promise.all([
+            fetch(`/api/designer-schedules?designer_id=${designerId}`),
+            fetch(`/api/designer-time-off?designer_id=${designerId}`),
+          ]);
+          const [scheduleData, timeOffData] = await Promise.all([scheduleRes.json(), timeOffRes.json()]);
+          if (cancelled) return;
+          setRegularSchedule(scheduleRes.ok ? scheduleData.schedules || [] : []);
+          if (timeOffRes.ok) {
+            const raw = (timeOffData.timeOffs || []).filter(
+              (to: any) => to.reason === '임의 휴일' || to.reason === '특별 근무일',
+            );
+            setAllDesignerTimeOffs(raw);
+          } else {
+            setAllDesignerTimeOffs([]);
+          }
         }
       } catch (error) {
         console.error('Error fetching holiday data:', error);
@@ -184,20 +189,62 @@ export default function HolidaySettingModal({
   }, [isOpen, designerId]);
 
   const existingTimeOffsForVenue = useMemo(() => {
-    if (designerId === null || targetShopId === null) return [];
+    if (targetShopId === null) return [];
     return allDesignerTimeOffs.filter(
       (to: any) =>
         (to.reason === '임의 휴일' || to.reason === '특별 근무일') &&
         timeOffAppliesToVenue(to, targetShopId),
     );
-  }, [allDesignerTimeOffs, designerId, targetShopId]);
+  }, [allDesignerTimeOffs, targetShopId]);
+
+  // Comment: Designers belonging to the selected shop (Directors always included, non-directors by home shop)
+  const designersForShop = useMemo(() => {
+    if (targetShopId === null) return allDesigners;
+    return allDesigners.filter((d) => {
+      if (String(d.role || '').toLowerCase().includes('director')) return true;
+      return d.shop_id != null && Number(d.shop_id) === Number(targetShopId);
+    });
+  }, [allDesigners, targetShopId]);
+
+  // Comment: For "전체" mode, find dates where ALL shop designers have 임의 휴일 for the selected venue
+  const allDesignerHolidayDates = useMemo(() => {
+    if (designerId !== null || targetShopId === null || designersForShop.length === 0) return [];
+    const venueTimeOffs = existingTimeOffsForVenue.filter(
+      (to: any) => to.reason === '임의 휴일',
+    );
+    // Expand each record into individual dates, grouped by designer
+    const dateDesignerMap = new Map<string, Set<number>>();
+    for (const to of venueTimeOffs) {
+      const dates = expandDateRange(
+        String(to.start_date).slice(0, 10),
+        String(to.end_date).slice(0, 10),
+      );
+      for (const d of dates) {
+        if (!dateDesignerMap.has(d)) dateDesignerMap.set(d, new Set());
+        dateDesignerMap.get(d)!.add(Number(to.designer_id));
+      }
+    }
+    // Return dates where all shop designers have 임의 휴일
+    const result: string[] = [];
+    for (const [dateStr, designers] of dateDesignerMap) {
+      if (designers.size >= designersForShop.length) {
+        result.push(dateStr);
+      }
+    }
+    return result.sort();
+  }, [designerId, targetShopId, existingTimeOffsForVenue, designersForShop]);
 
   // Comment: Re-populate selectedDates when type, venue, or designer changes — winner per day (latest row) must match current type
   useEffect(() => {
-    if (!isOpen || designerId === null || targetShopId === null) return;
-    const targetReason = holidayType === 'holiday' ? '임의 휴일' : '특별 근무일';
-    setSelectedDates(datesWhereWinningReason(existingTimeOffsForVenue, targetReason));
-  }, [isOpen, designerId, targetShopId, existingTimeOffsForVenue, holidayType]);
+    if (!isOpen || targetShopId === null) return;
+    if (designerId === null) {
+      // "전체" mode: show dates where all designers have 임의 휴일
+      setSelectedDates(allDesignerHolidayDates);
+    } else {
+      const targetReason = holidayType === 'holiday' ? '임의 휴일' : '특별 근무일';
+      setSelectedDates(datesWhereWinningReason(existingTimeOffsForVenue, targetReason));
+    }
+  }, [isOpen, designerId, targetShopId, existingTimeOffsForVenue, holidayType, allDesignerHolidayDates]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -287,8 +334,15 @@ export default function HolidaySettingModal({
     setSubmitting(true);
     try {
       if (!designerId && holidayType === 'holiday') {
-        const promises = selectedDates.flatMap((date) =>
-          allDesigners.map((designer) =>
+        // Only create records for newly added dates (skip dates already fully covered)
+        const newDates = selectedDates.filter((d) => !allDesignerHolidayDates.includes(d));
+        if (newDates.length === 0) {
+          alert('새로 추가된 날짜가 없습니다.');
+          setSubmitting(false);
+          return;
+        }
+        const promises = newDates.flatMap((date) =>
+          designersForShop.map((designer) =>
             fetch('/api/designer-time-off', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -377,17 +431,16 @@ export default function HolidaySettingModal({
         />
 
         {(() => {
-          // Comment: Show shop selector only for "전체" or multi-venue designers (directors)
+          // Comment: Show shop selector only for "전체" or director-role designers
           const selectedDesigner = designerId != null
             ? allDesigners.find((d) => d.id === designerId)
             : null;
-          const isMultiVenue =
+          const isDirector =
             designerId === null || // "전체" selected
             (selectedDesigner &&
-              ((selectedDesigner.shop_ids_at?.length ?? 0) >= 2 ||
-                String(selectedDesigner.role || '').toLowerCase().includes('director')));
+              String(selectedDesigner.role || '').toLowerCase().includes('director'));
 
-          if (isMultiVenue && shops.length > 0) {
+          if (isDirector && shops.length > 0) {
             return (
               <>
                 <Select
@@ -524,12 +577,37 @@ export default function HolidaySettingModal({
                       );
                     }
 
+                    // Comment: "전체" mode — simplified: just toggle date selection, show red border for selected
+                    if (designerId === null) {
+                      const showTodayDot = isToday && isCurrentMonth;
+                      const displayClass = isSelected
+                        ? 'border-2 border-red-500 bg-white text-gray-900'
+                        : 'hover:bg-gray-100';
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => {
+                            if (!isCurrentMonth) return;
+                            setSelectedDates((prev) =>
+                              prev.includes(dateStr) ? prev.filter((x) => x !== dateStr) : [...prev, dateStr],
+                            );
+                          }}
+                          disabled={!isCurrentMonth}
+                          className={`relative aspect-square text-xs rounded-lg transition-colors ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-900'} ${displayClass}`}
+                        >
+                          {showTodayDot && (
+                            <span className="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500" aria-hidden />
+                          )}
+                          {d.getDate()}
+                        </button>
+                      );
+                    }
+
                     const weekday = d.getDay();
                     const hasRegularSchedule =
-                      designerId !== null
-                        ? regularSchedule.some((s: any) => s.weekday === weekday && !s.effective_to)
-                        : false;
-                    const isRegularHoliday = isCurrentMonth && !hasRegularSchedule && designerId !== null;
+                      regularSchedule.some((s: any) => s.weekday === weekday && !s.effective_to);
+                    const isRegularHoliday = isCurrentMonth && !hasRegularSchedule;
 
                     const existingTimeOff = winningVenueTimeOffOnDate(existingTimeOffsForVenue, dateStr);
                     const isExistingHoliday = existingTimeOff?.reason === '임의 휴일';
