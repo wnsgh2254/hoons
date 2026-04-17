@@ -9,7 +9,7 @@ import { Button, Input, Modal, Select, Tabs } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesItemType } from '@/lib/types';
 
-// DB에 한국어로 저장된 카테고리를 영어로 정규화 (역매핑)
+// DB에 한국어로 저장된 카테고리를 영어로 정규화 (역매핑)..
 const CATEGORY_NORMALIZE_MAP: Record<string, string> = {
   '커트': 'Cut',
   '드라이': 'Dry',
