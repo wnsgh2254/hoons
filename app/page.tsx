@@ -145,7 +145,7 @@ const Home = () => {
             <Link href="/booking" className="w-full md:w-auto text-center text-sm md:text-base font-normal uppercase tracking-[0.18em] border border-black px-6 md:px-8 py-3 text-black hover:bg-black hover:text-white transition-colors whitespace-normal md:whitespace-nowrap break-words">
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
-            <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-left md:text-right self-end md:self-auto">Now</h2>
+            <h2 className="hidden md:block font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-left md:text-right self-end md:self-auto">Now</h2>
         </div>
       </section>
 

@@ -3,16 +3,13 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 
 // Comment: Global top navigation bar used across landing and booking pages
 export function MainNav() {
   const pathname = usePathname();
   const isHome = pathname === '/';
-  const isBooking = pathname.startsWith('/booking');
   const isAdmin = pathname.startsWith('/admin');
-  const [isOpen, setIsOpen] = useState(false);
 
   // Comment: Don't show navigation on admin pages
   if (isAdmin) {
@@ -20,14 +17,6 @@ export function MainNav() {
   }
 
   const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
-  const toggleMenu = () => setIsOpen(!isOpen);
-  const closeMenu = () => setIsOpen(false);
-  const scrollToBookingTop = () => {
-    closeMenu();
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
 
   return (
     <>
@@ -36,7 +25,7 @@ export function MainNav() {
         <div className="w-full max-w-[100vw] px-4 sm:px-6 md:px-12 py-6 flex items-center justify-between gap-3 text-xs md:text-sm font-normal tracking-widest uppercase leading-none pointer-events-auto min-w-0">
           
           {/* Left: Brand Logo - allow shrink on mobile so Menu stays visible */}
-          <Link href="/" className="block z-50 group shrink-0 min-w-0 md:shrink-0" onClick={closeMenu} style={{ isolation: 'isolate' }}>
+          <Link href="/" className="block z-50 group shrink-0 min-w-0 md:shrink-0" style={{ isolation: 'isolate' }}>
             <Image 
               src="/images/logo-white.png" 
               alt="HAEYOOM" 
@@ -63,20 +52,13 @@ export function MainNav() {
           {/* Right: Book Now / Mobile Menu - never shrink so Menu is always visible on mobile */}
           <div className="flex flex-col items-end gap-1 shrink-0">
             <div className="md:hidden" style={{ isolation: 'isolate' }}>
-              {isBooking ? (
-                <button
-                  type="button"
-                  onClick={scrollToBookingTop}
-                  className="border border-black bg-white px-4 py-2 text-[11px] uppercase tracking-widest text-black transition-colors hover:bg-black hover:text-white"
-                  aria-label="Go to booking"
-                >
-                  Book
-                </button>
-              ) : (
-                <button className="uppercase whitespace-nowrap py-1 px-2 -mr-1" onClick={toggleMenu} aria-label={isOpen ? 'Close menu' : 'Open menu'}>
-                  {isOpen ? 'Close' : 'Menu'}
-                </button>
-              )}
+              <Link
+                href="/booking"
+                className="border border-black bg-white px-4 py-2 text-[11px] uppercase tracking-widest text-black transition-colors hover:bg-black hover:text-white"
+                aria-label="Go to booking"
+              >
+                Book
+              </Link>
             </div>
             <div className="hidden md:flex items-center gap-4" style={{ isolation: 'isolate' }}>
               <Link 
@@ -99,29 +81,6 @@ export function MainNav() {
           </div>
         </div>
       </header>
-
-      {/* Mobile Menu Overlay */}
-      <div className={`fixed inset-0 z-40 bg-[#F4F4F4] text-black transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'} md:hidden pt-24 px-4`}>
-        <nav className="flex flex-col space-y-0 border-t border-black">
-          {[
-            { name: 'Home', path: '/', hash: '' },
-            { name: 'About', path: '/', hash: '#about' },
-            { name: 'Menu', path: '/', hash: '#services' },
-            { name: 'Locations', path: '/', hash: '#locations' },
-            { name: 'Designers', path: '/', hash: '#designers' },
-            { name: 'Book Now', path: '/booking', hash: '' },
-          ].map((item) => (
-            <Link 
-              key={item.name}
-              href={`${item.path}${item.hash}`} 
-              onClick={closeMenu}
-              className="text-4xl font-display font-normal uppercase tracking-tighter py-6 border-b border-black hover:bg-black hover:text-white transition-colors"
-            >
-              {item.name}
-            </Link>
-          ))}
-        </nav>
-      </div>
     </>
   );
 }
