@@ -22,6 +22,12 @@ export function MainNav() {
   const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
   const toggleMenu = () => setIsOpen(!isOpen);
   const closeMenu = () => setIsOpen(false);
+  const scrollToBookingTop = () => {
+    closeMenu();
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <>
@@ -56,10 +62,21 @@ export function MainNav() {
 
           {/* Right: Book Now / Mobile Menu - never shrink so Menu is always visible on mobile */}
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="md:hidden">
-              <button className="uppercase whitespace-nowrap py-1 px-2 -mr-1" onClick={toggleMenu} aria-label={isOpen ? 'Close menu' : 'Open menu'}>
-                {isOpen ? 'Close' : 'Menu'}
-              </button>
+            <div className="md:hidden" style={{ isolation: 'isolate' }}>
+              {isBooking ? (
+                <button
+                  type="button"
+                  onClick={scrollToBookingTop}
+                  className="border border-black bg-white px-4 py-2 text-[11px] uppercase tracking-widest text-black transition-colors hover:bg-black hover:text-white"
+                  aria-label="Go to booking"
+                >
+                  Book
+                </button>
+              ) : (
+                <button className="uppercase whitespace-nowrap py-1 px-2 -mr-1" onClick={toggleMenu} aria-label={isOpen ? 'Close menu' : 'Open menu'}>
+                  {isOpen ? 'Close' : 'Menu'}
+                </button>
+              )}
             </div>
             <div className="hidden md:flex items-center gap-4" style={{ isolation: 'isolate' }}>
               <Link 

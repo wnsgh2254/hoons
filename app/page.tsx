@@ -140,12 +140,12 @@ const Home = () => {
       {/* SPLIT HEADER: BOOK / NOW */}
       <section className="border-b border-black bg-[#F4F4F4]">
         {/* Adjusted padding to px-6 md:px-12 */}
-        <div className="flex justify-between items-center px-6 md:px-12 py-12 md:py-20 overflow-hidden">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 md:gap-4 px-6 md:px-12 py-12 md:py-20 overflow-hidden">
             <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter">Book</h2>
-            <Link href="/booking" className="text-sm md:text-base font-normal uppercase tracking-widest border border-black px-8 py-3 text-black hover:bg-black hover:text-white transition-colors whitespace-nowrap mx-4">
+            <Link href="/booking" className="w-full md:w-auto text-center text-sm md:text-base font-normal uppercase tracking-[0.18em] border border-black px-6 md:px-8 py-3 text-black hover:bg-black hover:text-white transition-colors whitespace-normal md:whitespace-nowrap break-words">
                 Book Appointment <ArrowRight size={14} className="inline ml-1" />
             </Link>
-            <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-right">Now</h2>
+            <h2 className="font-display font-normal text-6xl md:text-8xl uppercase tracking-tighter text-left md:text-right self-end md:self-auto">Now</h2>
         </div>
       </section>
 

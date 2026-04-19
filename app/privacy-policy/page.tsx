@@ -1,6 +1,6 @@
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-[#F4F4F4] pt-32 pb-32">
+    <div className="min-h-screen bg-[#F4F4F4] pt-32 pb-32 text-black">
   
       {/* Content Section */}
       <div className="px-6 md:px-12">
