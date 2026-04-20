@@ -1,73 +1,123 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// Comment: Helper to safely convert to number
-const toNum = (v: any) => Number(v || 0);
+const toNum = (value: unknown) => Number(value || 0);
 
-// Comment: Get total sales data for sales page
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+    const shopId = searchParams.get('shop_id');
 
     if (!startDate || !endDate) {
       return NextResponse.json(
-        { error: '시작 날짜와 종료 날짜가 필요합니다.' },
-        { status: 400 }
+        { error: 'start_date and end_date are required.' },
+        { status: 400 },
       );
     }
 
-    // Comment: Fetch bookings in date range
-    const { data: bookings, error: bookingsError } = await supabase
+    let salesQuery = supabase
+      .from('sales')
+      .select(`
+        id,
+        shop_id,
+        customer_id,
+        sales_date,
+        total_amount,
+        cash_amount,
+        card_amount,
+        bank_transfer_amount,
+        sales_items (
+          item_type,
+          quantity,
+          amount,
+          prepaid_deduction
+        )
+      `)
+      .gte('sales_date', startDate)
+      .lte('sales_date', endDate);
+
+    let refundsQuery = supabase
+      .from('refunds')
+      .select(`
+        id,
+        shop_id,
+        refund_date,
+        cash_amount,
+        card_amount,
+        bank_transfer_amount,
+        refund_items (
+          item_type,
+          quantity,
+          amount
+        )
+      `)
+      .gte('refund_date', startDate)
+      .lte('refund_date', endDate);
+
+    let bookingsQuery = supabase
       .from('bookings')
-      .select('id, service_id, total_amount, booking_date, status, deposit_amount, prepaid_pass_id')
+      .select('id, shop_id')
       .gte('booking_date', startDate)
       .lte('booking_date', endDate);
+
+    if (shopId) {
+      const numericShopId = Number(shopId);
+      salesQuery = salesQuery.eq('shop_id', numericShopId);
+      refundsQuery = refundsQuery.eq('shop_id', numericShopId);
+      bookingsQuery = bookingsQuery.eq('shop_id', numericShopId);
+    }
+
+    const [{ data: sales, error: salesError }, { data: refunds, error: refundsError }, { data: bookings, error: bookingsError }] =
+      await Promise.all([salesQuery, refundsQuery, bookingsQuery]);
+
+    if (salesError) {
+      console.error('Error fetching sales:', salesError);
+      return NextResponse.json(
+        { error: 'Failed to load sales data.' },
+        { status: 500 },
+      );
+    }
+
+    if (refundsError) {
+      console.error('Error fetching refunds:', refundsError);
+      return NextResponse.json(
+        { error: 'Failed to load refund data.' },
+        { status: 500 },
+      );
+    }
 
     if (bookingsError) {
       console.error('Error fetching bookings:', bookingsError);
       return NextResponse.json(
-        { error: '예약 데이터 조회에 실패했습니다.' },
-        { status: 500 }
+        { error: 'Failed to load booking data.' },
+        { status: 500 },
       );
     }
 
-    // Comment: Fetch payments in date range (including prepaid pass sales)
-    const { data: payments, error: paymentsError } = await supabase
+    const bookingIds = (bookings || []).map((booking: any) => booking.id);
+    let paymentsQuery = supabase
       .from('payments')
-      .select('id, booking_id, amount, method, type, created_at, designer_id')
+      .select('id, booking_id, amount, method, type, created_at')
       .gte('created_at', `${startDate}T00:00:00`)
       .lte('created_at', `${endDate}T23:59:59`);
 
+    if (bookingIds.length > 0) {
+      paymentsQuery = paymentsQuery.in('booking_id', bookingIds);
+    } else {
+      paymentsQuery = paymentsQuery.eq('booking_id', -1);
+    }
+
+    const { data: payments, error: paymentsError } = await paymentsQuery;
     if (paymentsError) {
       console.error('Error fetching payments:', paymentsError);
-      return NextResponse.json(
-        { error: '결제 데이터 조회에 실패했습니다.' },
-        { status: 500 }
-      );
     }
 
-    // Comment: Fetch product sales
-    const { data: productSales, error: productSalesError } = await supabase
-      .from('product_sale_items')
-      .select('quantity, line_amount, created_at, payments(id, method, type)')
-      .gte('created_at', `${startDate}T00:00:00`)
-      .lte('created_at', `${endDate}T23:59:59`);
-
-    if (productSalesError) {
-      console.error('Error fetching product sales:', productSalesError);
-    }
-
-    // Comment: Fetch prepaid pass purchases (payments with type that indicates prepaid)
-    // Comment: For now, we'll check if there's a prepaid_passes table or track prepaid purchases differently
-    // Comment: Assuming prepaid purchases are tracked via payments with a specific type or booking_id is null
-
-    const bookingsData = bookings || [];
+    const salesData = sales || [];
+    const refundsData = refunds || [];
     const paymentsData = payments || [];
-    const productSalesData = productSales || [];
 
-    // Comment: Initialize sales summary
     const salesSummary = {
       service: { quantity: 0, amount: 0 },
       product: { quantity: 0, amount: 0 },
@@ -82,46 +132,42 @@ export async function GET(request: NextRequest) {
       total: 0,
     };
 
-    // Comment: Process service sales from bookings
-    bookingsData.forEach((booking: any) => {
-      const isPrepaidDeduction = booking.prepaid_pass_id !== null && booking.prepaid_pass_id !== undefined;
-      
-      if (booking.status === 'cancelled') {
-        // Comment: Count as refund
-        if (booking.service_id) {
-          refundSummary.service.quantity += 1;
-          refundSummary.service.amount += toNum(booking.total_amount);
+    salesData.forEach((sale: any) => {
+      (sale.sales_items || []).forEach((item: any) => {
+        const quantity = Math.max(1, toNum(item.quantity));
+        const amount = toNum(item.amount);
+
+        if (item.item_type === 'service') {
+          salesSummary.service.quantity += quantity;
+          salesSummary.service.amount += amount;
+        } else if (item.item_type === 'product') {
+          salesSummary.product.quantity += quantity;
+          salesSummary.product.amount += amount;
+        } else if (item.item_type === 'prepaid') {
+          salesSummary.membership.quantity += quantity;
+          salesSummary.membership.amount += amount;
         }
-      } else if (booking.status === 'confirmed') {
-        // Comment: Count as sale (not prepaid deduction)
-        if (booking.service_id && !isPrepaidDeduction) {
-          salesSummary.service.quantity += 1;
-          salesSummary.service.amount += toNum(booking.total_amount);
+      });
+    });
+
+    refundsData.forEach((refund: any) => {
+      (refund.refund_items || []).forEach((item: any) => {
+        const quantity = Math.max(1, toNum(item.quantity));
+        const amount = toNum(item.amount);
+
+        if (item.item_type === 'service') {
+          refundSummary.service.quantity += quantity;
+          refundSummary.service.amount += amount;
+        } else if (item.item_type === 'product') {
+          refundSummary.product.quantity += quantity;
+          refundSummary.product.amount += amount;
+        } else if (item.item_type === 'prepaid') {
+          refundSummary.membership.quantity += quantity;
+          refundSummary.membership.amount += amount;
         }
-      }
+      });
     });
 
-    // Comment: Process product sales
-    productSalesData.forEach((item: any) => {
-      const payment = item.payments;
-      if (payment && payment.type === 'product') {
-        salesSummary.product.quantity += toNum(item.quantity);
-        salesSummary.product.amount += toNum(item.line_amount);
-      }
-    });
-
-    // Comment: Process prepaid pass purchases (payments with booking_id is null)
-    const prepaidPayments = paymentsData.filter((p: any) => {
-      // Comment: Prepaid pass sales are payments with booking_id is null
-      return p.booking_id === null || p.booking_id === undefined;
-    });
-
-    prepaidPayments.forEach((payment: any) => {
-      salesSummary.membership.quantity += 1;
-      salesSummary.membership.amount += toNum(payment.amount);
-    });
-
-    // Comment: Calculate totals
     salesSummary.total =
       salesSummary.service.amount +
       salesSummary.product.amount +
@@ -132,7 +178,6 @@ export async function GET(request: NextRequest) {
       refundSummary.product.amount +
       refundSummary.membership.amount;
 
-    // Comment: Payment method breakdown
     const paymentDetails = {
       cash: {
         service: 0,
@@ -148,29 +193,41 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    // Comment: Process payments by method
-    paymentsData.forEach((payment: any) => {
-      const method = payment.method === 'cash' ? 'cash' : 'card';
-      const amount = toNum(payment.amount);
+    salesData.forEach((sale: any) => {
+      const items = sale.sales_items || [];
+      const typeTotals = {
+        service: items
+          .filter((item: any) => item.item_type === 'service')
+          .reduce((sum: number, item: any) => sum + toNum(item.amount), 0),
+        product: items
+          .filter((item: any) => item.item_type === 'product')
+          .reduce((sum: number, item: any) => sum + toNum(item.amount), 0),
+        membership: items
+          .filter((item: any) => item.item_type === 'prepaid')
+          .reduce((sum: number, item: any) => sum + toNum(item.amount), 0),
+      };
+      const payableTotal =
+        typeTotals.service + typeTotals.product + typeTotals.membership || toNum(sale.total_amount);
 
-      if (payment.booking_id === null || payment.booking_id === undefined) {
-        // Comment: Prepaid pass sale (membership)
-        paymentDetails[method].membership += amount;
-      } else if (payment.type === 'deposit' || payment.type === 'balance') {
-        // Comment: Service payment
-        paymentDetails[method].service += amount;
-      } else if (payment.type === 'product') {
-        // Comment: Product payment
-        paymentDetails[method].product += amount;
-      } else {
-        // Comment: Might be membership or other
-        paymentDetails[method].membership += amount;
-      }
+      const paymentBuckets = [
+        { key: 'cash' as const, amount: toNum(sale.cash_amount) },
+        { key: 'card' as const, amount: toNum(sale.card_amount) + toNum(sale.bank_transfer_amount) },
+      ];
 
-      paymentDetails[method].total += amount;
+      paymentBuckets.forEach(({ key, amount }) => {
+        if (amount <= 0) return;
+
+        const serviceShare = payableTotal > 0 ? (typeTotals.service / payableTotal) * amount : 0;
+        const productShare = payableTotal > 0 ? (typeTotals.product / payableTotal) * amount : 0;
+        const membershipShare = Math.max(0, amount - serviceShare - productShare);
+
+        paymentDetails[key].service += serviceShare;
+        paymentDetails[key].product += productShare;
+        paymentDetails[key].membership += membershipShare;
+        paymentDetails[key].total += amount;
+      });
     });
 
-    // Comment: Deposit summary
     const depositSummary = {
       cash: {
         deposit: 0,
@@ -190,13 +247,7 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    // Comment: Process deposits (exclude prepaid pass sales)
     paymentsData.forEach((payment: any) => {
-      // Comment: Skip prepaid pass sales (booking_id is null) for deposit summary
-      if (payment.booking_id === null || payment.booking_id === undefined) {
-        return;
-      }
-
       const method = payment.method === 'cash' ? 'cash' : 'card';
       const amount = toNum(payment.amount);
 
@@ -209,25 +260,48 @@ export async function GET(request: NextRequest) {
       depositSummary[method].total += amount;
     });
 
-    // Comment: Revenue summary (with membership deductions)
-    // Comment: Calculate membership deductions from bookings with prepaid_pass_id
     const membershipDeductions = {
       service: { quantity: 0, amount: 0 },
       product: { quantity: 0, amount: 0 },
       total: 0,
     };
 
-    bookingsData.forEach((booking: any) => {
-      const isPrepaidDeduction = booking.prepaid_pass_id !== null && booking.prepaid_pass_id !== undefined;
-      if (booking.status === 'confirmed' && isPrepaidDeduction) {
-        if (booking.service_id) {
-          membershipDeductions.service.quantity += 1;
-          membershipDeductions.service.amount += toNum(booking.total_amount);
+    const uniqueCustomers = {
+      service: new Set<number>(),
+      product: new Set<number>(),
+    };
+
+    salesData.forEach((sale: any) => {
+      (sale.sales_items || []).forEach((item: any) => {
+        const prepaidDeduction = toNum(item.prepaid_deduction);
+
+        if (item.item_type === 'service') {
+          if (sale.customer_id != null) {
+            uniqueCustomers.service.add(Number(sale.customer_id));
+          }
+          if (prepaidDeduction > 0) {
+            membershipDeductions.service.quantity += 1;
+            membershipDeductions.service.amount += prepaidDeduction;
+          }
+        } else if (item.item_type === 'product') {
+          if (sale.customer_id != null) {
+            uniqueCustomers.product.add(Number(sale.customer_id));
+          }
+          if (prepaidDeduction > 0) {
+            membershipDeductions.product.quantity += 1;
+            membershipDeductions.product.amount += prepaidDeduction;
+          }
         }
-      }
+      });
     });
 
-    membershipDeductions.total = membershipDeductions.service.amount + membershipDeductions.product.amount;
+    membershipDeductions.total =
+      membershipDeductions.service.amount + membershipDeductions.product.amount;
+
+    const totalUniqueCustomers = new Set<number>([
+      ...uniqueCustomers.service,
+      ...uniqueCustomers.product,
+    ]);
 
     const revenueSummary = {
       sales: {
@@ -239,29 +313,31 @@ export async function GET(request: NextRequest) {
       total: {
         service: { amount: salesSummary.service.amount + membershipDeductions.service.amount },
         product: { amount: salesSummary.product.amount + membershipDeductions.product.amount },
-        total: salesSummary.service.amount + salesSummary.product.amount + membershipDeductions.total,
+        total:
+          salesSummary.service.amount +
+          salesSummary.product.amount +
+          membershipDeductions.total,
       },
       customers: {
-        service: { quantity: salesSummary.service.quantity, amount: 0 },
-        product: { quantity: salesSummary.product.quantity, amount: 0 },
-        total: { quantity: salesSummary.service.quantity, amount: 0 },
+        service: { quantity: uniqueCustomers.service.size, amount: 0 },
+        product: { quantity: uniqueCustomers.product.size, amount: 0 },
+        total: { quantity: totalUniqueCustomers.size, amount: 0 },
       },
     };
 
-    // Comment: Calculate average per customer
     if (revenueSummary.customers.service.quantity > 0) {
       revenueSummary.customers.service.amount = Math.round(
-        revenueSummary.sales.service.amount / revenueSummary.customers.service.quantity
+        revenueSummary.sales.service.amount / revenueSummary.customers.service.quantity,
       );
     }
     if (revenueSummary.customers.product.quantity > 0) {
       revenueSummary.customers.product.amount = Math.round(
-        revenueSummary.sales.product.amount / revenueSummary.customers.product.quantity
+        revenueSummary.sales.product.amount / revenueSummary.customers.product.quantity,
       );
     }
     if (revenueSummary.customers.total.quantity > 0) {
       revenueSummary.customers.total.amount = Math.round(
-        revenueSummary.total.total / revenueSummary.customers.total.quantity
+        revenueSummary.total.total / revenueSummary.customers.total.quantity,
       );
     }
 
@@ -273,13 +349,13 @@ export async function GET(request: NextRequest) {
         depositSummary,
         revenueSummary,
       },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error('Error in total sales route:', error);
     return NextResponse.json(
-      { error: '서버 오류가 발생했습니다.' },
-      { status: 500 }
+      { error: 'An unexpected error occurred.' },
+      { status: 500 },
     );
   }
 }

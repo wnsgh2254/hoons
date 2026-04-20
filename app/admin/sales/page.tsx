@@ -1225,6 +1225,146 @@ function SalesHistoryModal({
       const actualStartDate = dateMode === 'daily' ? selectedDate : startDate;
       const actualEndDate = dateMode === 'daily' ? selectedDate : endDate;
 
+      const normalizeHistoryItemType = (value: string) => {
+        if (!value) return null;
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'all' || value === '전체') return null;
+        if (normalized === 'service' || value === '서비스') return 'service';
+        if (normalized === 'product' || value === '제품') return 'product';
+        if (
+          normalized === 'membership' ||
+          normalized === 'prepaid' ||
+          value === '정액권' ||
+          value === '선불권'
+        ) {
+          return 'membership';
+        }
+        return null;
+      };
+
+      const normalizedItemType = normalizeHistoryItemType(selectedItemType);
+      const salesParams = new URLSearchParams();
+      salesParams.append('start_date', actualStartDate);
+      salesParams.append('end_date', actualEndDate);
+      if (selectedDesignerId) {
+        salesParams.append('designer_id', selectedDesignerId);
+      }
+      if (normalizedItemType) {
+        salesParams.append('item_type', normalizedItemType);
+      }
+
+      const [registeredSalesRes, registeredRefundsRes] = await Promise.all([
+        fetch(`/api/sales?${salesParams.toString()}`),
+        fetch(`/api/refunds?${salesParams.toString()}`),
+      ]);
+
+      const registeredSalesData = await registeredSalesRes.json();
+      const registeredRefundsData = await registeredRefundsRes.json();
+
+      const salesHistory = (registeredSalesData.sales || []).map((sale: any) => ({
+        id: sale.id,
+        customer_id: sale.customer_id,
+        shop_id: sale.shop_id || null,
+        booking_date: sale.sales_date,
+        booking_time: sale.sales_time,
+        sales_date: sale.sales_date,
+        sales_time: sale.sales_time,
+        sales_amount: sale.sales_amount || 0,
+        discount_amount: sale.discount_amount || 0,
+        total_amount: sale.total_amount || 0,
+        cash_amount: sale.cash_amount || 0,
+        card_amount: sale.card_amount || 0,
+        bank_transfer_amount: sale.bank_transfer_amount || 0,
+        memo: sale.memo || null,
+        created_at: sale.created_at || null,
+        edit_history: sale.edit_history || [],
+        items: (sale.sales_items || []).map((item: any) => ({
+          item_type: item.item_type,
+          item_name: item.item_name,
+          unit_price: item.unit_price,
+          quantity: item.quantity,
+          discount: item.discount,
+          discount_type: item.discount_type,
+          discount_value: item.discount_value,
+          amount: item.amount,
+          manager: item.manager,
+          sales_classification: item.sales_classification,
+          prepaid_deduction: item.prepaid_deduction,
+        })),
+        payments: [
+          ...(Number(sale.cash_amount) > 0 ? [{ method: 'cash', amount: Number(sale.cash_amount) }] : []),
+          ...(Number(sale.card_amount) > 0 ? [{ method: 'card', amount: Number(sale.card_amount) }] : []),
+          ...(Number(sale.bank_transfer_amount) > 0
+            ? [{ method: 'bank_transfer', amount: Number(sale.bank_transfer_amount) }]
+            : []),
+        ],
+      }));
+
+      const registeredRefundHistory = (registeredRefundsData.refunds || []).map((refund: any) => ({
+        id: refund.id,
+        _isRefund: true,
+        customer_id: refund.customer_id,
+        shop_id: refund.shop_id || null,
+        booking_date: refund.refund_date,
+        booking_time: refund.refund_time,
+        sales_date: refund.refund_date,
+        sales_time: refund.refund_time,
+        sales_amount: refund.total_amount || 0,
+        discount_amount: 0,
+        total_amount: refund.total_amount || 0,
+        cash_amount: refund.cash_amount || 0,
+        card_amount: refund.card_amount || 0,
+        bank_transfer_amount: refund.bank_transfer_amount || 0,
+        memo: refund.memo || null,
+        items: (refund.refund_items || []).map((item: any) => ({
+          item_type: item.item_type,
+          item_name: item.item_name,
+          unit_price: item.unit_price,
+          quantity: item.quantity,
+          discount: 0,
+          amount: item.amount,
+          manager: item.manager,
+          sales_classification: null,
+          prepaid_deduction: 0,
+        })),
+        payments: [
+          ...(refund.cash_amount > 0 ? [{ method: 'cash', amount: refund.cash_amount }] : []),
+          ...(refund.card_amount > 0 ? [{ method: 'card', amount: refund.card_amount }] : []),
+          ...(refund.bank_transfer_amount > 0
+            ? [{ method: 'bank_transfer', amount: refund.bank_transfer_amount }]
+            : []),
+        ],
+        refund_total: refund.total_amount,
+        refund_memo: refund.memo,
+      }));
+
+      let registeredHistory = [...salesHistory, ...registeredRefundHistory];
+      registeredHistory.sort((a: any, b: any) => {
+        const dateA = `${a.booking_date} ${a.booking_time || ''}`;
+        const dateB = `${b.booking_date} ${b.booking_time || ''}`;
+        return dateB.localeCompare(dateA);
+      });
+
+      if (selectedPaymentMethod !== '전체') {
+        registeredHistory = registeredHistory.filter((historyItem: any) => {
+          if (selectedPaymentMethod === '정액권 차감') {
+            return historyItem.items.some((historyLine: any) => Number(historyLine.prepaid_deduction) > 0);
+          }
+          if (historyItem.payments.length === 0) return false;
+          return historyItem.payments.some((payment: any) => {
+            if (selectedPaymentMethod === '현금') return payment.method === 'cash';
+            if (selectedPaymentMethod === '카드') return payment.method === 'card';
+            if (selectedPaymentMethod === '계좌이체') return payment.method === 'bank_transfer';
+            return true;
+          });
+        });
+      }
+
+      setHistoryData(registeredHistory);
+      setTotalCount(registeredHistory.length);
+      setTotalPages(Math.ceil(registeredHistory.length / ITEMS_PER_PAGE));
+      return;
+
       const params = new URLSearchParams();
       params.append('start_date', actualStartDate);
       params.append('end_date', actualEndDate);
@@ -1447,25 +1587,36 @@ function SalesHistoryModal({
     const salesData = {
       id: item.id,
       customer_id: item.customer_id,
+      shop_id: item.shop_id ?? null,
       customer_name: getCustomerName(item.customer_id),
-      sales_date: item.booking_date,
-      sales_time: item.booking_time,
-      sales_amount: item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0),
-      discount_amount: 0,
-      total_amount: item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0),
+      sales_date: item.sales_date || item.booking_date,
+      sales_time: item.sales_time || item.booking_time,
+      sales_amount:
+        item.sales_amount ??
+        item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0),
+      discount_amount: item.discount_amount ?? 0,
+      total_amount:
+        item.total_amount ??
+        item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0),
       cash_amount: item.payments?.filter((p: any) => p.method === 'cash').reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0,
       card_amount: item.payments?.filter((p: any) => p.method === 'card').reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0,
       bank_transfer_amount: item.payments?.filter((p: any) => p.method === 'bank_transfer').reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0,
       point_accumulation: 0,
-      memo: item.items[0]?.memo || null,
+      memo: item.memo || item.items[0]?.memo || null,
+      created_at: item.created_at || null,
+      edit_history: item.edit_history || [],
       items: item.items.map((it: any) => ({
-        item_type: 'service',
-        item_name: getServiceName(it.service_id),
-        unit_price: Number(it.total_amount) || 0,
-        quantity: 1,
-        discount: 0,
-        amount: Number(it.total_amount) || 0,
-        manager: getDesignerName(it.designer_id),
+        item_type: it.item_type || 'service',
+        item_name: it.item_name || getServiceName(it.service_id),
+        unit_price: Number(it.unit_price ?? it.amount ?? it.total_amount) || 0,
+        quantity: Number(it.quantity) || 1,
+        discount: Number(it.discount) || 0,
+        discount_type: it.discount_type ?? null,
+        discount_value: it.discount_value ?? null,
+        amount: Number(it.amount ?? it.total_amount) || 0,
+        manager: it.manager || getDesignerName(it.designer_id),
+        sales_classification: it.sales_classification ?? null,
+        prepaid_deduction: Number(it.prepaid_deduction) || 0,
       })),
     };
     setSelectedSalesDetail(salesData);
@@ -1541,7 +1692,7 @@ function SalesHistoryModal({
               {item._isRefund && i === 0 && (
                 <Badge variant="error" size="sm">환불</Badge>
               )}
-              <span>{item._isRefund ? (it.item_name || '-') : getServiceName(it.service_id)}</span>
+              <span>{it.item_name || getServiceName(it.service_id)}</span>
             </div>
           ))}
         </div>
@@ -1553,7 +1704,7 @@ function SalesHistoryModal({
       render: (item: any) => (
         <div className="flex flex-col gap-1">
           {item.items.map((it: any, i: number) => (
-            <div key={i}>{item._isRefund ? (it.manager || '-') : getDesignerName(it.designer_id)}</div>
+            <div key={i}>{it.manager || getDesignerName(it.designer_id)}</div>
           ))}
         </div>
       ),
@@ -1561,12 +1712,26 @@ function SalesHistoryModal({
     {
       key: 'salesType',
       header: '영업 구분',
-      render: () => '-',
+      render: (item: any) => (
+        <div className="flex flex-col gap-1">
+          {item.items.map((it: any, i: number) => (
+            <div key={i}>{it.sales_classification || '-'}</div>
+          ))}
+        </div>
+      ),
     },
     {
       key: 'discount',
       header: '할인',
-      render: () => '-',
+      render: (item: any) => (
+        <div className="flex flex-col gap-1 items-end">
+          {item.items.map((it: any, i: number) => (
+            <div key={i}>
+              {Number(it.discount) > 0 ? Number(it.discount).toLocaleString() : '-'}
+            </div>
+          ))}
+        </div>
+      ),
     },
     {
       key: 'amount',
@@ -1576,8 +1741,10 @@ function SalesHistoryModal({
         <div className={`flex flex-col gap-1 items-end ${item._isRefund ? 'text-red-500 font-medium' : ''}`}>
           {item.items.map((it: any, i: number) => (
             <div key={i}>
-              {it.total_amount
-                ? (item._isRefund ? `-${Number(it.total_amount).toLocaleString()}` : Number(it.total_amount).toLocaleString())
+              {Number(it.amount ?? it.total_amount)
+                ? (item._isRefund
+                    ? `-${Number(it.amount ?? it.total_amount).toLocaleString()}`
+                    : Number(it.amount ?? it.total_amount).toLocaleString())
                 : '-'}
             </div>
           ))}
@@ -1598,10 +1765,15 @@ function SalesHistoryModal({
       align: 'right' as const,
       render: (item: any) => {
         if (item._isRefund) {
-          const refundTotal = item.refund_total || item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+          const refundTotal =
+            item.refund_total ||
+            item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0);
           return <span className="text-red-500 font-medium">-{Number(refundTotal).toLocaleString()}</span>;
         }
-        const totalAmount = item.items.reduce((sum: number, i: any) => sum + (Number(i.total_amount) || 0), 0);
+        const totalAmount = item.items.reduce(
+          (sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0),
+          0,
+        );
         const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
         return totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString();
       },
@@ -1609,7 +1781,7 @@ function SalesHistoryModal({
     {
       key: 'memo',
       header: '메모',
-      render: (item: any) => item._isRefund ? (item.refund_memo || '-') : (item.items[0]?.memo || '-'),
+      render: (item: any) => item._isRefund ? (item.refund_memo || '-') : (item.memo || '-'),
     },
     {
       key: 'detail',

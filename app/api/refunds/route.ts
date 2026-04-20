@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customer_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+    const designerId = searchParams.get('designer_id');
+    const itemType = searchParams.get('item_type');
+    const shopId = searchParams.get('shop_id');
 
     if (!customerId && !startDate) {
       return NextResponse.json({ error: 'customer_id or start_date is required' }, { status: 400 });
@@ -30,6 +35,9 @@ export async function GET(request: NextRequest) {
     if (endDate) {
       query = query.lte('refund_date', endDate);
     }
+    if (shopId) {
+      query = query.eq('shop_id', Number(shopId));
+    }
 
     const { data, error } = await query;
 
@@ -38,13 +46,51 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ refunds: [] }, { status: 200 });
       }
       console.error('Error fetching refunds:', error);
-      return NextResponse.json({ error: '환불 내역 조회에 실패했습니다.' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to fetch refund history.' }, { status: 500 });
     }
 
-    return NextResponse.json({ refunds: data || [] }, { status: 200 });
+    let refunds = data || [];
+
+    if (designerId) {
+      const { data: designer } = await supabase
+        .from('designers')
+        .select('id, name, english_name')
+        .eq('id', Number(designerId))
+        .maybeSingle();
+
+      if (!designer) {
+        return NextResponse.json({ refunds: [] }, { status: 200 });
+      }
+
+      refunds = refunds
+        .map((refund: any) => ({
+          ...refund,
+          refund_items: (refund.refund_items || []).filter((item: any) => {
+            const normalizedManager = normalizeName(item.manager);
+            return [designer.name, designer.english_name].some(
+              (candidate) => normalizeName(candidate) === normalizedManager,
+            );
+          }),
+        }))
+        .filter((refund: any) => (refund.refund_items || []).length > 0);
+    }
+
+    if (itemType) {
+      const normalizedItemType = itemType === 'membership' ? 'prepaid' : itemType;
+      refunds = refunds
+        .map((refund: any) => ({
+          ...refund,
+          refund_items: (refund.refund_items || []).filter(
+            (item: any) => String(item.item_type) === normalizedItemType,
+          ),
+        }))
+        .filter((refund: any) => (refund.refund_items || []).length > 0);
+    }
+
+    return NextResponse.json({ refunds }, { status: 200 });
   } catch (error: any) {
     console.error('Error in refunds GET route:', error);
-    return NextResponse.json({ error: error.message || '환불 내역 조회 중 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to fetch refund history.' }, { status: 500 });
   }
 }
 
@@ -65,12 +111,11 @@ export async function POST(request: NextRequest) {
 
     if (!customer_id || !items || items.length === 0) {
       return NextResponse.json(
-        { error: '고객 ID와 환불 항목이 필요합니다.' },
-        { status: 400 }
+        { error: 'Customer ID and refund items are required.' },
+        { status: 400 },
       );
     }
 
-    // 환불 헤더 생성
     const { data: refundHeader, error: headerError } = await supabase
       .from('refunds')
       .insert({
@@ -90,10 +135,9 @@ export async function POST(request: NextRequest) {
 
     if (headerError) {
       console.error('Error creating refund header:', headerError);
-      return NextResponse.json({ error: '환불 등록에 실패했습니다.' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to register refund.' }, { status: 500 });
     }
 
-    // 환불 항목 생성
     const refundItems = items.map((item: any) => ({
       refund_id: refundHeader.id,
       item_type: item.type,
@@ -110,20 +154,19 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) {
       console.error('Error creating refund items:', itemsError);
-      // 헤더 롤백
       await supabase.from('refunds').delete().eq('id', refundHeader.id);
-      return NextResponse.json({ error: '환불 항목 등록에 실패했습니다.' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to register refund items.' }, { status: 500 });
     }
 
     return NextResponse.json(
       { success: true, refund: refundHeader },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error: any) {
     console.error('Error in refunds POST route:', error);
     return NextResponse.json(
-      { error: error.message || '환불 등록 중 오류가 발생했습니다.' },
-      { status: 500 }
+      { error: error.message || 'Failed to register refund.' },
+      { status: 500 },
     );
   }
 }

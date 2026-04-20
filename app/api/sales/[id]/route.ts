@@ -67,7 +67,7 @@ export async function PUT(
 
     const body = await request.json();
     const {
-      customer_id, items, sales_amount, discount_amount,
+      customer_id, shop_id, items, sales_amount, discount_amount,
       total, payment_method, payment_amounts,
       point_accumulation, memo, sales_date, sales_time,
     } = body;
@@ -109,6 +109,7 @@ export async function PUT(
       .from('sales')
       .update({
         customer_id,
+        shop_id: shop_id || null,
         sales_date: sales_date || new Date().toISOString().split('T')[0],
         sales_time: sales_time || new Date().toTimeString().slice(0, 5),
         sales_amount: sales_amount || 0,

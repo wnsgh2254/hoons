@@ -2,46 +2,113 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { issuePrepaidPassFromSale } from '@/lib/data';
 
+const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
+
+function managerMatchesDesigner(
+  manager: string | null | undefined,
+  designer: { name?: string | null; english_name?: string | null } | null | undefined,
+) {
+  const normalizedManager = normalizeName(manager);
+  if (!normalizedManager || !designer) return false;
+
+  return [designer.name, designer.english_name].some(
+    (candidate) => normalizeName(candidate) === normalizedManager,
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customer_id');
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
+    const designerId = searchParams.get('designer_id');
+    const itemType = searchParams.get('item_type');
+    const shopId = searchParams.get('shop_id');
 
-    if (!customerId) {
+    if (!customerId && !startDate) {
       return NextResponse.json(
-        { error: 'customer_id is required' },
-        { status: 400 }
+        { error: 'customer_id or start_date is required' },
+        { status: 400 },
       );
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('sales')
       .select(`
         *,
         sales_items (*)
       `)
-      .eq('customer_id', customerId)
       .order('sales_date', { ascending: false })
       .order('sales_time', { ascending: false });
 
+    if (customerId) {
+      query = query.eq('customer_id', customerId);
+    }
+    if (startDate) {
+      query = query.gte('sales_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('sales_date', endDate);
+    }
+    if (shopId) {
+      query = query.eq('shop_id', Number(shopId));
+    }
+
+    const { data, error } = await query;
+
     if (error) {
-      // Table may not exist yet - return empty array gracefully
       if (error.code === 'PGRST205' || error.message?.includes('Could not find')) {
         return NextResponse.json({ sales: [] }, { status: 200 });
       }
       console.error('Error fetching sales:', error);
       return NextResponse.json(
-        { error: '판매 내역 조회에 실패했습니다.' },
-        { status: 500 }
+        { error: 'Failed to fetch sales history.' },
+        { status: 500 },
       );
     }
 
-    return NextResponse.json({ sales: data || [] }, { status: 200 });
+    let sales = data || [];
+
+    if (designerId) {
+      const { data: designer } = await supabase
+        .from('designers')
+        .select('id, name, english_name')
+        .eq('id', Number(designerId))
+        .maybeSingle();
+
+      if (!designer) {
+        return NextResponse.json({ sales: [] }, { status: 200 });
+      }
+
+      sales = sales
+        .map((sale: any) => ({
+          ...sale,
+          sales_items: (sale.sales_items || []).filter((item: any) =>
+            managerMatchesDesigner(item.manager, designer),
+          ),
+        }))
+        .filter((sale: any) => (sale.sales_items || []).length > 0);
+    }
+
+    if (itemType) {
+      const normalizedItemType = itemType === 'membership' ? 'prepaid' : itemType;
+      sales = sales
+        .map((sale: any) => ({
+          ...sale,
+          sales_items: (sale.sales_items || []).filter(
+            (item: any) => String(item.item_type) === normalizedItemType,
+          ),
+        }))
+        .filter((sale: any) => (sale.sales_items || []).length > 0);
+    }
+
+    return NextResponse.json({ sales }, { status: 200 });
   } catch (error: any) {
     console.error('Error in sales GET route:', error);
     return NextResponse.json(
-      { error: error.message || '판매 내역 조회 중 오류가 발생했습니다.' },
-      { status: 500 }
+      { error: error.message || 'Failed to fetch sales history.' },
+      { status: 500 },
     );
   }
 }
@@ -67,17 +134,11 @@ export async function POST(request: NextRequest) {
 
     if (!customer_id || !items || items.length === 0) {
       return NextResponse.json(
-        { error: '고객 ID와 판매 항목이 필요합니다.' },
-        { status: 400 }
+        { error: 'Customer ID and sales items are required.' },
+        { status: 400 },
       );
     }
 
-    // 판매 날짜와 시간 결합
-    const salesDateTime = sales_date && sales_time 
-      ? `${sales_date}T${sales_time}:00`
-      : new Date().toISOString();
-
-    // 판매 헤더 생성
     const { data: saleHeader, error: headerError } = await supabase
       .from('sales')
       .insert({
@@ -101,12 +162,11 @@ export async function POST(request: NextRequest) {
     if (headerError) {
       console.error('Error creating sale header:', headerError);
       return NextResponse.json(
-        { error: '판매 등록에 실패했습니다.' },
-        { status: 500 }
+        { error: 'Failed to register sale.' },
+        { status: 500 },
       );
     }
 
-    // 판매 항목 생성
     const saleItems = items.map((item: any) => ({
       sale_id: saleHeader.id,
       item_type: item.type,
@@ -129,15 +189,13 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) {
       console.error('Error creating sale items:', itemsError);
-      // 헤더는 이미 생성되었으므로 롤백
       await supabase.from('sales').delete().eq('id', saleHeader.id);
       return NextResponse.json(
-        { error: '판매 항목 등록에 실패했습니다.' },
-        { status: 500 }
+        { error: 'Failed to register sale items.' },
+        { status: 500 },
       );
     }
 
-    // Comment: Credit prepaid_passes for each prepaid line item (purchase). Deduction-only path below is separate.
     const rawItems = (items || []) as any[];
     for (const rawItem of rawItems) {
       if (String(rawItem.type) !== 'prepaid') continue;
@@ -145,7 +203,7 @@ export async function POST(request: NextRequest) {
       const perCredit = Math.round(Number(rawItem.prepaid_credit_points ?? rawItem.prepaid_points ?? 0));
       const totalCredit = perCredit * qty;
       if (totalCredit <= 0) continue;
-      const passLabel = String(rawItem.name || '정액권').trim();
+      const passLabel = String(rawItem.name || 'Prepaid').trim();
       const expiresAt =
         rawItem.prepaid_expires_at != null && String(rawItem.prepaid_expires_at).trim() !== ''
           ? String(rawItem.prepaid_expires_at).trim()
@@ -153,7 +211,7 @@ export async function POST(request: NextRequest) {
       try {
         await issuePrepaidPassFromSale({
           customerId: Number(customer_id),
-          passLabel: passLabel,
+          passLabel,
           creditPoints: totalCredit,
           expiresAt,
         });
@@ -165,14 +223,13 @@ export async function POST(request: NextRequest) {
           {
             error:
               prepaidIssueErr?.message ||
-              '정액권 잔액 반영에 실패했습니다. 판매 등록이 취소되었습니다.',
+              'Failed to issue prepaid balance. The sale registration was rolled back.',
           },
           { status: 400 },
         );
       }
     }
 
-    // Apply prepaid deduction to customer's prepaid balance
     const totalPrepaidDeduction = saleItems.reduce(
       (sum: number, item: any) => sum + Number(item.prepaid_deduction || 0),
       0,
@@ -185,26 +242,26 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       const normalizedPhone = String(customerRow?.phone || '').replace(/\D/g, '');
 
-      let query = supabase
+      let prepaidQuery = supabase
         .from('prepaid_passes')
         .select('id, points, customer_id')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (normalizedPhone) {
-        query = query.or(
+        prepaidQuery = prepaidQuery.or(
           `customer_id.eq.${customer_id},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
         );
       } else {
-        query = query.eq('customer_id', customer_id);
+        prepaidQuery = prepaidQuery.eq('customer_id', customer_id);
       }
-      const { data: prepaidRows, error: prepaidSelErr } = await query;
+      const { data: prepaidRows, error: prepaidSelErr } = await prepaidQuery;
 
       if (prepaidSelErr) {
         console.error('Error fetching prepaid pass for deduction:', prepaidSelErr);
       } else {
         const legacyIds = (prepaidRows || [])
-          .filter((r: any) => r.customer_id == null)
-          .map((r: any) => Number(r.id))
+          .filter((row: any) => row.customer_id == null)
+          .map((row: any) => Number(row.id))
           .filter((id: number) => Number.isFinite(id));
         if (legacyIds.length > 0) {
           await supabase
@@ -235,45 +292,44 @@ export async function POST(request: NextRequest) {
     if (booking_id != null && booking_id !== '') {
       const bid = Number(booking_id);
       if (!Number.isNaN(bid)) {
-        const { data: bk, error: bkSelErr } = await supabase
+        const { data: booking, error: bookingLookupError } = await supabase
           .from('bookings')
           .select('id, customer_id')
           .eq('id', bid)
           .maybeSingle();
-        if (bkSelErr || !bk) {
-          console.error('sale_completed: booking lookup failed', bkSelErr);
+        if (bookingLookupError || !booking) {
+          console.error('sale_completed: booking lookup failed', bookingLookupError);
           await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
           await supabase.from('sales').delete().eq('id', saleHeader.id);
           return NextResponse.json(
-            { error: '연결된 예약을 찾을 수 없습니다.' },
+            { error: 'Linked booking was not found.' },
             { status: 400 },
           );
         }
-        if (bk.customer_id != null && Number(bk.customer_id) !== Number(customer_id)) {
+        if (booking.customer_id != null && Number(booking.customer_id) !== Number(customer_id)) {
           await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
           await supabase.from('sales').delete().eq('id', saleHeader.id);
           return NextResponse.json(
-            { error: '예약과 고객이 일치하지 않습니다.' },
+            { error: 'Booking and customer do not match.' },
             { status: 400 },
           );
         }
-        const { error: updErr } = await supabase
+        const { error: bookingUpdateError } = await supabase
           .from('bookings')
           .update({ sale_completed: 1 })
           .eq('id', bid);
-        if (updErr) {
-          console.error('Error setting booking sale_completed:', updErr);
+        if (bookingUpdateError) {
+          console.error('Error setting booking sale_completed:', bookingUpdateError);
           await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
           await supabase.from('sales').delete().eq('id', saleHeader.id);
           return NextResponse.json(
-            { error: '예약 계산완료 표시에 실패했습니다.' },
+            { error: 'Failed to mark the booking as completed.' },
             { status: 500 },
           );
         }
       }
     }
 
-    // 포인트 적립이 있으면 고객 포인트 업데이트
     if (point_accumulation > 0) {
       const { error: pointsError } = await supabase.rpc('increment_customer_points', {
         customer_id: customer_id,
@@ -282,22 +338,21 @@ export async function POST(request: NextRequest) {
 
       if (pointsError) {
         console.error('Error updating customer points:', pointsError);
-        // 포인트 업데이트 실패해도 판매는 완료된 것으로 처리
       }
     }
 
     return NextResponse.json(
-      { 
+      {
         success: true,
         sale: saleHeader,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error: any) {
     console.error('Error in sales POST route:', error);
     return NextResponse.json(
-      { error: error.message || '판매 등록 중 오류가 발생했습니다.' },
-      { status: 500 }
+      { error: error.message || 'Failed to register sale.' },
+      { status: 500 },
     );
   }
 }

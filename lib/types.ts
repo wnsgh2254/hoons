@@ -169,6 +169,7 @@ export interface SalesDetailItem {
 export interface SalesDetailData {
   id: number;
   customer_id: number;
+  shop_id?: number | null;
   customer_name: string;
   sales_date: string;
   sales_time: string;

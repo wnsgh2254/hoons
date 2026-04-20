@@ -360,6 +360,7 @@ export default function AppointmentsManagementPage() {
 
   // Shop ID for sales/refund modals
   const [salesRegistrationShopId, setSalesRegistrationShopId] = useState<number | null>(null);
+  const [salesDefaultManager, setSalesDefaultManager] = useState<string | null>(null);
 
   // Refund Registration Modal State (환불등록)
   const [isRefundRegistrationModalOpen, setIsRefundRegistrationModalOpen] = useState(false);
@@ -2038,6 +2039,8 @@ export default function AppointmentsManagementPage() {
         if (booking.id) {
           setSalesLinkedBookingId(booking.id);
         }
+        setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
+        setSalesDefaultManager((booking as any).designer?.name || null);
         setSalesLinkedDepositPaid(
           Math.max(0, Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0),
         );
@@ -2635,6 +2638,8 @@ export default function AppointmentsManagementPage() {
                             const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
                             const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
                             if (booking.id) setSalesLinkedBookingId(booking.id);
+                            setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
+                            setSalesDefaultManager((booking as any).designer?.name || null);
                             setSalesLinkedDepositPaid(
                               Math.max(
                                 0,
@@ -3917,6 +3922,7 @@ export default function AppointmentsManagementPage() {
           if (viewingCustomer) {
             setSalesLinkedBookingId(null);
             setSalesLinkedDepositPaid(0);
+            setSalesDefaultManager(null);
             setSalesRegistrationCustomer({
               id: viewingCustomer.id,
               name: viewingCustomer.name || '',
@@ -3997,6 +4003,7 @@ export default function AppointmentsManagementPage() {
           setCurrentTempSaleData(null);
           setSalesLinkedBookingId(null);
           setSalesLinkedDepositPaid(0);
+          setSalesDefaultManager(null);
           setCloseSalesFlowOnPickerClose(false);
         }}
         onOpenItemPicker={(tab) => {
@@ -4073,6 +4080,7 @@ export default function AppointmentsManagementPage() {
       <SalesItemPickerModal
         isOpen={isSalesItemPickerModalOpen}
         activeTab={salesItemPickerTab}
+        defaultManager={salesDefaultManager}
         onClose={() => {
           setIsSalesItemPickerModalOpen(false);
           if (closeSalesFlowOnPickerClose) {
@@ -4086,6 +4094,7 @@ export default function AppointmentsManagementPage() {
             setCurrentTempSaleData(null);
             setSalesLinkedBookingId(null);
             setSalesLinkedDepositPaid(0);
+            setSalesDefaultManager(null);
             setViewingCustomerId(null);
             setViewingCustomer(null);
           }
@@ -4195,6 +4204,7 @@ export default function AppointmentsManagementPage() {
             name: currentData.customer_name,
             phone: null,
           });
+          setSalesDefaultManager(null);
           setEditingSaleData(currentData);
           setEditingSaleId(currentData.id);
           setSalesRegistrationShopId(currentData.shop_id || null);

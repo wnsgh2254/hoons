@@ -5,6 +5,7 @@ import { SERVICE_PICKER_CATEGORY_ORDER, getServiceCategoryForPicker } from '@/li
 import { useServices } from '@/hooks/useServices';
 import { useInventory } from '@/hooks/useInventory';
 import { usePrepaidTemplates } from '@/hooks/usePrepaidTemplates';
+import { useStaff } from '@/hooks/useStaff';
 import { Button, Input, Modal, Select, Tabs } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesItemType } from '@/lib/types';
@@ -45,6 +46,7 @@ interface SalesItemPickerModalProps {
   onClose: () => void;
   onSelect: (item: PickerSelectedItem | PickerSelectedItem[]) => void;
   title?: string;
+  defaultManager?: string | null;
 }
 
 /** Comment: Build ISO expiry from validity UI (null = unlimited / not set) */
@@ -79,11 +81,13 @@ export default function SalesItemPickerModal({
   onClose,
   onSelect,
   title = '판매 항목 선택',
+  defaultManager = null,
 }: SalesItemPickerModalProps) {
   const [activeTab, setActiveTab] = useState<SalesItemType>(initialTab);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedPaymentType, setSelectedPaymentType] = useState<'card' | 'cash'>('card');
-  const [selectedManager, setSelectedManager] = useState<string>('태훈원장');
+  const { staff: managers } = useStaff({ onlyActive: true, enabled: isOpen });
+  const [selectedManager, setSelectedManager] = useState<string>('');
   const { services, loading } = useServices({ enabled: isOpen && activeTab === 'service' });
   const { items: inventoryItems, brands: inventoryBrands, loading: inventoryLoading } = useInventory({ enabled: isOpen && activeTab === 'product' });
   const { templates: prepaidTemplates } = usePrepaidTemplates();
@@ -106,6 +110,7 @@ export default function SalesItemPickerModal({
       setActiveTab(initialTab);
       setSelectedCategory(null);
       setSelectedPaymentType('card');
+      setSelectedManager(defaultManager || managers[0]?.name || '');
       setSelectedPrepaid(null);
       setCustomPrice('');
       setAccumulatedAmount('');
@@ -116,7 +121,7 @@ export default function SalesItemPickerModal({
       setProductSearchTerm('');
       setSelectedProductCategory('전체');
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, defaultManager, managers]);
 
 
   if (!isOpen) return null;
