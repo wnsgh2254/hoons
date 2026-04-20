@@ -358,6 +358,8 @@ export default function AppointmentsManagementPage() {
   const [salesLinkedBookingId, setSalesLinkedBookingId] = useState<number | null>(null);
   /** 예약에 이미 납부된 예수금 (AUD), 판매 모달 합계 차감용 */
   const [salesLinkedDepositPaid, setSalesLinkedDepositPaid] = useState(0);
+  const [salesDefaultDate, setSalesDefaultDate] = useState<string | null>(null);
+  const [salesDefaultTime, setSalesDefaultTime] = useState<string | null>(null);
 
   // Shop ID for sales/refund modals
   const [salesRegistrationShopId, setSalesRegistrationShopId] = useState<number | null>(null);
@@ -2048,6 +2050,12 @@ export default function AppointmentsManagementPage() {
         if (booking.id) {
           setSalesLinkedBookingId(booking.id);
         }
+        setSalesDefaultDate((booking as any).booking_date || selectedDate);
+        setSalesDefaultTime(
+          typeof (booking as any).booking_time === 'string' && (booking as any).booking_time.length >= 5
+            ? (booking as any).booking_time.slice(0, 5)
+            : null,
+        );
         setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
         setSalesDefaultManager((booking as any).designer?.name || null);
         setSalesLinkedDepositPaid(
@@ -3578,6 +3586,7 @@ export default function AppointmentsManagementPage() {
         setNewBookingDate={setNewBookingDate}
         setNewBookingTimeSlots={setNewBookingTimeSlots}
         setNewBookingMemo={setNewBookingMemo}
+        setNewBookingShopId={setNewBookingShopId}
         setNewBookingSubmitting={setNewBookingSubmitting}
         setIsCustomerRegistrationModalOpen={setIsCustomerRegistrationModalOpen}
         setBookingSuccessMessage={setBookingSuccessMessage}
@@ -3981,6 +3990,8 @@ export default function AppointmentsManagementPage() {
           if (viewingCustomer) {
             setSalesLinkedBookingId(null);
             setSalesLinkedDepositPaid(0);
+            setSalesDefaultDate(selectedDate);
+            setSalesDefaultTime(null);
             setSalesDefaultManager(null);
             setSalesRegistrationCustomer({
               id: viewingCustomer.id,
@@ -4062,6 +4073,8 @@ export default function AppointmentsManagementPage() {
           setCurrentTempSaleData(null);
           setSalesLinkedBookingId(null);
           setSalesLinkedDepositPaid(0);
+          setSalesDefaultDate(null);
+          setSalesDefaultTime(null);
           setSalesDefaultManager(null);
           setCloseSalesFlowOnPickerClose(false);
         }}
@@ -4095,6 +4108,8 @@ export default function AppointmentsManagementPage() {
         initialData={editingSaleData}
         editSaleId={editingSaleId}
         bookingId={salesLinkedBookingId ?? currentTempSaleBookingId}
+        defaultSalesDate={salesDefaultDate}
+        defaultSalesTime={salesDefaultTime}
         bookingDepositPaid={salesLinkedDepositPaid}
         tempSaveData={currentTempSaleData}
         onTemporarySave={(bid) => {

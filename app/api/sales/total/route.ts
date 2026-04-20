@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 const toNum = (value: unknown) => Number(value || 0);
+const isTransientUpstreamError = (error: any) => {
+  const message = String(error?.message || '');
+  return (
+    message.includes('502') ||
+    message.includes('Bad gateway') ||
+    message.includes('<!DOCTYPE html>') ||
+    message.includes('Cloudflare')
+  );
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,7 +90,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (refundsError) {
+    if (refundsError && !isTransientUpstreamError(refundsError)) {
       console.error('Error fetching refunds:', refundsError);
       return NextResponse.json(
         { error: 'Failed to load refund data.' },
@@ -89,7 +98,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (bookingsError) {
+    if (bookingsError && !isTransientUpstreamError(bookingsError)) {
       console.error('Error fetching bookings:', bookingsError);
       return NextResponse.json(
         { error: 'Failed to load booking data.' },
@@ -97,7 +106,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const bookingIds = (bookings || []).map((booking: any) => booking.id);
+    if (refundsError) {
+      console.warn('Transient upstream error fetching refunds for sales total; using empty refund summary.', refundsError);
+    }
+
+    if (bookingsError) {
+      console.warn('Transient upstream error fetching bookings for sales total; deposit summary may be incomplete.', bookingsError);
+    }
+
+    const bookingIds = ((bookings as any[]) || []).map((booking: any) => booking.id);
     let paymentsQuery = supabase
       .from('payments')
       .select('id, booking_id, amount, method, type, created_at')
@@ -116,7 +133,7 @@ export async function GET(request: NextRequest) {
     }
 
     const salesData = sales || [];
-    const refundsData = refunds || [];
+    const refundsData = refundsError ? [] : (refunds || []);
     const paymentsData = payments || [];
 
     const salesSummary = {

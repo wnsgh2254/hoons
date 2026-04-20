@@ -75,6 +75,7 @@ interface NewBookingModalProps {
   setNewBookingDate?: (value: string) => void;
   setNewBookingTimeSlots?: React.Dispatch<React.SetStateAction<NewBookingTimeSlot[]>>;
   setNewBookingMemo?: (value: string) => void;
+  setNewBookingShopId?: (value: number | null) => void;
   setNewBookingSubmitting?: (value: boolean) => void;
   setIsCustomerRegistrationModalOpen?: (value: boolean) => void;
   setBookingSuccessMessage?: (value: string | null) => void;
@@ -116,6 +117,7 @@ export default function NewBookingModal({
   setNewBookingDate = noop,
   setNewBookingTimeSlots = noop,
   setNewBookingMemo = noop,
+  setNewBookingShopId = noop,
   setNewBookingSubmitting = noop,
   setIsCustomerRegistrationModalOpen = noop,
   setBookingSuccessMessage = noop,
@@ -158,39 +160,96 @@ export default function NewBookingModal({
   // Self-load designers/services/shops when parent doesn't provide them
   const [selfLoadedDesigners, setSelfLoadedDesigners] = useState<any[]>([]);
   const [selfLoadedServices, setSelfLoadedServices] = useState<any[]>([]);
-  const [selfLoadingOptions, setSelfLoadingOptions] = useState(false);
-  const selfLoadTriggered = useRef(false);
+  const [selfLoadingBaseOptions, setSelfLoadingBaseOptions] = useState(false);
+  const [selfLoadingDesigners, setSelfLoadingDesigners] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || newBookingDesigners.length > 0 || selfLoadTriggered.current) return;
-    selfLoadTriggered.current = true;
-    setSelfLoadingOptions(true);
-    const targetDate = bookingDate || selectedDate || new Date().toISOString().split('T')[0];
+    if (!isOpen) return;
+
+    const needsShops = shops.length === 0;
+    const needsServices = newBookingServices.length === 0 && selfLoadedServices.length === 0;
+    if (!needsShops && !needsServices) return;
+
+    let cancelled = false;
+    setSelfLoadingBaseOptions(true);
+
     Promise.all([
-      fetch('/api/shops').then((r) => r.json()),
-      fetch(`/api/working-designers?date=${encodeURIComponent(targetDate)}`).then((r) => r.json()),
-      fetch('/api/services').then((r) => r.json()),
+      needsShops ? fetch('/api/shops').then((r) => r.json()) : Promise.resolve({ shops }),
+      needsServices ? fetch('/api/services').then((r) => r.json()) : Promise.resolve({ services: selfLoadedServices }),
     ])
-      .then(([shopsData, designersData, servicesData]) => {
+      .then(([shopsData, servicesData]) => {
+        if (cancelled) return;
+
         const shopList = shopsData.shops || [];
-        if (shopList.length > 0) {
+        if (needsShops && shopList.length > 0) {
           setShops(shopList);
-          if (!shopManuallySet.current) setShopId((prev) => prev ?? shopList[0].id);
         }
-        setSelfLoadedDesigners(designersData.designers || []);
-        setSelfLoadedServices(servicesData.services || []);
+
+        if (needsServices) {
+          setSelfLoadedServices(servicesData.services || []);
+        }
       })
       .catch(console.error)
-      .finally(() => setSelfLoadingOptions(false));
-  }, [isOpen, newBookingDesigners.length, bookingDate, selectedDate]);
+      .finally(() => {
+        if (!cancelled) setSelfLoadingBaseOptions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, shops, shops.length, newBookingServices.length, selfLoadedServices, selfLoadedServices.length]);
 
   useEffect(() => {
-    if (!isOpen) selfLoadTriggered.current = false;
-  }, [isOpen]);
+    if (!isOpen) return;
+    if (newBookingShopId == null) return;
+    setShopId(newBookingShopId);
+  }, [isOpen, newBookingShopId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (shopId != null || shopManuallySet.current) return;
+
+    const defaultShopId = newBookingShopId ?? shops[0]?.id ?? null;
+    if (defaultShopId == null) return;
+
+    setShopId(defaultShopId);
+    setNewBookingShopId(defaultShopId);
+  }, [isOpen, shopId, newBookingShopId, shops, setNewBookingShopId]);
+
+  useEffect(() => {
+    if (!isOpen || newBookingDesigners.length > 0 || !shopId) return;
+
+    let cancelled = false;
+    const targetDate = bookingDate || selectedDate || new Date().toISOString().split('T')[0];
+    setSelfLoadingDesigners(true);
+
+    fetch(
+      `/api/available-designers?date=${encodeURIComponent(targetDate)}&shopId=${encodeURIComponent(String(shopId))}`,
+    )
+      .then(async (response) => {
+        const data = await response.json();
+        if (cancelled) return;
+        setSelfLoadedDesigners(response.ok ? data.designers || [] : []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(error);
+          setSelfLoadedDesigners([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSelfLoadingDesigners(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, newBookingDesigners.length, bookingDate, selectedDate, shopId]);
 
   const effectiveDesigners = newBookingDesigners.length > 0 ? newBookingDesigners : selfLoadedDesigners;
   const effectiveServices = newBookingServices.length > 0 ? newBookingServices : selfLoadedServices;
-  const effectiveLoadingOptions = newBookingLoadingOptions || selfLoadingOptions;
+  const effectiveLoadingOptions =
+    newBookingLoadingOptions || selfLoadingBaseOptions || selfLoadingDesigners;
   const editPrefillDoneForIdRef = useRef<number | null>(null);
   // Services are provided via the newBookingServices prop (loaded by initial-data on the parent page)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -1160,7 +1219,9 @@ export default function NewBookingModal({
                   options={shopOptions}
                   value={shopId ?? ''}
                   onChange={(e) => {
-                    setShopId(Number(e.target.value));
+                    const nextShopId = e.target.value ? Number(e.target.value) : null;
+                    setShopId(nextShopId);
+                    setNewBookingShopId(nextShopId);
                     shopManuallySet.current = true;
                   }}
                 />

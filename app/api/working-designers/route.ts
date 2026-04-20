@@ -1,137 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
-import { resolvePerShopTimeOffOutcomes, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
+import { getAvailableDesignerIdsForShop } from '@/lib/designer-availability';
 
-// Comment: Get designers who are scheduled to work on a given date (and are active).
-// Optional shopId param enables per-shop time-off resolution.
+export const dynamic = 'force-dynamic';
+
+type DesignerRow = {
+  id: number;
+  name: string;
+  english_name: string | null;
+  role: string | null;
+  shop_id: number | null;
+  is_active: boolean;
+};
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const dateParam = (searchParams.get('date') || '').trim();
+  const date = (searchParams.get('date') || '').trim();
   const shopIdParam = searchParams.get('shopId');
 
-  if (!dateParam) {
-    return NextResponse.json({ designers: [] });
+  if (!date) {
+    return NextResponse.json({ designers: [] }, { status: 200 });
   }
-
-  const targetDate = new Date(dateParam);
-  if (Number.isNaN(targetDate.getTime())) {
-    return NextResponse.json({ designers: [] });
-  }
-
-  const weekday = salonCalendarWeekdayIndex(dateParam);
-  const shopId = shopIdParam ? Number(shopIdParam) : null;
 
   try {
-    // Comment: Load active designers
-    const { data: designers, error: designersError } = await supabase
-      .from('designers')
-      .select('id, name, role, is_active, shop_id');
+    const [shopsResult, allDesignersResult, shopMapResult] = await Promise.all([
+      supabase.from('shops').select('id').order('id', { ascending: true }),
+      supabase
+        .from('designers')
+        .select('id, name, english_name, role, shop_id, is_active')
+        .eq('is_active', true),
+      supabase
+        .from('designer_shops')
+        .select('designer_id, shop_id')
+        .eq('is_active', true),
+    ]);
 
-    if (designersError) {
-      console.error('Error fetching designers for working-designers:', designersError);
-      return NextResponse.json({ error: '디자이너 정보를 불러오지 못했습니다.' }, { status: 500 });
+    if (shopsResult.error) {
+      console.error('working-designers shops query:', shopsResult.error);
+      return NextResponse.json({ error: 'Failed to load shops.' }, { status: 500 });
     }
 
-    const activeDesigners = (designers || []).filter((d: any) => d.is_active !== false);
-
-    // Comment: Load weekly schedules for the weekday
-    const { data: schedules, error: schedulesError } = await supabase
-      .from('designer_schedules')
-      .select('designer_id, weekday, effective_from, effective_to')
-      .eq('weekday', weekday);
-
-    if (schedulesError) {
-      console.error('Error fetching designer_schedules:', schedulesError);
-      return NextResponse.json({ error: '근무 스케줄 정보를 불러오지 못했습니다.' }, { status: 500 });
+    if (allDesignersResult.error) {
+      console.error('working-designers designers query:', allDesignersResult.error);
+      return NextResponse.json({ error: 'Failed to load designers.' }, { status: 500 });
     }
 
-    // Comment: Load time-off records filtered by reason and date range
-    const { data: timeOff, error: timeOffError } = await supabase
-      .from('designer_time_off')
-      .select('id, designer_id, shop_id, reason, created_at')
-      .in('reason', ['임의 휴일', '특별 근무일'])
-      .lte('start_date', dateParam)
-      .gte('end_date', dateParam);
+    const shopIds: number[] =
+      shopIdParam != null
+        ? [Number(shopIdParam)]
+        : Array.from(
+            new Set((shopsResult.data || []).map((row: { id: number }) => Number(row.id)).filter(Number.isFinite)),
+          );
 
-    if (timeOffError) {
-      console.error('Error fetching designer_time_off:', timeOffError);
-      return NextResponse.json({ error: '휴무 정보를 불러오지 못했습니다.' }, { status: 500 });
+    const idsByShop = await Promise.all(
+      shopIds.map((shopId) => getAvailableDesignerIdsForShop(supabase, date, shopId)),
+    );
+    const availableIdSet = new Set(idsByShop.flat().map(Number).filter(Number.isFinite));
+
+    const shopMap = new Map<number, number[]>();
+    for (const row of shopMapResult.data || []) {
+      const designerId = Number(row.designer_id);
+      const shopId = Number(row.shop_id);
+      const list = shopMap.get(designerId) || [];
+      if (!list.includes(shopId)) list.push(shopId);
+      shopMap.set(designerId, list);
     }
 
-    const dateOnly = new Date(dateParam);
-    dateOnly.setHours(0, 0, 0, 0);
+    const designers = ((allDesignersResult.data || []) as DesignerRow[])
+      .filter((designer) => availableIdSet.has(Number(designer.id)))
+      .map((designer) => ({
+        id: designer.id,
+        name: designer.name,
+        english_name: designer.english_name,
+        role: designer.role,
+        shop_id: designer.shop_id,
+        shop_ids_at: Array.from(
+          new Set([
+            ...(designer.shop_id != null ? [Number(designer.shop_id)] : []),
+            ...(shopMap.get(Number(designer.id)) || []),
+          ]),
+        ),
+      }));
 
-    const isWithinDateRange = (value: string | null, from: boolean) => {
-      if (!value) return true;
-      const d = new Date(value);
-      d.setHours(0, 0, 0, 0);
-      return from ? d <= dateOnly : d >= dateOnly;
-    };
-
-    const workingDesignerIdSet = new Set<number>();
-
-    (schedules || []).forEach((s: any) => {
-      if (
-        isWithinDateRange(s.effective_from, true) &&
-        isWithinDateRange(s.effective_to, false)
-      ) {
-        workingDesignerIdSet.add(Number(s.designer_id));
-      }
-    });
-
-    // Comment: Resolve time-off using per-shop logic when shopId is provided
-    if (shopId != null) {
-      const { specialWorkDesignerIds, arbitraryHolidayDesignerIds } =
-        resolvePerShopTimeOffOutcomes((timeOff || []) as VenueTimeOffRow[], shopId);
-
-      // Add special work day designers (they work even without regular schedule)
-      for (const id of specialWorkDesignerIds) {
-        workingDesignerIdSet.add(id);
-      }
-
-      // Remove arbitrary holiday designers
-      for (const id of arbitraryHolidayDesignerIds) {
-        workingDesignerIdSet.delete(id);
-      }
-    } else {
-      // Comment: Fallback for calls without shopId — treat all 임의 휴일 as exclusion
-      const arbitraryHolidayIds = new Set<number>();
-      const specialWorkIds = new Set<number>();
-
-      for (const t of (timeOff || []) as VenueTimeOffRow[]) {
-        const did = Number(t.designer_id);
-        if (t.reason === '임의 휴일') arbitraryHolidayIds.add(did);
-        else if (t.reason === '특별 근무일') specialWorkIds.add(did);
-      }
-
-      for (const id of specialWorkIds) {
-        workingDesignerIdSet.add(id);
-      }
-      for (const id of arbitraryHolidayIds) {
-        // Only exclude if there's no competing special work day
-        if (!specialWorkIds.has(id)) {
-          workingDesignerIdSet.delete(id);
-        }
-      }
-    }
-
-    const workingDesigners = activeDesigners.filter((d: any) => {
-      const id = Number(d.id);
-      return workingDesignerIdSet.has(id);
-    });
-
-    return NextResponse.json({
-      designers: workingDesigners.map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        role: d.role,
-        shop_id: d.shop_id || null,
-      })),
-    });
+    return NextResponse.json({ designers }, { status: 200 });
   } catch (error) {
     console.error('Unexpected error in working-designers route:', error);
-    return NextResponse.json({ error: '근무 디자이너 정보를 불러오지 못했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to load working designers.' }, { status: 500 });
   }
 }

@@ -267,9 +267,33 @@ function TotalSalesTab({
   const [loading, setLoading] = useState(false);
   const [salesData, setSalesData] = useState<any>(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(true);
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string>('');
 
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchShops = async () => {
+      try {
+        const res = await fetch('/api/shops');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+        setShops(data.shops || []);
+      } catch (error) {
+        console.error('Error fetching shops for total sales filter:', error);
+      }
+    };
+
+    fetchShops();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSearch = () => {
     if (dateMode === 'daily' && !selectedDate) {
@@ -298,6 +322,9 @@ function TotalSalesTab({
           params.append('start_date', startDate);
           params.append('end_date', endDate);
         }
+        if (selectedShopId) {
+          params.append('shop_id', selectedShopId);
+        }
 
         // Comment: Fetch sales data from API
         const res = await fetch(`/api/sales/total?${params.toString()}`);
@@ -316,7 +343,7 @@ function TotalSalesTab({
     };
 
     fetchData();
-  }, [shouldFetch, dateMode, selectedDate, startDate, endDate]);
+  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedShopId]);
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
@@ -329,6 +356,11 @@ function TotalSalesTab({
       setSelectedDate(date.toISOString().split('T')[0]);
     }
   };
+
+  const shopOptions = shops.map((shop: any) => ({
+    value: String(shop.id),
+    label: shop.name,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -343,6 +375,15 @@ function TotalSalesTab({
         setEndDate={setEndDate}
         handleDateChange={handleDateChange}
         handleSearch={handleSearch}
+        extraFilters={
+          <Select
+            value={selectedShopId}
+            onChange={(e) => setSelectedShopId(e.target.value)}
+            options={shopOptions}
+            placeholder="전체 지점"
+            wrapperClassName="flex-1 min-w-0 md:max-w-xs"
+          />
+        }
       />
 
       {loading ? (
