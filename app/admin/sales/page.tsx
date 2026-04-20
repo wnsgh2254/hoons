@@ -428,12 +428,13 @@ function SalesSummaryTable({
       }
     : data;
 
-  const tableClass = "table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0";
+  const tableClass = "w-full min-w-[480px] text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0";
   const tableWrapperClass = "bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden";
 
   return (
     <div>
       <div className={tableWrapperClass}>
+        <div className="overflow-x-auto">
         <table className={tableClass}>
           <thead>
             <tr className="bg-gray-100 border-b border-gray-200">
@@ -491,10 +492,12 @@ function SalesSummaryTable({
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       {showPaymentDetails && (
         <div className={`${tableWrapperClass} mt-3`}>
+          <div className="overflow-x-auto">
           <table className={tableClass}>
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200">
@@ -529,6 +532,7 @@ function SalesSummaryTable({
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -561,7 +565,8 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
         <thead>
           <tr className="bg-gray-100 border-b border-gray-200">
             <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]">결제 방법</th>
@@ -615,6 +620,7 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
           </tr>
         </tbody>
       </table>
+      </div>
       <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
         <p className="text-xs text-gray-600">* 미수 발생 합계: 0</p>
       </div>
@@ -652,7 +658,8 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
         <thead>
           <tr className="bg-gray-100 border-b border-gray-200">
             <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>유형</th>
@@ -708,6 +715,7 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
