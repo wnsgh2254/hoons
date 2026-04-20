@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { invalidateStaffCache } from '@/hooks/useStaff';
 import {
   AdminPageLayout,
   PageHeader,
@@ -836,6 +837,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
         }).catch((e) => console.warn('weekday defaults save skipped:', e));
       }
 
+      invalidateStaffCache();
       // Refetch all resources
       fetchResources();
     } catch (err) {

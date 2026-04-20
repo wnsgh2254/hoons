@@ -1,0 +1,96 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const customerId = Number(id);
+    if (!customerId || Number.isNaN(customerId)) {
+      return NextResponse.json({ error: '유효하지 않은 고객 ID 입니다.' }, { status: 400 });
+    }
+
+    const now = new Date();
+    const oneYearAgo = new Date(now);
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const todayStr = now.toISOString().split('T')[0];
+    const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+
+    const [bookingsResult, prepaidResult] = await Promise.all([
+      supabase
+        .from('bookings')
+        .select('booking_date, booking_time, status, total_amount')
+        .eq('customer_id', customerId),
+      supabase
+        .from('prepaid_passes')
+        .select('id, name, points, is_active, expires_at, created_at')
+        .eq('customer_id', customerId)
+        .eq('is_active', true),
+    ]);
+
+    type BookingRow = { booking_date: string; booking_time: string | null; status: string | null; total_amount: number | null };
+    type PrepaidRow = { id: number; name: string | null; points: number | null; is_active: boolean | null; expires_at: string | null; created_at: string | null };
+
+    const allBookings: BookingRow[] = (bookingsResult.data as BookingRow[]) || [];
+
+    const totalSales = allBookings.reduce((sum: number, b: BookingRow) => {
+      const s = (b.status || '').toLowerCase();
+      return s === 'paid' || s === 'completed' ? sum + Number(b.total_amount || 0) : sum;
+    }, 0);
+
+    const lastVisitDate =
+      allBookings
+        .filter((b: BookingRow) => {
+          const s = (b.status || '').toLowerCase();
+          return s === 'paid' || s === 'completed';
+        })
+        .map((b: BookingRow) => b.booking_date)
+        .sort((a: string, b: string) => b.localeCompare(a))[0] ?? null;
+
+    let daysSinceLastVisit: number | null = null;
+    if (lastVisitDate) {
+      const diffMs = now.getTime() - new Date(lastVisitDate).getTime();
+      daysSinceLastVisit = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    }
+
+    const recentBookings = allBookings.filter((b: BookingRow) => b.booking_date >= oneYearAgoStr);
+    const appointmentsCount = recentBookings.length;
+    const cancelledCount = recentBookings.filter((b: BookingRow) => {
+      const s = (b.status || '').toLowerCase();
+      return s === 'cancelled' || s === 'canceled';
+    }).length;
+
+    const nextAppointment =
+      allBookings
+        .filter((b: BookingRow) => {
+          const s = (b.status || '').toLowerCase();
+          const isUpcoming = !s || s === 'booked' || s === 'reserved' || s === 'confirmed' || s === 'pending';
+          return isUpcoming && b.booking_date >= todayStr;
+        })
+        .sort((a: BookingRow, b: BookingRow) => {
+          const dateCmp = a.booking_date.localeCompare(b.booking_date);
+          if (dateCmp !== 0) return dateCmp;
+          return (a.booking_time || '').localeCompare(b.booking_time || '');
+        })
+        .map((b: BookingRow) => ({ date: b.booking_date, time: b.booking_time || '' }))[0] ?? null;
+
+    const prepaidTickets: PrepaidRow[] = (prepaidResult.data as PrepaidRow[]) || [];
+    const prepaidBalance = prepaidTickets.reduce((sum: number, p: PrepaidRow) => sum + Number(p.points || 0), 0);
+
+    return NextResponse.json({
+      total_sales: totalSales,
+      last_visit_date: lastVisitDate,
+      days_since_last_visit: daysSinceLastVisit,
+      appointments_count: appointmentsCount,
+      cancelled_count: cancelledCount,
+      next_appointment: nextAppointment,
+      prepaid_tickets: prepaidTickets,
+      prepaid_balance: prepaidBalance,
+    });
+  } catch (error) {
+    console.error('Error in customers stats route:', error);
+    return NextResponse.json({ error: '통계를 불러오지 못했습니다.' }, { status: 500 });
+  }
+}
