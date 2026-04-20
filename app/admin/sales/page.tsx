@@ -1697,13 +1697,14 @@ function SalesHistoryModal({
     {
       key: 'shop',
       header: '지점',
+      className: 'hidden md:table-cell',
       render: (item: any) => getShopName(item.shop_id),
     },
     {
       key: 'date',
       header: '날짜',
       render: (item: any) => (
-        <span>{item.booking_date} {formatTime(item.booking_time)}</span>
+        <span className="whitespace-nowrap">{item.booking_date}<br className="sm:hidden" /><span className="hidden sm:inline"> </span>{formatTime(item.booking_time)}</span>
       ),
     },
     {
@@ -1711,7 +1712,7 @@ function SalesHistoryModal({
       header: '고객명',
       render: (item: any) => (
         <button
-          className="hover:underline cursor-pointer"
+          className="hover:underline cursor-pointer whitespace-nowrap"
           onClick={() => item.customer_id && handleCustomerClick(item.customer_id)}
         >
           {getCustomerName(item.customer_id)}
@@ -1737,6 +1738,7 @@ function SalesHistoryModal({
     {
       key: 'designer',
       header: '담당자',
+      className: 'hidden sm:table-cell',
       render: (item: any) => (
         <div className="flex flex-col gap-1">
           {item.items.map((it: any, i: number) => (
@@ -1748,6 +1750,7 @@ function SalesHistoryModal({
     {
       key: 'salesType',
       header: '영업 구분',
+      className: 'hidden lg:table-cell',
       render: (item: any) => (
         <div className="flex flex-col gap-1">
           {item.items.map((it: any, i: number) => (
@@ -1759,6 +1762,7 @@ function SalesHistoryModal({
     {
       key: 'discount',
       header: '할인',
+      className: 'hidden lg:table-cell',
       render: (item: any) => (
         <div className="flex flex-col gap-1 items-end">
           {item.items.map((it: any, i: number) => (
@@ -1776,7 +1780,7 @@ function SalesHistoryModal({
       render: (item: any) => (
         <div className={`flex flex-col gap-1 items-end ${item._isRefund ? 'text-red-500 font-medium' : ''}`}>
           {item.items.map((it: any, i: number) => (
-            <div key={i}>
+            <div key={i} className="whitespace-nowrap">
               {Number(it.amount ?? it.total_amount)
                 ? (item._isRefund
                     ? `-${Number(it.amount ?? it.total_amount).toLocaleString()}`
@@ -1790,6 +1794,7 @@ function SalesHistoryModal({
     {
       key: 'paymentMethod',
       header: '결제 방법',
+      className: 'hidden sm:table-cell',
       render: (item: any) => {
         const paymentMethods = item.payments.map((p: any) => formatPaymentMethod(p.method)).join(', ') || '-';
         return paymentMethods;
@@ -1804,25 +1809,25 @@ function SalesHistoryModal({
           const refundTotal =
             item.refund_total ||
             item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0);
-          return <span className="text-red-500 font-medium">-{Number(refundTotal).toLocaleString()}</span>;
+          return <span className="text-red-500 font-medium whitespace-nowrap">-{Number(refundTotal).toLocaleString()}</span>;
         }
         const totalAmount = item.items.reduce(
           (sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0),
           0,
         );
         const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-        return totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString();
+        return <span className="whitespace-nowrap">{totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString()}</span>;
       },
     },
     {
       key: 'memo',
       header: '메모',
+      className: 'hidden md:table-cell',
       render: (item: any) => item._isRefund ? (item.refund_memo || '-') : (item.memo || '-'),
     },
     {
       key: 'detail',
       header: '',
-      width: 50,
       render: (item: any) => (
         item._isRefund ? null : (
           <button
@@ -1846,90 +1851,92 @@ function SalesHistoryModal({
     >
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-5.5">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'daily'}
-                onChange={() => setDateMode('daily')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">일별</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'period'}
-                onChange={() => setDateMode('period')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">기간</span>
-            </label>
+        <div className="flex flex-col gap-3">
+          {/* Row 1: date mode toggle + date inputs */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex gap-4 shrink-0">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  checked={dateMode === 'daily'}
+                  onChange={() => setDateMode('daily')}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">일별</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  checked={dateMode === 'period'}
+                  onChange={() => setDateMode('period')}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">기간</span>
+              </label>
+            </div>
+
+            {dateMode === 'daily' ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
+                  &lt;
+                </Button>
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  wrapperClassName="flex-1 min-w-0 sm:min-w-[180px] sm:flex-none"
+                />
+                <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
+                  &gt;
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2 min-w-0">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  wrapperClassName="min-w-0 sm:min-w-[180px]"
+                />
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  wrapperClassName="min-w-0 sm:min-w-[180px]"
+                />
+              </div>
+            )}
           </div>
 
-          {dateMode === 'daily' ? (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
-                &lt;
-              </Button>
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                wrapperClassName="w-auto"
-              />
-              <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
-                &gt;
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                wrapperClassName="w-auto"
-              />
-              <span className="text-gray-400">~</span>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={startDate}
-                wrapperClassName="w-auto"
-              />
-            </div>
-          )}
-
-          <Select
-            label="항목"
-            value={selectedItemType}
-            onChange={(e) => setSelectedItemType(e.target.value)}
-            options={itemTypeOptions}
-              wrapperClassName="flex-1 min-w-0"
-          />
-
-          <Select
-            label="결제 방법"
-            value={selectedPaymentMethod}
-            onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-            options={paymentMethodOptions}
-              wrapperClassName="flex-1 min-w-0"
-          />
-
-          <Select
-            label="담당자"
-            value={selectedDesignerId}
-            onChange={(e) => setSelectedDesignerId(e.target.value)}
-            options={designerOptions}
-            placeholder="전체"
-              wrapperClassName="flex-1 min-w-0"
-          />
-
-          <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
-            검색
-          </Button>
+          {/* Row 2: selects + search */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-end sm:gap-3">
+            <Select
+              label="항목"
+              value={selectedItemType}
+              onChange={(e) => setSelectedItemType(e.target.value)}
+              options={itemTypeOptions}
+              wrapperClassName="min-w-0"
+            />
+            <Select
+              label="결제 방법"
+              value={selectedPaymentMethod}
+              onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+              options={paymentMethodOptions}
+              wrapperClassName="min-w-0"
+            />
+            <Select
+              label="담당자"
+              value={selectedDesignerId}
+              onChange={(e) => setSelectedDesignerId(e.target.value)}
+              options={designerOptions}
+              placeholder="전체"
+              wrapperClassName="min-w-0"
+            />
+            <Button variant="primary" size="sm" icon="search" onClick={handleSearch} className="w-full sm:w-auto sm:self-end">
+              검색
+            </Button>
+          </div>
         </div>
       </div>
 
