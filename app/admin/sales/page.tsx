@@ -148,10 +148,28 @@ function DateFilterBar({
   handleSearch: () => void;
   extraFilters?: React.ReactNode;
 }) {
+  const handleStartDateChange = (nextStartDate: string) => {
+    setStartDate(nextStartDate);
+
+    // Comment: Keep the end date aligned so the range never goes backwards.
+    if (endDate && nextStartDate && endDate < nextStartDate) {
+      setEndDate(nextStartDate);
+    }
+  };
+
+  const handleEndDateChange = (nextEndDate: string) => {
+    if (startDate && nextEndDate && nextEndDate < startDate) {
+      setEndDate(startDate);
+      return;
+    }
+
+    setEndDate(nextEndDate);
+  };
+
   return (
     <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-        <div className="flex gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center">
+        <div className="flex flex-wrap gap-4">
           <label className="flex items-center gap-2">
             <input
               type="radio"
@@ -173,7 +191,7 @@ function DateFilterBar({
         </div>
 
         {dateMode === 'daily' ? (
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
               &lt;
             </Button>
@@ -181,34 +199,44 @@ function DateFilterBar({
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              wrapperClassName="w-auto"
+              wrapperClassName="w-full sm:min-w-[180px]"
             />
             <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
               &gt;
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
             <Input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              wrapperClassName="w-auto"
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              wrapperClassName="w-full min-w-0 sm:min-w-[180px]"
             />
-            <span className="text-gray-400">~</span>
+            <span className="hidden text-center text-gray-400 sm:block">~</span>
             <Input
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              min={startDate}
-              wrapperClassName="w-auto"
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              min={startDate || undefined}
+              wrapperClassName="w-full min-w-0 sm:min-w-[180px]"
             />
           </div>
         )}
 
-        {extraFilters}
+        {extraFilters && (
+          <div className="flex w-full min-w-0 flex-col gap-4 md:flex-1 md:flex-row">
+            {extraFilters}
+          </div>
+        )}
 
-        <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
+        <Button
+          variant="primary"
+          size="sm"
+          icon="search"
+          onClick={handleSearch}
+          className="w-full sm:w-auto"
+        >
           검색
         </Button>
       </div>
@@ -797,7 +825,7 @@ function ByStaffSalesTab({
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               options={designerOptions}
               placeholder="전체 직원"
-              wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
             />
           </>
         }
@@ -1023,7 +1051,7 @@ function ByItemSalesTab({
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               options={designerOptions}
               placeholder="전체 직원"
-              wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
             />
             <Select
               value={selectedItemType}
@@ -1034,7 +1062,7 @@ function ByItemSalesTab({
                 }
               }}
               options={itemTypeOptions}
-              wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
             />
             <div className="flex gap-4">
               <label className={`flex items-center gap-2 ${selectedItemType !== 'service' ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -1871,7 +1899,7 @@ function SalesHistoryModal({
             value={selectedItemType}
             onChange={(e) => setSelectedItemType(e.target.value)}
             options={itemTypeOptions}
-            wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
           />
 
           <Select
@@ -1879,7 +1907,7 @@ function SalesHistoryModal({
             value={selectedPaymentMethod}
             onChange={(e) => setSelectedPaymentMethod(e.target.value)}
             options={paymentMethodOptions}
-            wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
           />
 
           <Select
@@ -1888,7 +1916,7 @@ function SalesHistoryModal({
             onChange={(e) => setSelectedDesignerId(e.target.value)}
             options={designerOptions}
             placeholder="전체"
-            wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
           />
 
           <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
