@@ -526,6 +526,7 @@ export default function AppointmentsManagementPage() {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null>(null);
   const bookingMenuOriginalPositionRef = useRef<{ top: number; left: number; width: number } | null>(null);
 
@@ -1791,15 +1792,24 @@ export default function AppointmentsManagementPage() {
           const scrollContainer = document.getElementById('schedule-scroll-container');
           const scrollTop = scrollContainer?.scrollTop || 0;
           const scrollLeft = scrollContainer?.scrollLeft || 0;
-          const menuTop = cardRect.bottom + 4;
+          const menuEstimatedHeight = 280;
+          const viewportPadding = 12;
+          const spaceBelow = window.innerHeight - cardRect.bottom;
+          const spaceAbove = cardRect.top;
+          const placement =
+            spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+          const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
           const menuLeft = cardRect.left;
-          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+          const menuWidth = cellContainer
+            ? Math.max(cellContainer.getBoundingClientRect().width - 8, 180)
+            : cardRect.width;
           setBookingMenuPosition({
-            top: menuTop,
+            top: Math.max(menuTop, viewportPadding),
             left: menuLeft,
             width: menuWidth,
             scrollTop,
             scrollLeft,
+            placement,
           });
         }
         setBookingMenuOpen(bookingId);

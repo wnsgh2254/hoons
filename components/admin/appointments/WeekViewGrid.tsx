@@ -52,6 +52,7 @@ interface WeekViewGridProps {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null;
   bookingMenuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
   setBookingMenuPosition: (pos: {
@@ -60,6 +61,7 @@ interface WeekViewGridProps {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null) => void;
   menuCloseTimeoutRef: React.RefObject<NodeJS.Timeout | null>;
   menuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
@@ -1039,16 +1041,25 @@ export default function WeekViewGrid({
                           const scrollTop = scrollContainer?.scrollTop || 0;
                           const scrollLeft = scrollContainer?.scrollLeft || 0;
                           
-                          const menuTop = cardRect.bottom + 4;
+                          const menuEstimatedHeight = 280;
+                          const viewportPadding = 12;
+                          const spaceBelow = window.innerHeight - cardRect.bottom;
+                          const spaceAbove = cardRect.top;
+                          const placement =
+                            spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+                          const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
                           const menuLeft = cardRect.left;
-                          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+                          const menuWidth = cellContainer
+                            ? Math.max(cellContainer.getBoundingClientRect().width - 8, 180)
+                            : cardRect.width;
                           
                           setBookingMenuPosition({
-                            top: menuTop,
+                            top: Math.max(menuTop, viewportPadding),
                             left: menuLeft,
                             width: menuWidth,
                             scrollTop,
                             scrollLeft,
+                            placement,
                           });
                         }
                       setBookingMenuOpen(b.id);
@@ -1201,6 +1212,7 @@ export default function WeekViewGrid({
                             className="bg-white border border-gray-200 rounded-lg shadow-lg"
                             style={{
                               width: '100%',
+                              transform: bookingMenuPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
                             }}
                             onNewBooking={() => {
                             setIsNewBookingOpen?.(true);

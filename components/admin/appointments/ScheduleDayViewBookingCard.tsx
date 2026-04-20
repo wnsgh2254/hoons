@@ -44,6 +44,7 @@ interface ScheduleDayViewBookingCardProps {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null;
   onCardClick: (e: React.MouseEvent, bookingId: number) => void;
   onMouseEnter: (bookingId: number) => void;
@@ -257,7 +258,10 @@ function ScheduleDayViewBookingCard({
               <BookingContextMenu
                 booking={booking}
                 className="bg-white border border-gray-200 rounded-lg shadow-lg"
-                style={{ width: '100%' }}
+                style={{
+                  width: '100%',
+                  transform: bookingMenuPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
+                }}
                 onNewBooking={() => menuHandlers.onNewBooking(booking)}
                 onEditBooking={(b) => menuHandlers.onEditBooking(b)}
                 onViewDetail={(b) => menuHandlers.onViewDetail(b)}

@@ -18,6 +18,7 @@ interface MenuPosition {
   width: number;
   scrollTop: number;
   scrollLeft: number;
+  placement: 'top' | 'bottom';
 }
 
 interface BookingCardProps {
@@ -177,16 +178,25 @@ function BookingCard({
               const scrollTop = scrollContainer?.scrollTop || 0;
               const scrollLeft = scrollContainer?.scrollLeft || 0;
 
-              const menuTop = cardRect.bottom + 4;
+              const menuEstimatedHeight = 280;
+              const viewportPadding = 12;
+              const spaceBelow = window.innerHeight - cardRect.bottom;
+              const spaceAbove = cardRect.top;
+              const placement =
+                spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+              const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
               const menuLeft = cardRect.left;
-              const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+              const menuWidth = cellContainer
+                ? Math.max(cellContainer.getBoundingClientRect().width - 8, 180)
+                : cardRect.width;
 
               setBookingMenuPosition({
-                top: menuTop,
+                top: Math.max(menuTop, viewportPadding),
                 left: menuLeft,
                 width: menuWidth,
                 scrollTop,
                 scrollLeft,
+                placement,
               });
             }
             setBookingMenuOpen(b.id);
@@ -388,7 +398,10 @@ function BookingCard({
               <BookingContextMenu
                 booking={b}
                 className="bg-white border border-gray-200 rounded-lg shadow-lg"
-                style={{ width: '100%' }}
+                style={{
+                  width: '100%',
+                  transform: bookingMenuPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
+                }}
                 onNewBooking={() => onNewBooking(b)}
                 onEditBooking={onEditBooking}
                 onViewDetail={onViewDetail}
