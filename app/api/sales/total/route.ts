@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         id,
         shop_id,
         refund_date,
+        total_amount,
         cash_amount,
         card_amount,
         bank_transfer_amount,
@@ -258,6 +259,30 @@ export async function GET(request: NextRequest) {
       }
 
       depositSummary[method].total += amount;
+    });
+
+    refundsData.forEach((refund: any) => {
+      const totalRefundAmount = toNum(refund.total_amount);
+      const depositRefundAmount = (refund.refund_items || [])
+        .filter((item: any) => String(item.item_type) === 'deposit')
+        .reduce((sum: number, item: any) => sum + toNum(item.amount), 0);
+
+      const paymentBuckets = [
+        { key: 'cash' as const, amount: toNum(refund.cash_amount) },
+        { key: 'card' as const, amount: toNum(refund.card_amount) + toNum(refund.bank_transfer_amount) },
+      ];
+
+      paymentBuckets.forEach(({ key, amount }) => {
+        if (amount <= 0) return;
+
+        const depositShare =
+          totalRefundAmount > 0 ? Math.min(amount, (depositRefundAmount / totalRefundAmount) * amount) : 0;
+        const regularRefundShare = Math.max(0, amount - depositShare);
+
+        depositSummary[key].depositRefund += depositShare;
+        depositSummary[key].refund += regularRefundShare;
+        depositSummary[key].total -= amount;
+      });
     });
 
     const membershipDeductions = {

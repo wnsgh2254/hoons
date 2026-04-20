@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking, buildPhoneVariants } from '@/lib/data';
+import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
@@ -151,7 +152,12 @@ export async function GET(request: NextRequest) {
         console.error('Error fetching minimal bookings:', minError);
         return NextResponse.json({ error: '예약 조회에 실패했습니다.' }, { status: 500 });
       }
-      return NextResponse.json({ bookings: minData || [] }, { status: 200 });
+      return NextResponse.json({
+        bookings: (minData || []).map((booking: any) => ({
+          ...booking,
+          status: isCancelledBookingStatus(booking.status) ? 'cancelled' : booking.status,
+        })),
+      }, { status: 200 });
     }
 
     let query = supabase

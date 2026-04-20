@@ -14,6 +14,7 @@ type RefundItem = {
   quantity: number;
   amount: number;
   manager: string;
+  prepaidCreditPoints?: number;
 };
 
 interface RefundRegistrationModalProps {
@@ -91,6 +92,7 @@ export default function RefundRegistrationModal({
     price: number;
     type: SalesItemType;
     manager?: string;
+    prepaid_credit_points?: number;
   }) => {
     const newItem: RefundItem = {
       id: `${item.type}-${item.id}-${Date.now()}`,
@@ -100,6 +102,10 @@ export default function RefundRegistrationModal({
       quantity: 1,
       amount: item.price,
       manager: item.manager || '',
+      prepaidCreditPoints:
+        item.type === 'prepaid'
+          ? Math.round(Number(item.prepaid_credit_points ?? 0))
+          : undefined,
     };
     setRefundItems(prev => {
       const updatedItems = [...prev, newItem];
@@ -180,6 +186,11 @@ export default function RefundRegistrationModal({
             quantity: item.quantity,
             amount: item.amount,
             manager: item.manager,
+            ...(item.type === 'prepaid'
+              ? {
+                  prepaid_credit_points: item.prepaidCreditPoints ?? 0,
+                }
+              : {}),
           })),
           total_amount: totalAmount,
           point_deduction: 0,

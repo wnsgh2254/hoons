@@ -41,6 +41,7 @@ import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
 import RefundRegistrationModal from '@/components/admin/appointments/RefundRegistrationModal';
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
+import { isCancelledBookingStatus, isUpcomingBookingStatus } from '@/lib/booking-status';
 import {
   GRID_START_HOUR,
   GRID_END_HOUR,
@@ -800,7 +801,7 @@ export default function AppointmentsManagementPage() {
           });
           const appointmentsCount = recentBookings.length;
           const cancelledCount = recentBookings.filter(
-            (b: any) => b.status === 'CANCELLED',
+            (b: any) => isCancelledBookingStatus(b.status),
           ).length;
 
           // Comment: 다음 예약
@@ -811,9 +812,7 @@ export default function AppointmentsManagementPage() {
               );
               return (
                 bookingDate > new Date() &&
-                (b.status === 'BOOKED' ||
-                  b.status === 'CONFIRMED' ||
-                  !b.status)
+                isUpcomingBookingStatus(b.status)
               );
             })
             .sort((a: any, b: any) => {
@@ -1048,7 +1047,7 @@ export default function AppointmentsManagementPage() {
 
         const counts: Record<number, number> = {};
         (data.bookings || []).forEach((b: { booking_date: string; status: string }) => {
-          if (b.status === 'cancelled') return;
+          if (isCancelledBookingStatus(b.status)) return;
           const d = new Date(b.booking_date);
           if (Number.isNaN(d.getTime())) return;
           counts[d.getDate()] = (counts[d.getDate()] || 0) + 1;
@@ -1610,7 +1609,7 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Filter upcoming bookings (exclude cancelled + past times for today in Sydney)
   const upcomingBookings = useMemo(() => {
-    const base = sortedBookings.filter((b) => b.status !== 'cancelled');
+    const base = sortedBookings.filter((b) => !isCancelledBookingStatus(b.status));
 
     const todaySydney = getSydneyToday();
     if (selectedDate !== todaySydney) {

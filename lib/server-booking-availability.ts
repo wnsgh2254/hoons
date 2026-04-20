@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isExpiredPendingBooking } from '@/lib/pending-bookings';
 import {
   dbTimeStringToMinutes,
   isStartSlotUnavailable,
@@ -138,7 +139,7 @@ export async function loadDesignerAvailabilityForPublicBooking(
 
   const { data: bookings, error: bErr } = await supabase
     .from('bookings')
-    .select('booking_time, status, service:service_id(duration_minutes), custom_service_duration')
+    .select('booking_time, status, created_at, service:service_id(duration_minutes), custom_service_duration')
     .eq('designer_id', designerId)
     .eq('shop_id', shopId)
     .eq('booking_date', date);
@@ -152,6 +153,9 @@ export async function loadDesignerAvailabilityForPublicBooking(
   for (const b of bookings || []) {
     if (!b.booking_time) continue;
     if (isCancelledStatus((b as { status?: string | null }).status)) continue;
+    if (isExpiredPendingBooking((b as { status?: string | null }).status, (b as { created_at?: string | null }).created_at)) {
+      continue;
+    }
     const start = dbTimeStringToMinutes(b.booking_time);
     const dur = bookingDurationMinutes(b as any);
     bookingIntervals.push({ start, end: start + dur });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
 import { createPublicBooking, getCustomerIdByPhone } from "@/lib/data";
+import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
   resolveBookingDurationMinutes,
@@ -50,6 +51,12 @@ export async function POST(request: NextRequest) {
       durationMinutes:
         typeof durationMinutesBody === "number" ? durationMinutesBody : null,
       serviceId: serviceId != null ? Number(serviceId) : null,
+    });
+
+    await cleanupExpiredPendingBookings(supabase, {
+      date: dateStr,
+      shopId: Number(shopId),
+      designerId: designerId != null ? Number(designerId) : null,
     });
 
     const slotCheck = await assertPublicBookingSlotAvailable(supabase, {

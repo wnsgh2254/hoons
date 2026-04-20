@@ -19,6 +19,7 @@ import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDraw
 import NewBookingModal from '@/components/admin/appointments/NewBookingModal';
 import type { Customer, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
+import { isCancelledBookingStatus, isUpcomingBookingStatus } from '@/lib/booking-status';
 import { useStaff } from '@/hooks/useStaff';
 
 export default function CustomersPage() {
@@ -210,12 +211,12 @@ export default function CustomersPage() {
           oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
           const recentBookings = bookings.filter((b: any) => new Date(b.booking_date) >= oneYearAgo);
           const appointmentsCount = recentBookings.length;
-          const cancelledCount = recentBookings.filter((b: any) => b.status === 'CANCELLED').length;
+          const cancelledCount = recentBookings.filter((b: any) => isCancelledBookingStatus(b.status)).length;
 
           const upcomingBookings = bookings
             .filter((b: any) => {
               const bookingDate = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-              return bookingDate > new Date() && (b.status === 'BOOKED' || b.status === 'CONFIRMED' || !b.status);
+              return bookingDate > new Date() && isUpcomingBookingStatus(b.status);
             })
             .sort((a: any, b: any) => {
               const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);

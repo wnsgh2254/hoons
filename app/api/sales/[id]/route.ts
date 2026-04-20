@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import {
+  adjustInventoryStockForSaleItem,
+  adjustPrepaidBalance,
+} from '@/lib/sales-reconciliation';
 
 export async function DELETE(
   request: NextRequest,
@@ -82,7 +86,7 @@ export async function PUT(
     // Pre-calculate prepaid deduction delta for edit mode
     const { data: oldItems } = await supabase
       .from('sales_items')
-      .select('prepaid_deduction')
+      .select('item_type, item_name, quantity, prepaid_deduction')
       .eq('sale_id', Number(id));
     const oldPrepaidDeductionTotal = (oldItems || []).reduce(
       (sum: number, row: any) => sum + Number(row.prepaid_deduction || 0),
@@ -93,6 +97,27 @@ export async function PUT(
       0,
     );
     const prepaidDelta = newPrepaidDeductionTotal - oldPrepaidDeductionTotal;
+    const oldProductQuantityMap = new Map<string, number>();
+    const newProductQuantityMap = new Map<string, number>();
+    const addQuantity = (map: Map<string, number>, itemName: string, quantity: number) => {
+      map.set(itemName, (map.get(itemName) || 0) + quantity);
+    };
+    (oldItems || []).forEach((row: any) => {
+      if (String(row.item_type) !== 'product') return;
+      addQuantity(
+        oldProductQuantityMap,
+        String(row.item_name || ''),
+        Math.max(1, Number(row.quantity || 1)),
+      );
+    });
+    (items || []).forEach((row: any) => {
+      if (String(row.type) !== 'product') return;
+      addQuantity(
+        newProductQuantityMap,
+        String(row.name || ''),
+        Math.max(1, Number(row.quantity || 1)),
+      );
+    });
 
     // 0. Fetch existing edit_history
     const { data: existingSale } = await supabase
@@ -178,74 +203,30 @@ export async function PUT(
       );
     }
 
-    // Sync prepaid balance on edit (delta-based)
+    for (const [itemName, oldQty] of oldProductQuantityMap.entries()) {
+      const newQty = newProductQuantityMap.get(itemName) || 0;
+      const delta = newQty - oldQty;
+      if (delta !== 0) {
+        await adjustInventoryStockForSaleItem(supabase, {
+          itemName,
+          quantityDelta: -delta,
+        });
+      }
+      newProductQuantityMap.delete(itemName);
+    }
+
+    for (const [itemName, qty] of newProductQuantityMap.entries()) {
+      await adjustInventoryStockForSaleItem(supabase, {
+        itemName,
+        quantityDelta: -qty,
+      });
+    }
+
     if (prepaidDelta !== 0) {
-      const { data: customerRow } = await supabase
-        .from('customers')
-        .select('id, phone')
-        .eq('id', customer_id)
-        .maybeSingle();
-      const normalizedPhone = String(customerRow?.phone || '').replace(/\D/g, '');
-
-      let query = supabase
-        .from('prepaid_passes')
-        .select('id, points, customer_id')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      if (normalizedPhone) {
-        query = query.or(
-          `customer_id.eq.${customer_id},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
-        );
-      } else {
-        query = query.eq('customer_id', customer_id);
-      }
-      const { data: prepaidRows, error: prepaidSelErr } = await query;
-
-      if (prepaidSelErr) {
-        console.error('Error fetching prepaid passes for sale edit:', prepaidSelErr);
-      } else if ((prepaidRows || []).length > 0) {
-        const legacyIds = (prepaidRows || [])
-          .filter((r: any) => r.customer_id == null)
-          .map((r: any) => Number(r.id))
-          .filter((id: number) => Number.isFinite(id));
-        if (legacyIds.length > 0) {
-          await supabase
-            .from('prepaid_passes')
-            .update({ customer_id })
-            .in('id', legacyIds);
-        }
-        if (prepaidDelta > 0) {
-          // Additional deduction
-          let remaining = prepaidDelta;
-          for (const row of prepaidRows || []) {
-            if (remaining <= 0) break;
-            const current = Number(row.points || 0);
-            const deduct = Math.min(current, remaining);
-            const next = current - deduct;
-            const { error: updErr } = await supabase
-              .from('prepaid_passes')
-              .update({ points: next })
-              .eq('id', row.id);
-            if (updErr) {
-              console.error(`Error deducting prepaid for pass ${row.id}:`, updErr);
-              break;
-            }
-            remaining -= deduct;
-          }
-        } else {
-          // Refund deduction amount to latest pass
-          const refund = Math.abs(prepaidDelta);
-          const target = prepaidRows[0];
-          const current = Number(target.points || 0);
-          const { error: updErr } = await supabase
-            .from('prepaid_passes')
-            .update({ points: current + refund })
-            .eq('id', target.id);
-          if (updErr) {
-            console.error(`Error refunding prepaid for pass ${target.id}:`, updErr);
-          }
-        }
-      }
+      await adjustPrepaidBalance(supabase, {
+        customerId: Number(customer_id),
+        pointsDelta: -prepaidDelta,
+      });
     }
 
     return NextResponse.json(

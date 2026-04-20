@@ -85,18 +85,29 @@ export async function GET(request: NextRequest) {
         prepaidBalances[targetCustomerId] += Number(p.points || 0);
       });
 
-      // Comment: Get total sales from bookings
-      const { data: bookingsData } = await supabase
-        .from('bookings')
-        .select('customer_id, total_amount')
-        .in('customer_id', customerIds)
-        .eq('status', 'confirmed');
+      const [{ data: salesData }, { data: refundData }] = await Promise.all([
+        supabase
+          .from('sales')
+          .select('customer_id, total_amount')
+          .in('customer_id', customerIds),
+        supabase
+          .from('refunds')
+          .select('customer_id, total_amount')
+          .in('customer_id', customerIds),
+      ]);
 
-      (bookingsData || []).forEach((b: any) => {
-        if (!totalSales[b.customer_id]) {
-          totalSales[b.customer_id] = 0;
+      (salesData || []).forEach((sale: any) => {
+        if (!totalSales[sale.customer_id]) {
+          totalSales[sale.customer_id] = 0;
         }
-        totalSales[b.customer_id] += Number(b.total_amount || 0);
+        totalSales[sale.customer_id] += Number(sale.total_amount || 0);
+      });
+
+      (refundData || []).forEach((refund: any) => {
+        if (!totalSales[refund.customer_id]) {
+          totalSales[refund.customer_id] = 0;
+        }
+        totalSales[refund.customer_id] -= Number(refund.total_amount || 0);
       });
     }
 
