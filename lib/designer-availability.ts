@@ -61,30 +61,7 @@ export async function getAvailableDesignerIdsForShop(
     );
   }
 
-  // 3. Directors are available at every shop
-  let designerIdsDirectorWeekday: number[] = [];
-  const { data: dirRows } = await supabase
-    .from('designers')
-    .select('id')
-    .eq('is_active', true)
-    .ilike('role', '%Director%');
-
-  const dirIds = (dirRows || []).map((r: any) => Number(r.id)).filter(Number.isFinite);
-  if (dirIds.length > 0) {
-    const { data: dirSched } = await supabase
-      .from('designer_schedules')
-      .select('designer_id')
-      .eq('weekday', weekday)
-      .in('designer_id', dirIds)
-      .lte('effective_from', date)
-      .or(`effective_to.is.null,effective_to.gte.${date}`);
-
-    designerIdsDirectorWeekday = Array.from(
-      new Set((dirSched || []).map((r: any) => r.designer_id).filter(Boolean)),
-    );
-  }
-
-  // 4. Linked shop designers (designer_shops table)
+  // 3. Linked shop designers (designer_shops table)
   let designerIdsFromLinkedShops: number[] = [];
   const { data: linkRows } = await supabase
     .from('designer_shops')
@@ -133,7 +110,6 @@ export async function getAvailableDesignerIdsForShop(
       ...designerIdsFromSchedule,
       ...designerIdsFromHomeShop,
       ...designerIdsFromLinkedShops,
-      ...designerIdsDirectorWeekday,
       ...designerIdsFromSpecialWork,
     ]),
   );

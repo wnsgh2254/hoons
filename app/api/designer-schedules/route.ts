@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     if (!designerId && !date && allParam === 'true') {
       let query = supabase
         .from('designer_schedules')
-        .select('id, designer_id, weekday, start_time, end_time')
+        .select('id, designer_id, shop_id, weekday, start_time, end_time')
         .is('effective_to', null)
         .order('designer_id', { ascending: true })
         .order('weekday', { ascending: true });
@@ -126,37 +126,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Comment: Directors are bookable at every shop — include if they have this weekday on any schedule row
-    let designerIdsDirectorWeekday: number[] = [];
-    if (shopId) {
-      const { data: dirRows } = await supabase
-        .from('designers')
-        .select('id')
-        .eq('is_active', true)
-        .ilike('role', '%Director%');
-
-      const dirIds = (dirRows || [])
-        .map((r: { id: number }) => Number(r.id))
-        .filter((n: number) => Number.isFinite(n));
-      if (dirIds.length > 0) {
-        const { data: dirSched, error: dirErr } = await supabase
-          .from('designer_schedules')
-          .select('designer_id')
-          .eq('weekday', weekday)
-          .in('designer_id', dirIds)
-          .lte('effective_from', date)
-          .or(`effective_to.is.null,effective_to.gte.${date}`);
-
-        if (dirErr) {
-          console.error('Error fetching director weekday schedules:', dirErr);
-        } else {
-          designerIdsDirectorWeekday = Array.from(
-            new Set((dirSched || []).map((row: { designer_id: number }) => row.designer_id).filter(Boolean)),
-          );
-        }
-      }
-    }
-
     // Comment: designer_shops link — same weekday schedule rule as home shop (multi-venue staff)
     let designerIdsFromLinkedShops: number[] = [];
     if (shopId) {
@@ -246,7 +215,6 @@ export async function GET(request: NextRequest) {
         ...designerIdsFromSchedule,
         ...designerIdsFromHomeShop,
         ...designerIdsFromLinkedShops,
-        ...designerIdsDirectorWeekday,
         ...designerIdsFromSpecialWork,
       ]),
     );

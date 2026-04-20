@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const schedules: unknown[] = [];
     for (const entry of entries) {
-      const { weekday, start_time, end_time, effective_from, effective_to } = entry;
+      const { weekday, start_time, end_time, effective_from, effective_to, shop_id: entryShopId } = entry;
       if (weekday === undefined || !start_time || !end_time) {
         return NextResponse.json(
           { error: '각 항목에 weekday, start_time, end_time이 필요합니다.' },
@@ -51,9 +51,14 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      // Use per-entry shop_id if provided, fall back to the designer's resolved shop
+      const effectiveShopId =
+        entryShopId != null && Number.isFinite(Number(entryShopId))
+          ? Number(entryShopId)
+          : resolvedShopId;
       const { schedule, error: upsertErr } = await upsertDesignerScheduleRow({
         designer_id: Number(designer_id),
-        resolvedShopId,
+        resolvedShopId: effectiveShopId,
         weekday: Number(weekday),
         start_time,
         end_time,
