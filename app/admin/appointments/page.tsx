@@ -2819,8 +2819,9 @@ export default function AppointmentsManagementPage() {
                                 const slotTop = (slotMinutes / 30) * GRID_30MIN_HEIGHT + 8;
                                 const slotHeight = GRID_30MIN_HEIGHT;
                                 
-                                // Check if this slot has a booking
-                                const hasBooking = designerBookings.some((b) => {
+                                // Comment: Track which half of the slot is occupied so partially empty space
+                                // remains clickable for overlapping bookings.
+                                const activeSlotBookings = designerBookings.filter((b) => {
                                   if (!b.booking_time) return false;
                                   const [bHour, bMin] = b.booking_time.split(':').map(Number);
                                   const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
@@ -2828,6 +2829,50 @@ export default function AppointmentsManagementPage() {
                                   const bEndMinutes = bStartMinutes + bDuration;
                                   return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
                                 });
+                                let occupiedLeft = false;
+                                let occupiedRight = false;
+                                let occupiedFull = false;
+                                activeSlotBookings.forEach((booking) => {
+                                  const [hourStr, minuteStr] = (booking.booking_time || '').split(':');
+                                  const hour = Number(hourStr);
+                                  const minutes = Number(minuteStr);
+                                  if (Number.isNaN(hour) || Number.isNaN(minutes)) return;
+                                  const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
+                                  const durationMinutes = getBookingDurationMinutes(booking as any);
+                                  const endMinutes = startMinutes + durationMinutes;
+                                  let hasOverlap = false;
+                                  let placeOnRight = false;
+                                  designerBookings.forEach((other: any) => {
+                                    if (other === booking || !other.booking_time) return;
+                                    const [ohStr, omStr] = other.booking_time.split(':').map(Number);
+                                    if (Number.isNaN(ohStr) || Number.isNaN(omStr)) return;
+                                    const otherStart = (ohStr - GRID_START_HOUR) * 60 + omStr;
+                                    const otherDuration = getBookingDurationMinutes(other as any);
+                                    const otherEnd = otherStart + otherDuration;
+                                    const overlap =
+                                      Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);
+                                    if (overlap) {
+                                      hasOverlap = true;
+                                      if ((other as any).id < (booking as any).id) {
+                                        placeOnRight = true;
+                                      }
+                                    }
+                                  });
+                                  if (!hasOverlap) {
+                                    occupiedFull = true;
+                                    return;
+                                  }
+                                  if (placeOnRight) {
+                                    occupiedRight = true;
+                                  } else {
+                                    occupiedLeft = true;
+                                  }
+                                });
+                                const hasEmptyLane =
+                                  !occupiedFull && !(occupiedLeft && occupiedRight);
+                                const emptyLeftPercent = occupiedLeft && !occupiedRight ? 50 : 0;
+                                const emptyWidthPercent =
+                                  occupiedLeft || occupiedRight ? 50 : 100;
                                 
                                 // Check if this slot is restricted and get restriction info
                                 const slotRestriction = designerRestrictions.find((r) => {
@@ -2843,7 +2888,7 @@ export default function AppointmentsManagementPage() {
                                 });
                                 const isRestricted = !!slotRestriction;
                                 
-                                if (hasBooking || !designerId || isDesignerOff) return null;
+                                if (!hasEmptyLane || !designerId || isDesignerOff) return null;
                                 
                                 const slotKey = `${dateStr}-${col.columnKey}-${slotTime}`;
                                 const isHovered = hoveredEmptySlot?.date === dateStr && 
@@ -2862,10 +2907,12 @@ export default function AppointmentsManagementPage() {
                                 return (
                                   <div
                                     key={slotKey}
-                                    className="absolute left-0 right-0 z-0 select-none"
+                                    className="absolute z-0 select-none"
                                     style={{ 
                                       top: slotTop, 
                                       height: slotHeight,
+                                      left: `${emptyLeftPercent}%`,
+                                      width: `${emptyWidthPercent}%`,
                                       pointerEvents: (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction) ? 'none' : 'auto',
                                       cursor: !isRestricted && designerId ? 'pointer' : 'default',
                                       userSelect: 'none',
