@@ -2055,6 +2055,8 @@ export default function AppointmentsManagementPage() {
           setIsSalesRegistrationModalOpen(true);
           setSalesItemPickerTab('service');
           setIsSalesItemPickerModalOpen(true);
+        } else {
+          alert('고객 정보가 없어 판매 등록을 할 수 없습니다.\n예약 수정에서 고객을 연결해 주세요.');
         }
         setBookingMenuOpen(null);
         setBookingMenuPosition(null);
@@ -2657,6 +2659,8 @@ export default function AppointmentsManagementPage() {
                               setIsSalesRegistrationModalOpen(true);
                               setSalesItemPickerTab('service');
                               setIsSalesItemPickerModalOpen(true);
+                            } else {
+                              alert('고객 정보가 없어 판매 등록을 할 수 없습니다.\n예약 수정에서 고객을 연결해 주세요.');
                             }
                             setBookingMenuOpen(null);
                             setBookingMenuPosition(null);
@@ -2714,7 +2718,6 @@ export default function AppointmentsManagementPage() {
                                       className={`relative h-full overflow-hidden border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'} last:border-r-0 ${isDesignerOff ? 'bg-gray-100/50' : ''}`}
                                       style={{
                                         minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
-                                        ...(isDesignerOff ? { pointerEvents: 'none' as const } : {}),
                                       }}
                             >
                               {/* Comment: Render restriction blocks (greyout) */}

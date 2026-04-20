@@ -119,6 +119,7 @@ function ScheduleDayViewBookingCard({
         width: `${widthPercent}%`,
         paddingLeft: 4,
         paddingRight: 4,
+        pointerEvents: 'auto',
       }}
       onMouseEnter={() => booking.id && onMouseEnter(booking.id)}
       onMouseLeave={(e) => booking.id && onMouseLeave(e, booking.id)}

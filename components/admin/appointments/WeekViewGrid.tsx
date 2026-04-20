@@ -309,7 +309,6 @@ export default function WeekViewGrid({
           <div
             key={dayIndex}
             className={`relative h-full overflow-hidden ${isDayOff ? 'bg-gray-100/50' : ''}`}
-            style={isDayOff ? { pointerEvents: 'none' as const } : undefined}
           >
             {/* Comment: Render restriction blocks (greyout) - skip on holidays */}
             {!isDayOff && dayRestrictions.map((restriction: any) => {
@@ -956,7 +955,7 @@ export default function WeekViewGrid({
                   key={b.id}
                   booking={b}
                   className="absolute"
-                  style={{ top, height, zIndex: 1, left: `${leftPercent}%`, width: `${widthPercent}%`, paddingLeft: 4, paddingRight: 4 }}
+                  style={{ top, height, zIndex: 1, left: `${leftPercent}%`, width: `${widthPercent}%`, paddingLeft: 4, paddingRight: 4, pointerEvents: 'auto' }}
                   hoveredBooking={hoveredBooking}
                   bookingMenuOpen={bookingMenuOpen}
                   hoverCardPosition={hoverCardPosition}
