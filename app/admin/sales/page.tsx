@@ -15,13 +15,10 @@ import {
   Input,
   DataTable,
   EmptyState,
-  AlertModal,
   Badge,
 } from '@/components/ui';
-import { Z } from '@/lib/constants';
 import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDrawer';
-import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
-import SalesRegistrationModal from '@/components/admin/appointments/SalesRegistrationModal';
+import { useSalesDetailActions } from '@/hooks/useSalesDetailActions';
 
 type TabType = 'total' | 'byStaff' | 'byItem';
 type DateMode = 'daily' | 'period';
@@ -1176,15 +1173,10 @@ function SalesHistoryModal({
   const [customerInfoLoading, setCustomerInfoLoading] = useState(false);
   const [customerInfoTab, setCustomerInfoTab] = useState<'sales' | 'bookings' | 'prepaid'>('sales');
 
-  // Sales detail modal state
-  const [selectedSalesDetail, setSelectedSalesDetail] = useState<any>(null);
-  const [isSalesDetailOpen, setIsSalesDetailOpen] = useState(false);
-  const [isDeleteSaleAlertOpen, setIsDeleteSaleAlertOpen] = useState(false);
-  const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
-  const [isSalesRegistrationModalOpen, setIsSalesRegistrationModalOpen] = useState(false);
-  const [salesRegistrationCustomer, setSalesRegistrationCustomer] = useState<{ id: number; name: string; phone: string | null } | null>(null);
-  const [editingSaleData, setEditingSaleData] = useState<any | null>(null);
-  const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
+  // Sales detail modal + edit/delete actions (shared hook)
+  const salesActions = useSalesDetailActions({
+    onRefresh: () => fetchHistory(currentPage),
+  });
 
   // Comment: Fetch initial data (shops and customers)
   useEffect(() => {
@@ -1619,8 +1611,7 @@ function SalesHistoryModal({
         prepaid_deduction: Number(it.prepaid_deduction) || 0,
       })),
     };
-    setSelectedSalesDetail(salesData);
-    setIsSalesDetailOpen(true);
+    salesActions.openDetail(salesData);
   };
 
   const formatTime = (time: string) => {
@@ -1949,90 +1940,7 @@ function SalesHistoryModal({
         />
       )}
 
-      {/* Sales Detail Modal */}
-      <SalesDetailModal
-        isOpen={isSalesDetailOpen}
-        salesData={selectedSalesDetail}
-        onClose={() => {
-          setIsSalesDetailOpen(false);
-          setSelectedSalesDetail(null);
-        }}
-        onEdit={() => {
-          if (!selectedSalesDetail) return;
-          const currentData = selectedSalesDetail;
-          setIsSalesDetailOpen(false);
-          setSelectedSalesDetail(null);
-          setSalesRegistrationCustomer({
-            id: currentData.customer_id,
-            name: currentData.customer_name,
-            phone: null,
-          });
-          setEditingSaleData(currentData);
-          setEditingSaleId(currentData.id);
-          setIsSalesRegistrationModalOpen(true);
-        }}
-        onDelete={() => {
-          if (!selectedSalesDetail) return;
-          setDeletingSaleId(selectedSalesDetail.id);
-          setIsDeleteSaleAlertOpen(true);
-        }}
-      />
-
-      {/* Sales Delete Alert Modal */}
-      <AlertModal
-        isOpen={isDeleteSaleAlertOpen}
-        title="판매 삭제"
-        message="이 판매 내역을 삭제하시겠습니까? 삭제된 내역은 복구할 수 없습니다."
-        highlightText="복구할 수 없습니다"
-        variant="confirm"
-        zIndex={Z.MODAL_ALERT_TOP}
-        onConfirm={async () => {
-          if (!deletingSaleId) return;
-          try {
-            const response = await fetch(`/api/sales/${deletingSaleId}`, {
-              method: 'DELETE',
-            });
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || '판매 삭제에 실패했습니다.');
-            }
-            setIsDeleteSaleAlertOpen(false);
-            setDeletingSaleId(null);
-            setIsSalesDetailOpen(false);
-            setSelectedSalesDetail(null);
-            fetchHistory(currentPage);
-          } catch (error: any) {
-            console.error('판매 삭제 오류:', error);
-            alert(error.message || '판매 삭제 중 오류가 발생했습니다.');
-            setIsDeleteSaleAlertOpen(false);
-          }
-        }}
-        onClose={() => {
-          setIsDeleteSaleAlertOpen(false);
-          setDeletingSaleId(null);
-        }}
-      />
-
-      {/* Sales Registration Modal (for editing) */}
-      <SalesRegistrationModal
-        isOpen={isSalesRegistrationModalOpen}
-        onClose={() => {
-          setIsSalesRegistrationModalOpen(false);
-          setSalesRegistrationCustomer(null);
-          setEditingSaleData(null);
-          setEditingSaleId(null);
-        }}
-        onComplete={() => {
-          setIsSalesRegistrationModalOpen(false);
-          setSalesRegistrationCustomer(null);
-          setEditingSaleData(null);
-          setEditingSaleId(null);
-          fetchHistory(currentPage);
-        }}
-        customer={salesRegistrationCustomer}
-        initialData={editingSaleData}
-        editSaleId={editingSaleId}
-      />
+      {salesActions.modals}
     </Modal>
   );
 }

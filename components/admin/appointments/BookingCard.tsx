@@ -14,6 +14,7 @@ import BookingContextMenu from './BookingContextMenu';
 
 interface MenuPosition {
   top: number;
+  triggerTop: number;
   left: number;
   width: number;
   scrollTop: number;
@@ -155,7 +156,7 @@ function BookingCard({
       }}
     >
       <div
-        className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
+        className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} border-t-2 border-t-white border-b-2 border-b-white rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
         style={{ zIndex: outerStyle.zIndex ?? 1 }}
         onClick={(e) => {
           e.stopPropagation();
@@ -183,6 +184,7 @@ function BookingCard({
 
               setBookingMenuPosition({
                 top: menuTop,
+                triggerTop: cardRect.top,
                 left: menuLeft,
                 width: menuWidth,
                 scrollTop,
@@ -250,7 +252,7 @@ function BookingCard({
           return createPortal(
             <div
               data-hover-card
-              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[200] min-w-[280px] p-3"
               style={{
                 top: `${hoverCardPosition.top}px`,
                 left: `${hoverCardPosition.left}px`,
@@ -338,12 +340,17 @@ function BookingCard({
             };
           }
 
+          // Comment: Flip menu upward if not enough space below the viewport.
+          const menuEstimatedHeight = 280;
+          const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
           return createPortal(
             <div
               data-booking-menu
-              className="fixed bg-transparent z-50"
+              className="fixed bg-transparent z-[99999]"
               style={{
-                top: `${bookingMenuPosition.top}px`,
+                ...(flipUp
+                  ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
+                  : { top: `${bookingMenuPosition.top}px` }),
                 left: `${bookingMenuPosition.left}px`,
                 width: `${bookingMenuPosition.width}px`,
               }}

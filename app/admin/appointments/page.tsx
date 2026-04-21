@@ -398,6 +398,7 @@ export default function AppointmentsManagementPage() {
   } | null>(null);
   const [emptySlotMenuPosition, setEmptySlotMenuPosition] = useState<{
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -521,6 +522,7 @@ export default function AppointmentsManagementPage() {
   const [bookingMenuOpen, setBookingMenuOpen] = useState<number | null>(null);
   const [bookingMenuPosition, setBookingMenuPosition] = useState<{
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -1797,6 +1799,7 @@ export default function AppointmentsManagementPage() {
           const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
           setBookingMenuPosition({
             top: menuTop,
+            triggerTop: cardRect.top,
             left: menuLeft,
             width: menuWidth,
             scrollTop,
@@ -1883,19 +1886,8 @@ export default function AppointmentsManagementPage() {
       onNewBooking: (booking) => {
         setEditingBooking(null);
         setNewBookingDate(booking.booking_date || selectedDate);
-        const bookingCustomer = (booking as any)?.customer;
-        if (bookingCustomer?.id) {
-          const prefill = {
-            id: Number(bookingCustomer.id),
-            name: String(bookingCustomer.name || ''),
-            phone: bookingCustomer.phone ?? null,
-          };
-          setRegisteredCustomer(prefill);
-          setNewBookingSelectedCustomerId(prefill.id);
-        } else {
-          setRegisteredCustomer(null);
-          setNewBookingSelectedCustomerId(null);
-        }
+        setRegisteredCustomer(null);
+        setNewBookingSelectedCustomerId(null);
         if (booking.shop_id != null) {
           setNewBookingShopId(Number(booking.shop_id));
         }
@@ -2036,6 +2028,13 @@ export default function AppointmentsManagementPage() {
         const customerId = (booking as any).customer?.id || (booking as any).customer_id;
         const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
         const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
+        if (!customerId) {
+          alert('이 예약에 연결된 고객이 없습니다. 판매를 등록하려면 먼저 고객을 등록해주세요.');
+          return;
+        }
         if (booking.id) {
           setSalesLinkedBookingId(booking.id);
         }
@@ -2044,27 +2043,81 @@ export default function AppointmentsManagementPage() {
         setSalesLinkedDepositPaid(
           Math.max(0, Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0),
         );
-        if (customerId) {
-          setCloseSalesFlowOnPickerClose(true);
-          setViewingCustomerId(customerId);
-          loadCustomerInfo(customerId);
-          setSalesRegistrationCustomer({
-            id: customerId,
-            name: customerName,
-            phone: customerPhone,
-          });
-          setIsSalesRegistrationModalOpen(true);
-          setSalesItemPickerTab('service');
-          setIsSalesItemPickerModalOpen(true);
-        }
-        setBookingMenuOpen(null);
-        setBookingMenuPosition(null);
-        bookingMenuOriginalPositionRef.current = null;
+        setViewingCustomerId(customerId);
+        loadCustomerInfo(customerId);
+        setSalesRegistrationCustomer({
+          id: customerId,
+          name: customerName,
+          phone: customerPhone,
+        });
+        setIsSalesRegistrationModalOpen(true);
       },
-      onViewSaleDetail: (booking) => {
+      onViewSaleDetail: async (booking) => {
         setBookingMenuOpen(null);
         setBookingMenuPosition(null);
         bookingMenuOriginalPositionRef.current = null;
+
+        const customerId = (booking as any).customer?.id ?? (booking as any).customer_id;
+        if (!customerId) return;
+
+        try {
+          const res = await fetch(`/api/sales?customer_id=${customerId}`);
+          if (!res.ok) return;
+          const { sales = [] } = await res.json();
+          if (!sales.length) return;
+
+          const bookingDate = (booking as any).booking_date;
+          const bookingTime = (booking as any).booking_time || '';
+          const sameDay = sales.filter((s: any) => s.sales_date === bookingDate);
+          const candidates = sameDay.length > 0 ? sameDay : sales;
+          const sale = candidates.reduce((best: any, cur: any) => {
+            if (!best) return cur;
+            const bestDiff = Math.abs(String(best.sales_time || '').localeCompare(bookingTime));
+            const curDiff = Math.abs(String(cur.sales_time || '').localeCompare(bookingTime));
+            return curDiff < bestDiff ? cur : best;
+          }, null as any);
+          if (!sale) return;
+
+          const customerName =
+            (booking as any).customer?.name || (booking as any).customer_name || '';
+          const salesDetail = {
+            id: sale.id,
+            customer_id: sale.customer_id ?? customerId,
+            shop_id: sale.shop_id ?? null,
+            customer_name: customerName,
+            sales_date: sale.sales_date,
+            sales_time: sale.sales_time || '',
+            sales_amount: sale.sales_amount || 0,
+            discount_amount: sale.discount_amount || 0,
+            total_amount: sale.total_amount || 0,
+            cash_amount: sale.cash_amount || 0,
+            card_amount: sale.card_amount || 0,
+            bank_transfer_amount: sale.bank_transfer_amount || 0,
+            payment_method: sale.payment_method || null,
+            point_accumulation: sale.point_accumulation || 0,
+            memo: sale.memo || null,
+            items: (sale.sales_items || []).map((i: any) => ({
+              item_type: i.item_type || 'service',
+              item_name: i.item_name || '-',
+              unit_price: Number(i.unit_price) || 0,
+              quantity: Number(i.quantity) || 1,
+              discount: Number(i.discount) || 0,
+              discount_type: i.discount_type || null,
+              discount_value: i.discount_value ?? null,
+              amount: Number(i.amount) || 0,
+              manager: i.manager || null,
+              sales_classification: i.sales_classification || null,
+              prepaid_deduction: Number(i.prepaid_deduction) || 0,
+            })),
+            created_by: sale.created_by,
+            created_at: sale.created_at,
+            edit_history: sale.edit_history || [],
+          };
+          setSalesDetailData(salesDetail);
+          setIsSalesDetailModalOpen(true);
+        } catch (err) {
+          console.error('onViewSaleDetail error:', err);
+        }
       },
     }),
     [
@@ -2637,6 +2690,15 @@ export default function AppointmentsManagementPage() {
                             const customerId = (booking as any).customer?.id || (booking as any).customer_id;
                             const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
                             const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
+                            setBookingMenuOpen(null);
+                            setBookingMenuPosition(null);
+                            if (bookingMenuOriginalPositionRef.current) {
+                              bookingMenuOriginalPositionRef.current = null;
+                            }
+                            if (!customerId) {
+                              alert('이 예약에 연결된 고객이 없습니다. 판매를 등록하려면 먼저 고객을 등록해주세요.');
+                              return;
+                            }
                             if (booking.id) setSalesLinkedBookingId(booking.id);
                             setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
                             setSalesDefaultManager((booking as any).designer?.name || null);
@@ -2646,24 +2708,14 @@ export default function AppointmentsManagementPage() {
                                 Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0,
                               ),
                             );
-                            if (customerId) {
-                              setCloseSalesFlowOnPickerClose(true);
-                              setViewingCustomerId(customerId);
-                              loadCustomerInfo(customerId);
-                              setSalesRegistrationCustomer({
-                                id: customerId,
-                                name: customerName,
-                                phone: customerPhone,
-                              });
-                              setIsSalesRegistrationModalOpen(true);
-                              setSalesItemPickerTab('service');
-                              setIsSalesItemPickerModalOpen(true);
-                            }
-                            setBookingMenuOpen(null);
-                            setBookingMenuPosition(null);
-                            if (bookingMenuOriginalPositionRef.current) {
-                              bookingMenuOriginalPositionRef.current = null;
-                            }
+                            setViewingCustomerId(customerId);
+                            loadCustomerInfo(customerId);
+                            setSalesRegistrationCustomer({
+                              id: customerId,
+                              name: customerName,
+                              phone: customerPhone,
+                            });
+                            setIsSalesRegistrationModalOpen(true);
                           }}
                           movingBooking={movingBooking}
                           onSelectMoveTarget={(target) => {
@@ -2780,6 +2832,7 @@ export default function AppointmentsManagementPage() {
                                         // 메뉴 위치는 뷰포트 기준으로 계산 (렌더링 시 상대 위치로 변환)
                                         setEmptySlotMenuPosition({
                                           top: rect.bottom,
+                                          triggerTop: rect.top,
                                           left: menuLeft,
                                           width: menuWidth,
                                           scrollTop,
@@ -2807,8 +2860,11 @@ export default function AppointmentsManagementPage() {
                                 const slotTop = (slotMinutes / 30) * GRID_30MIN_HEIGHT + 8;
                                 const slotHeight = GRID_30MIN_HEIGHT;
                                 
-                                // Check if this slot has a booking
-                                const hasBooking = designerBookings.some((b) => {
+                                // Determine which sub-columns (left/right halves) of this slot
+                                // are covered by bookings. We render the empty-slot layer for
+                                // partially-covered slots so the visible empty area next to a
+                                // half-width card stays clickable.
+                                const coveringBookings = designerBookings.filter((b) => {
                                   if (!b.booking_time) return false;
                                   const [bHour, bMin] = b.booking_time.split(':').map(Number);
                                   const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
@@ -2816,6 +2872,36 @@ export default function AppointmentsManagementPage() {
                                   const bEndMinutes = bStartMinutes + bDuration;
                                   return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
                                 });
+                                let slotFullyCovered = false;
+                                let slotLeftCovered = false;
+                                let slotRightCovered = false;
+                                for (const cb of coveringBookings) {
+                                  let cbHasOverlap = false;
+                                  let cbPlaceOnRight = false;
+                                  const [cbhStr, cbmStr] = (cb.booking_time as string).split(':');
+                                  const cbStart =
+                                    (Number(cbhStr) - GRID_START_HOUR) * 60 + Number(cbmStr);
+                                  const cbEnd = cbStart + getBookingDurationMinutes(cb as any);
+                                  designerBookings.forEach((other: any) => {
+                                    if (other === cb || !other.booking_time) return;
+                                    const [ohStr, omStr] = other.booking_time.split(':');
+                                    const oStart =
+                                      (Number(ohStr) - GRID_START_HOUR) * 60 + Number(omStr);
+                                    const oEnd = oStart + getBookingDurationMinutes(other);
+                                    if (Math.max(cbStart, oStart) < Math.min(cbEnd, oEnd)) {
+                                      cbHasOverlap = true;
+                                      if ((other as any).id < (cb as any).id) cbPlaceOnRight = true;
+                                    }
+                                  });
+                                  if (!cbHasOverlap) {
+                                    slotFullyCovered = true;
+                                    break;
+                                  }
+                                  if (cbPlaceOnRight) slotRightCovered = true;
+                                  else slotLeftCovered = true;
+                                }
+                                const hasBooking =
+                                  slotFullyCovered || (slotLeftCovered && slotRightCovered);
                                 
                                 // Check if this slot is restricted and get restriction info
                                 const slotRestriction = designerRestrictions.find((r) => {
@@ -2847,13 +2933,19 @@ export default function AppointmentsManagementPage() {
                                 
                                 const isMoveMode = !!movingBooking;
 
+                                const slotLeftStyle = slotLeftCovered ? '50%' : '0';
+                                const slotRightStyle = slotRightCovered ? '50%' : '0';
+
                                 return (
                                   <div
                                     key={slotKey}
-                                    className="absolute left-0 right-0 z-0 select-none"
-                                    style={{ 
-                                      top: slotTop, 
+                                    data-empty-slot-cell
+                                    className="absolute z-0 select-none"
+                                    style={{
+                                      top: slotTop,
                                       height: slotHeight,
+                                      left: slotLeftStyle,
+                                      right: slotRightStyle,
                                       pointerEvents: (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction) ? 'none' : 'auto',
                                       cursor: !isRestricted && designerId ? 'pointer' : 'default',
                                       userSelect: 'none',
@@ -2923,8 +3015,9 @@ export default function AppointmentsManagementPage() {
                                         }`}
                                         style={{ zIndex: isMenuOpen ? 10000 : undefined }}
                                       >
-                                        {/* 빈 셀 more(≡) 버튼 - 예약 금지 셀은 미노출 */}
-                                        <div 
+                                        {/* 빈 셀 more(≡) 버튼 - 예약 금지 셀, half 슬롯은 미노출 */}
+                                        {!slotLeftCovered && !slotRightCovered && (
+                                        <div
                                           className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
                                           style={{ pointerEvents: 'auto' }}
                                         >
@@ -2952,7 +3045,7 @@ export default function AppointmentsManagementPage() {
                                                 }
                                                 
                                                 // 버튼의 부모 셀 찾기
-                                                const cellElement = e.currentTarget.closest('[class*="absolute left-0 right-0"]') as HTMLElement;
+                                                const cellElement = e.currentTarget.closest('[data-empty-slot-cell]') as HTMLElement;
                                                 const cellRect = cellElement?.getBoundingClientRect();
                                                 
                                                 // 셀의 너비를 메뉴 너비로 사용
@@ -2975,6 +3068,7 @@ export default function AppointmentsManagementPage() {
                                                 // 뷰포트 기준 위치를 그대로 저장 (렌더링 시 상대 위치로 변환)
                                                 setEmptySlotMenuPosition({
                                                   top: rect.bottom,
+                                                  triggerTop: rect.top,
                                                   left: menuLeft,
                                                   width: menuWidth,
                                                   scrollTop: scrollContainer.scrollTop,
@@ -3059,13 +3153,12 @@ export default function AppointmentsManagementPage() {
                                               return null;
                                             }
                                             
-                                            // Comment: Flip dropdown upward if not enough space below viewport
+                                            // Comment: Flip dropdown upward if not enough space below viewport.
+                                            // When flipping, anchor by `bottom` so the menu's bottom hugs the
+                                            // trigger's top — independent of the menu's actual height.
                                             const menuEstimatedHeight = isSlotRestricted ? 88 : 132;
                                             const spaceBelow = window.innerHeight - emptySlotMenuPosition.top;
                                             const flipUp = spaceBelow < menuEstimatedHeight;
-                                            const menuTop = flipUp
-                                              ? emptySlotMenuPosition.top - menuEstimatedHeight
-                                              : emptySlotMenuPosition.top;
 
                                             return createPortal(
                                             <div
@@ -3074,7 +3167,9 @@ export default function AppointmentsManagementPage() {
                                                 style={{
                                                   pointerEvents: 'auto',
                                                   border: 'none',
-                                                  top: `${menuTop}px`,
+                                                  ...(flipUp
+                                                    ? { bottom: `${window.innerHeight - emptySlotMenuPosition.triggerTop}px` }
+                                                    : { top: `${emptySlotMenuPosition.top}px` }),
                                                   left: `${emptySlotMenuPosition.left}px`,
                                                   width: `${emptySlotMenuPosition.width}px`,
                                                   height: 'auto',
@@ -3254,6 +3349,7 @@ export default function AppointmentsManagementPage() {
                                             , document.body);
                                           })()}
                                         </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -3951,40 +4047,41 @@ export default function AppointmentsManagementPage() {
           }
         }}
         onViewSalesDetail={(item) => {
-          // 판매 상세 모달 열기
-          console.log('onViewSalesDetail called with item:', item);
-          // SalesHistoryTable의 데이터를 SalesDetailModal 형식으로 변환
           const salesDetail = {
             id: item.id,
-            customer_id: viewingCustomerId || 0,
+            customer_id: item.customer_id ?? viewingCustomerId ?? 0,
+            shop_id: item.shop_id ?? null,
             customer_name: viewingCustomer?.name || '',
-            sales_date: item.booking_date,
-            sales_time: item.booking_time || '',
-            sales_amount: item.total_amount || 0,
-            discount_amount: item.discount || 0,
+            sales_date: item.sales_date,
+            sales_time: item.sales_time || '',
+            sales_amount: item.sales_amount || 0,
+            discount_amount: item.discount_amount || 0,
             total_amount: item.total_amount || 0,
-            cash_amount: item.payments?.find((p: any) => p.method === 'cash')?.amount || 0,
-            card_amount: item.payments?.find((p: any) => p.method === 'card')?.amount || 0,
-            bank_transfer_amount: item.payments?.find((p: any) => p.method === 'bank_transfer')?.amount || 0,
-            point_accumulation: 0, // TODO: Get from sales data
+            cash_amount: item.cash_amount || 0,
+            card_amount: item.card_amount || 0,
+            bank_transfer_amount: item.bank_transfer_amount || 0,
+            payment_method: item.payment_method || null,
+            point_accumulation: item.point_accumulation || 0,
             memo: item.memo || null,
-            items: item.items?.map((i: any) => ({
-              item_type: 'service' as const,
-              item_name: i.service_name || '-',
-              unit_price: i.total_amount || 0,
-              quantity: 1,
-              discount: 0,
-              amount: i.total_amount || 0,
-              manager: i.designer_name || null,
-              sales_classification: null,
-              point_deduction: 0,
-              prepaid_deduction: 0,
-            })) || [],
+            items: (item.sales_items || []).map((i: any) => ({
+              item_type: i.item_type || 'service',
+              item_name: i.item_name || '-',
+              unit_price: Number(i.unit_price) || 0,
+              quantity: Number(i.quantity) || 1,
+              discount: Number(i.discount) || 0,
+              discount_type: i.discount_type || null,
+              discount_value: i.discount_value ?? null,
+              amount: Number(i.amount) || 0,
+              manager: i.manager || null,
+              sales_classification: i.sales_classification || null,
+              prepaid_deduction: Number(i.prepaid_deduction) || 0,
+            })),
+            created_by: item.created_by,
+            created_at: item.created_at,
+            edit_history: item.edit_history || [],
           };
-          console.log('Setting sales detail data:', salesDetail);
           setSalesDetailData(salesDetail);
           setIsSalesDetailModalOpen(true);
-          console.log('isSalesDetailModalOpen set to true');
         }}
       />
 

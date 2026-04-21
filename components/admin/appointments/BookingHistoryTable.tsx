@@ -16,6 +16,7 @@ interface BookingHistoryItem {
   designer_id?: number;
   designer_name?: string;
   status?: string;
+  sale_completed?: number | boolean | null;
   created_at?: string;
   memo?: string;
 }
@@ -24,19 +25,24 @@ interface BookingHistoryTableProps {
   customerId: number;
 }
 
-function getStatusLabel(status: string | undefined): { label: string; className: string } {
+function getStatusLabel(
+  status: string | undefined,
+  saleCompleted?: number | boolean | null,
+): { label: string; className: string } {
   const s = (status || '').toUpperCase().trim();
-  if (s === 'NOSHOW' || s === 'NO_SHOW') {
-    return { label: '노쇼', className: 'text-red-600 font-semibold' };
-  }
   if (s === 'CANCELLED' || s === 'CANCELED') {
     return { label: '취소', className: 'text-gray-400' };
   }
+  const saleDone =
+    saleCompleted === 1 || saleCompleted === true || String(saleCompleted) === '1';
+  if (s === 'PAID' || s === 'PAYMENT_COMPLETED' || s === 'PAYMENT_COMPLETE' || s === 'COMPLETED' || saleDone) {
+    return { label: '계산완료', className: 'text-blue-600' };
+  }
+  if (s === 'NOSHOW' || s === 'NO_SHOW') {
+    return { label: '노쇼', className: 'text-red-600 font-semibold' };
+  }
   if (s === 'ARRIVED' || s === 'CUSTOMER_ENTERED' || s === 'CUSTOMER_ENTRANCE' || s === 'ENTERED') {
     return { label: '고객입장', className: 'text-purple-600' };
-  }
-  if (s === 'PAID' || s === 'PAYMENT_COMPLETED' || s === 'PAYMENT_COMPLETE' || s === 'COMPLETED') {
-    return { label: '결제완료', className: 'text-blue-600' };
   }
   // Default: BOOKED or unknown
   return { label: '예약완료', className: 'text-gray-900' };
@@ -94,10 +100,14 @@ export default function BookingHistoryTable({ customerId }: BookingHistoryTableP
           booking_date: b.booking_date,
           booking_time: b.booking_time,
           service_id: b.service_id,
-          service_name: servicesMap.get(b.service_id) || b.service?.name,
+          service_name:
+            b.custom_service_name ||
+            servicesMap.get(b.service_id) ||
+            b.service?.name,
           designer_id: b.designer_id,
           designer_name: designersMap.get(b.designer_id) || b.designer?.name,
           status: b.status || b.booking_status,
+          sale_completed: b.sale_completed,
           created_at: b.created_at,
           memo: b.memo,
         }));
@@ -162,7 +172,7 @@ export default function BookingHistoryTable({ customerId }: BookingHistoryTableP
                 </tr>
               ) : (
                 bookings.map((item) => {
-                  const statusInfo = getStatusLabel(item.status);
+                  const statusInfo = getStatusLabel(item.status, item.sale_completed);
                   const createdDate = item.created_at ? item.created_at.split('T')[0] : '-';
                   return (
                     <tr key={item.id} className="hover:bg-gray-50">

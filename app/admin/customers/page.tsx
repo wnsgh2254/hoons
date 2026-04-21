@@ -20,6 +20,7 @@ import NewBookingModal from '@/components/admin/appointments/NewBookingModal';
 import type { Customer, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import { useStaff } from '@/hooks/useStaff';
+import { useSalesDetailActions } from '@/hooks/useSalesDetailActions';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -53,6 +54,16 @@ export default function CustomersPage() {
   const [newBookingCustomerSearchResults, setNewBookingCustomerSearchResults] = useState<any[]>([]);
   const [newBookingIsCustomerSearching, setNewBookingIsCustomerSearching] = useState(false);
   const [isCustomerRegistrationModalOpen, setIsCustomerRegistrationModalOpen] = useState(false);
+
+  // Sales Detail Modal + edit/delete actions (shared hook)
+  const salesActions = useSalesDetailActions({
+    onRefresh: async () => {
+      if (viewingCustomerId) {
+        await loadCustomerInfo(viewingCustomerId);
+      }
+      await fetchCustomers(currentPage);
+    },
+  });
 
   const ITEMS_PER_PAGE = 20;
 
@@ -118,9 +129,12 @@ export default function CustomersPage() {
       if (res.ok) setNewBookingDesigners(json.designers || []);
     };
     const loadServices = async () => {
-      const res = await fetch('/api/services');
+      const res = await fetch('/api/booking-modal-services');
       const json = await res.json();
-      if (res.ok) setNewBookingServices(json.services || []);
+      if (res.ok) {
+        const activeServices = (json.services || []).filter((s: any) => s.is_active !== false);
+        setNewBookingServices(activeServices);
+      }
     };
     Promise.all([loadShops(), loadDesigners(), loadServices()]).finally(() =>
       setNewBookingLoadingOptions(false)
@@ -179,16 +193,28 @@ export default function CustomersPage() {
       // Background: detailed stats
       void (async () => {
         try {
-          const [bookingsRes, prepaidRes] = await Promise.all([
+          const [bookingsRes, prepaidRes, salesRes, refundsRes] = await Promise.all([
             fetch(`/api/appointment?customer_id=${customerId}&limit=500`),
             fetch(`/api/prepaid?customer_id=${customerId}`).catch(() => null),
+            fetch(`/api/sales?customer_id=${customerId}`).catch(() => null),
+            fetch(`/api/refunds?customer_id=${customerId}`).catch(() => null),
           ]);
 
           const bookingsData = await bookingsRes.json();
           const prepaidData = prepaidRes ? await prepaidRes.json() : null;
+          const salesData = salesRes ? await salesRes.json().catch(() => null) : null;
+          const refundsData = refundsRes ? await refundsRes.json().catch(() => null) : null;
           const bookings = bookingsData.bookings || [];
 
-          const totalSales = bookings.reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+          const salesTotal = (salesData?.sales || []).reduce(
+            (sum: number, s: any) => sum + Number(s.total_amount || 0),
+            0,
+          );
+          const refundsTotal = (refundsData?.refunds || []).reduce(
+            (sum: number, r: any) => sum + Number(r.total_amount || 0),
+            0,
+          );
+          const totalSales = salesTotal - refundsTotal;
 
           const completedBookings = bookings.filter(
             (b: any) => b.status === 'PAID' || b.status === 'COMPLETED',
@@ -361,7 +387,10 @@ export default function CustomersPage() {
         data={customers}
         keyExtractor={(c) => c.id}
         loading={loading}
-        emptyMessage="고객이 없습니다."
+        emptyMessage={
+          searchQuery.trim() ? '검색 결과가 없습니다' : '고객이 없습니다'
+        }
+        emptyIcon="person"
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={handlePageChange}
@@ -447,7 +476,45 @@ export default function CustomersPage() {
           setViewingCustomer(null);
         }}
         onTabChange={setCustomerInfoTab}
+        onViewSalesDetail={(item) => {
+          const salesDetail = {
+            id: item.id,
+            customer_id: item.customer_id ?? viewingCustomerId ?? 0,
+            shop_id: item.shop_id ?? null,
+            customer_name: viewingCustomer?.name || '',
+            sales_date: item.sales_date,
+            sales_time: item.sales_time || '',
+            sales_amount: item.sales_amount || 0,
+            discount_amount: item.discount_amount || 0,
+            total_amount: item.total_amount || 0,
+            cash_amount: item.cash_amount || 0,
+            card_amount: item.card_amount || 0,
+            bank_transfer_amount: item.bank_transfer_amount || 0,
+            payment_method: item.payment_method || null,
+            point_accumulation: item.point_accumulation || 0,
+            memo: item.memo || null,
+            items: (item.sales_items || []).map((i: any) => ({
+              item_type: i.item_type || 'service',
+              item_name: i.item_name || '-',
+              unit_price: Number(i.unit_price) || 0,
+              quantity: Number(i.quantity) || 1,
+              discount: Number(i.discount) || 0,
+              discount_type: i.discount_type || null,
+              discount_value: i.discount_value ?? null,
+              amount: Number(i.amount) || 0,
+              manager: i.manager || null,
+              sales_classification: i.sales_classification || null,
+              prepaid_deduction: Number(i.prepaid_deduction) || 0,
+            })),
+            created_by: item.created_by,
+            created_at: item.created_at,
+            edit_history: item.edit_history || [],
+          };
+          salesActions.openDetail(salesDetail);
+        }}
       />
+
+      {salesActions.modals}
     </AdminPageLayout>
   );
 }

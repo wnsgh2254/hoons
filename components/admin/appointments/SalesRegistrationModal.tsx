@@ -9,6 +9,7 @@ import PrepaidDeductionModal from './PrepaidDeductionModal';
 import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesDetailData, TempSalesData } from '@/lib/types';
+import { getSydneyToday, getSydneyNowTime } from '@/lib/utils/appointment-utils';
 
 function formatAudAmount(value: number): string {
   return new Intl.NumberFormat('en-AU', {
@@ -17,6 +18,17 @@ function formatAudAmount(value: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+function formatPaymentTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
 /** Gross sale total minus deposit credit (capped), never negative */
@@ -96,8 +108,8 @@ export default function SalesRegistrationModal({
   const [selectedDeduction, setSelectedDeduction] = useState<'discount' | 'prepaid' | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bank_transfer' | null>(null);
   const [memo, setMemo] = useState('');
-  const [salesDate, setSalesDate] = useState(new Date().toISOString().split('T')[0]);
-  const [salesTime, setSalesTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [salesDate, setSalesDate] = useState(getSydneyToday());
+  const [salesTime, setSalesTime] = useState(getSydneyNowTime());
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [selectedItemForDiscount, setSelectedItemForDiscount] = useState<SalesItem | null>(null);
   const [editingQuantityItemId, setEditingQuantityItemId] = useState<string | null>(null);
@@ -340,25 +352,38 @@ export default function SalesRegistrationModal({
         setSalesDate(initialData.sales_date);
         setSalesTime(initialData.sales_time);
         setPointAccumulation(initialData.point_accumulation || 0);
-        setPaymentAmounts({
-          cash: initialData.cash_amount || 0,
-          card: initialData.card_amount || 0,
-          bank_transfer: initialData.bank_transfer_amount || 0,
-        });
-        setPrepaidDeductionAmount(0);
-        setSelectedDeduction(null);
-        setPaymentMethod(null);
-        setActiveTab('service');
-        // 금액 계산
         const newSalesAmount = mappedItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
         const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
         const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
+        const gross = newSalesAmount - newDiscountAmount;
+        const netDue = netDueAfterDeposit(gross, 0);
+
+        // Fallback: legacy sales saved with payment_method but no per-method amount.
+        // Treat them as fully paid via that method so edit view mirrors the original payment.
+        const rawCash = initialData.cash_amount || 0;
+        const rawCard = initialData.card_amount || 0;
+        const rawBank = initialData.bank_transfer_amount || 0;
+        const rawMethod = (initialData.payment_method || '').toLowerCase();
+        const netPayable = Math.max(0, netDue - newPrepaidDeduction);
+        const hasExplicitAmount = rawCash !== 0 || rawCard !== 0 || rawBank !== 0;
+        const restoredAmounts = {
+          cash: rawCash,
+          card: rawCard,
+          bank_transfer: rawBank,
+        };
+        if (!hasExplicitAmount && netPayable > 0 && (rawMethod === 'cash' || rawMethod === 'card' || rawMethod === 'bank_transfer')) {
+          restoredAmounts[rawMethod] = netPayable;
+        }
+
+        setPaymentAmounts(restoredAmounts);
+        setPrepaidDeductionAmount(newPrepaidDeduction);
+        setSelectedDeduction(newPrepaidDeduction > 0 ? 'prepaid' : null);
+        setPaymentMethod(null);
+        setActiveTab('service');
         setSalesAmount(newSalesAmount);
         setDiscountAmount(newDiscountAmount);
-        const gross = newSalesAmount - newDiscountAmount;
         setTotal(gross);
-        const totalPaid = (initialData.cash_amount || 0) + (initialData.card_amount || 0) + (initialData.bank_transfer_amount || 0);
-        const netDue = netDueAfterDeposit(gross, 0);
+        const totalPaid = restoredAmounts.cash + restoredAmounts.card + restoredAmounts.bank_transfer;
         setAmountToReceive(netDue - totalPaid - newPrepaidDeduction);
       } else if (tempSaveData) {
         // 임시저장 복원 모드
@@ -411,8 +436,8 @@ export default function SalesRegistrationModal({
         setSelectedDeduction(null);
         setPaymentMethod(null);
         setMemo('');
-        setSalesDate(new Date().toISOString().split('T')[0]);
-        setSalesTime(new Date().toTimeString().slice(0, 5));
+        setSalesDate(getSydneyToday());
+        setSalesTime(getSydneyNowTime());
         setPaymentAmounts({
           cash: 0,
           card: 0,
@@ -1031,6 +1056,11 @@ export default function SalesRegistrationModal({
                       </div>
                     </div>
                   )}
+                  {editSaleId && initialData?.created_at && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      [결제 일시 {formatPaymentTimestamp(initialData.created_at)}]
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -1276,7 +1306,7 @@ export default function SalesRegistrationModal({
       <PrepaidDeductionModal
         isOpen={isGlobalPrepaidDeductionModalOpen}
         customerId={customer?.id || null}
-        initialAmount={0}
+        initialAmount={amountToReceive}
         selectedItemId={null}
         onBalanceLoaded={(balance) => setAvailablePrepaidBalance(balance)}
         onClose={() => {

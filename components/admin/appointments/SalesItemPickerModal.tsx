@@ -638,11 +638,7 @@ export default function SalesItemPickerModal({
             <Select
               value={selectedManager}
               onChange={(e) => setSelectedManager(e.target.value)}
-              options={[
-                { value: '태훈원장', label: '태훈원장' },
-                { value: 'winter 선생님', label: 'winter 선생님' },
-                { value: '여정선생님', label: '여정선생님' },
-              ]}
+              options={managers.map((m) => ({ value: m.name, label: m.name }))}
               className="w-auto"
             />
           </div>

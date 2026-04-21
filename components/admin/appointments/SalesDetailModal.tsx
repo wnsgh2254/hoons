@@ -75,8 +75,17 @@ export default function SalesDetailModal({
   const data = detailData || salesData;
   if (!data) return null;
 
-  const totalPayment = (data.cash_amount || 0) + (data.card_amount || 0) + (data.bank_transfer_amount || 0);
-  const amountToReceive = data.total_amount - totalPayment;
+  const rawCash = data.cash_amount || 0;
+  const rawCard = data.card_amount || 0;
+  const rawBank = data.bank_transfer_amount || 0;
+  const rawMethod = (data.payment_method || '').toLowerCase();
+  const hasExplicitAmount = rawCash !== 0 || rawCard !== 0 || rawBank !== 0;
+  const netPayable = Math.max(0, data.total_amount || 0);
+  const displayCash = !hasExplicitAmount && rawMethod === 'cash' && netPayable > 0 ? netPayable : rawCash;
+  const displayCard = !hasExplicitAmount && rawMethod === 'card' && netPayable > 0 ? netPayable : rawCard;
+  const displayBank = !hasExplicitAmount && rawMethod === 'bank_transfer' && netPayable > 0 ? netPayable : rawBank;
+  const totalPayment = displayCash + displayCard + displayBank;
+  const amountToReceive = (data.total_amount || 0) - totalPayment;
 
   return (
     <Modal
@@ -173,24 +182,24 @@ export default function SalesDetailModal({
                   </span>
                 </div>
 
-                {(data.cash_amount > 0 || data.card_amount > 0 || data.bank_transfer_amount > 0) && (
+                {(displayCash > 0 || displayCard > 0 || displayBank > 0) && (
                   <div className="space-y-2 pt-1">
-                    {data.cash_amount > 0 && (
+                    {displayCash > 0 && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-700">현금</span>
-                        <span className="font-medium text-gray-900">{Number(data.cash_amount).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{Number(displayCash).toLocaleString()}</span>
                       </div>
                     )}
-                    {data.card_amount > 0 && (
+                    {displayCard > 0 && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-700">카드</span>
-                        <span className="font-medium text-gray-900">{Number(data.card_amount).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{Number(displayCard).toLocaleString()}</span>
                       </div>
                     )}
-                    {data.bank_transfer_amount > 0 && (
+                    {displayBank > 0 && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-700">계좌이체</span>
-                        <span className="font-medium text-gray-900">{Number(data.bank_transfer_amount).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{Number(displayBank).toLocaleString()}</span>
                       </div>
                     )}
                     {totalPayment > 0 && data.created_at && (

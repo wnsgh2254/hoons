@@ -48,6 +48,7 @@ interface WeekViewGridProps {
   bookingMenuOpen: number | null;
   bookingMenuPosition: {
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -56,6 +57,7 @@ interface WeekViewGridProps {
   bookingMenuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
   setBookingMenuPosition: (pos: {
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -403,8 +405,10 @@ export default function WeekViewGrid({
               const slotTop = (slotMinutes / 30) * GRID_30MIN_HEIGHT + 8;
               const slotHeight = GRID_30MIN_HEIGHT;
 
-              // Check if this slot has a booking
-              const hasBooking = dayBookings.some((b) => {
+              // Check if this slot is fully covered by bookings (across all sub-columns).
+              // We still render the empty-slot layer for partially-covered slots so the
+              // visible empty area (next to a half-width card) remains clickable.
+              const coveringBookings = dayBookings.filter((b) => {
                 if (!b.booking_time) return false;
                 const [bHour, bMin] = b.booking_time.split(':').map(Number);
                 const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
@@ -412,6 +416,34 @@ export default function WeekViewGrid({
                 const bEndMinutes = bStartMinutes + bDuration;
                 return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
               });
+              let slotFullyCovered = false;
+              let slotLeftCovered = false;
+              let slotRightCovered = false;
+              for (const cb of coveringBookings) {
+                let cbHasOverlap = false;
+                let cbPlaceOnRight = false;
+                const [cbhStr, cbmStr] = (cb.booking_time as string).split(':');
+                const cbStart =
+                  (Number(cbhStr) - GRID_START_HOUR) * 60 + Number(cbmStr);
+                const cbEnd = cbStart + getBookingDurationMinutes(cb as any);
+                dayBookings.forEach((other: any) => {
+                  if (other === cb || !other.booking_time) return;
+                  const [ohStr, omStr] = other.booking_time.split(':');
+                  const oStart = (Number(ohStr) - GRID_START_HOUR) * 60 + Number(omStr);
+                  const oEnd = oStart + getBookingDurationMinutes(other);
+                  if (Math.max(cbStart, oStart) < Math.min(cbEnd, oEnd)) {
+                    cbHasOverlap = true;
+                    if ((other as any).id < (cb as any).id) cbPlaceOnRight = true;
+                  }
+                });
+                if (!cbHasOverlap) {
+                  slotFullyCovered = true;
+                  break;
+                }
+                if (cbPlaceOnRight) slotRightCovered = true;
+                else slotLeftCovered = true;
+              }
+              const hasBooking = slotFullyCovered || (slotLeftCovered && slotRightCovered);
 
               // Check if this slot is restricted and get restriction info
               const slotRestriction = dayRestrictions.find((r: any) => {
@@ -453,13 +485,18 @@ export default function WeekViewGrid({
 
               const isMoveMode = !!movingBooking;
 
+              const slotLeftStyle = slotLeftCovered ? '50%' : '0';
+              const slotRightStyle = slotRightCovered ? '50%' : '0';
+
               return (
                 <div
                   key={slotKey}
-                  className="absolute left-0 right-0 z-0 select-none"
+                  className="absolute z-0 select-none"
                   style={{
                     top: slotTop,
                     height: slotHeight,
+                    left: slotLeftStyle,
+                    right: slotRightStyle,
                     pointerEvents:
                       (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction)
                         ? 'none'
@@ -983,14 +1020,7 @@ export default function WeekViewGrid({
                       designerId: booking.designer?.id || weekViewDesignerId || 0,
                       time: bookingTime,
                       shopId: Number((booking as any)?.shop_id) || null,
-                      customer:
-                        (booking as any)?.customer?.id
-                          ? {
-                              id: Number((booking as any).customer.id),
-                              name: String((booking as any).customer.name || ''),
-                              phone: (booking as any).customer.phone ?? null,
-                            }
-                          : null,
+                      customer: null,
                     });
                     closeMenu();
                   }}
@@ -1046,6 +1076,7 @@ export default function WeekViewGrid({
                           
                           setBookingMenuPosition({
                             top: menuTop,
+                            triggerTop: cardRect.top,
                             left: menuLeft,
                             width: menuWidth,
                             scrollTop,
@@ -1140,12 +1171,17 @@ export default function WeekViewGrid({
 
                     {/* Context Menu - 상태별 메뉴 - Portal로 렌더링 */}
                     {bookingMenuOpen === b.id && !isNewBookingOpen && bookingMenuPosition && typeof window !== 'undefined' && (() => {
+                      // Comment: Flip menu upward if not enough space below the viewport.
+                      const menuEstimatedHeight = 280;
+                      const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
                       return createPortal(
                       <div
                         data-booking-menu
-                          className="fixed bg-transparent z-50"
+                          className="fixed bg-transparent z-[99999]"
                           style={{
-                            top: `${bookingMenuPosition.top}px`,
+                            ...(flipUp
+                              ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
+                              : { top: `${bookingMenuPosition.top}px` }),
                             left: `${bookingMenuPosition.left}px`,
                             width: `${bookingMenuPosition.width}px`,
                           }}

@@ -67,3 +67,56 @@ export async function GET(
   }
 }
 
+// Comment: Partial update for a customer (currently used for memo-only edits from the customer info drawer)
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const customerId = Number(id);
+    if (!customerId || Number.isNaN(customerId)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 고객 ID 입니다.' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const updates: Record<string, unknown> = {};
+    if (typeof body.memo === 'string' || body.memo === null) {
+      updates.memo = body.memo ? String(body.memo) : null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        { error: '수정할 항목이 없습니다.' },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from('customers')
+      .update(updates)
+      .eq('id', customerId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error patching customer:', error);
+      return NextResponse.json(
+        { error: '고객 정보 저장에 실패했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ customer: data }, { status: 200 });
+  } catch (error) {
+    console.error('Error in customers [id] PATCH route:', error);
+    return NextResponse.json(
+      { error: '고객 정보 저장에 실패했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
