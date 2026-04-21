@@ -121,7 +121,7 @@ export async function loadDesignerWorkingScheduleRowsForShopDate(
  * Return the designer IDs available to work at the given shop on the given date.
  * Base schedule follows the Reservation page interpretation exactly:
  * weekday default venue -> schedule row shop_id -> designer home shop.
- * Date-specific temporary holiday / special-work rows from Appointments then override that base.
+ * Date-specific temporary holiday / special-..work rows from Appointments then override that base.
  */
 export async function getAvailableDesignerIdsForShop(
   supabase: SupabaseClient,
