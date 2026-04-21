@@ -1359,13 +1359,8 @@ export default function NewBookingModal({
                               <span>{s.name}</span>
                             </label>
                           );
-                          if (newDesignerId && !shopManuallySet.current) {
-                            const designer = newBookingDesigners.find((d: any) => d.id === newDesignerId);
-                            if (designer?.shop_id) setShopId(designer.shop_id);
-                          }
-                        }}
-                        wrapperClassName="flex-1 min-w-0"
-                      />
+                        })
+                      )}
                       {!editingBooking && (
                         <>
                           <button
