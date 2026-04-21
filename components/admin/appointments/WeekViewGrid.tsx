@@ -48,6 +48,7 @@ interface WeekViewGridProps {
   bookingMenuOpen: number | null;
   bookingMenuPosition: {
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -57,6 +58,7 @@ interface WeekViewGridProps {
   bookingMenuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
   setBookingMenuPosition: (pos: {
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -495,6 +497,9 @@ export default function WeekViewGrid({
               }
 
               const isMoveMode = !!movingBooking;
+
+              const slotLeftStyle = slotLeftCovered ? '50%' : '0';
+              const slotRightStyle = slotRightCovered ? '50%' : '0';
 
               return (
                 <div
@@ -1028,14 +1033,7 @@ export default function WeekViewGrid({
                       designerId: booking.designer?.id || weekViewDesignerId || 0,
                       time: bookingTime,
                       shopId: Number((booking as any)?.shop_id) || null,
-                      customer:
-                        (booking as any)?.customer?.id
-                          ? {
-                              id: Number((booking as any).customer.id),
-                              name: String((booking as any).customer.name || ''),
-                              phone: (booking as any).customer.phone ?? null,
-                            }
-                          : null,
+                      customer: null,
                     });
                     closeMenu();
                   }}
@@ -1194,12 +1192,17 @@ export default function WeekViewGrid({
 
                     {/* Context Menu - 상태별 메뉴 - Portal로 렌더링 */}
                     {bookingMenuOpen === b.id && !isNewBookingOpen && bookingMenuPosition && typeof window !== 'undefined' && (() => {
+                      // Comment: Flip menu upward if not enough space below the viewport.
+                      const menuEstimatedHeight = 280;
+                      const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
                       return createPortal(
                       <div
                         data-booking-menu
-                          className="fixed bg-transparent z-50"
+                          className="fixed bg-transparent z-[99999]"
                           style={{
-                            top: `${bookingMenuPosition.top}px`,
+                            ...(flipUp
+                              ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
+                              : { top: `${bookingMenuPosition.top}px` }),
                             left: `${bookingMenuPosition.left}px`,
                             width: `${bookingMenuPosition.width}px`,
                           }}

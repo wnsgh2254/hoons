@@ -1,6 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import { Z } from '@/lib/constants';
 
 interface CustomerProfileSectionProps {
   customer: any;
@@ -11,13 +14,49 @@ export default function CustomerProfileSection({
   customer,
   onMemoChange,
 }: CustomerProfileSectionProps) {
-  const [memo, setMemo] = React.useState(customer.memo || '');
+  const [memo, setMemo] = useState<string>(customer.memo || '');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [draftMemo, setDraftMemo] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleMemoChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newMemo = e.target.value;
-    setMemo(newMemo);
-    if (onMemoChange) {
-      onMemoChange(newMemo);
+  useEffect(() => {
+    setMemo(customer.memo || '');
+  }, [customer.id, customer.memo]);
+
+  const openModal = () => {
+    setDraftMemo(memo);
+    setSaveError(null);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    if (saving) return;
+    setIsModalOpen(false);
+    setSaveError(null);
+  };
+
+  const handleSave = async () => {
+    if (!customer?.id) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/customers/${customer.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memo: draftMemo }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '메모 저장에 실패했습니다.');
+      }
+      setMemo(draftMemo);
+      onMemoChange?.(draftMemo);
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setSaveError(err?.message || '메모 저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -58,15 +97,43 @@ export default function CustomerProfileSection({
         </div>
       </div>
 
-      {/* Memo/Additional Info Text Area */}
-      <div>
-        <textarea
-          value={memo}
-          onChange={handleMemoChange}
-          placeholder="추가 정보를 입력하세요"
-          className="w-full min-h-[100px] border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-        />
-      </div>
+      {/* Memo — click to open modal */}
+      <button
+        type="button"
+        onClick={openModal}
+        className="w-full min-h-[100px] border border-gray-200 rounded-lg px-3 py-2 text-sm text-left whitespace-pre-wrap text-gray-900 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+      >
+        {memo}
+      </button>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title="메모 등록"
+        zIndex={Z.MODAL_NESTED}
+        maxWidth="max-w-2xl"
+      >
+        <div className="flex flex-col gap-4">
+          <textarea
+            value={draftMemo}
+            onChange={(e) => setDraftMemo(e.target.value)}
+            rows={10}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            autoFocus
+          />
+          {saveError && (
+            <p className="text-xs text-red-600">{saveError}</p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={closeModal} disabled={saving}>
+              취소
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? '저장 중...' : '저장'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

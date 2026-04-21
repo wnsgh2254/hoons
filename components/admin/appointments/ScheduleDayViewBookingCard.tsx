@@ -40,6 +40,7 @@ interface ScheduleDayViewBookingCardProps {
   hoverCardPosition: { top: number; left: number } | null;
   bookingMenuPosition: {
     top: number;
+    triggerTop: number;
     left: number;
     width: number;
     scrollTop: number;
@@ -126,7 +127,7 @@ function ScheduleDayViewBookingCard({
       onMouseLeave={(e) => booking.id && onMouseLeave(e, booking.id)}
     >
       <div
-        className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
+        className={`h-full w-full ${statusColor.bg} border-l-4 ${statusColor.border} border-t-2 border-t-white border-b-2 border-b-white rounded transition-all cursor-pointer p-2 flex flex-col justify-between overflow-hidden relative`}
         style={{ zIndex: emptySlotMenuOpen ? 0 : 1 }}
         onClick={(e) => {
           e.stopPropagation();
@@ -168,7 +169,7 @@ function ScheduleDayViewBookingCard({
           createPortal(
             <div
               data-hover-card
-              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[280px] p-3"
+              className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[200] min-w-[280px] p-3"
               style={{ top: `${hoverCardPosition.top}px`, left: `${hoverCardPosition.left}px` }}
             >
               <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
@@ -243,12 +244,19 @@ function ScheduleDayViewBookingCard({
               width: bookingMenuPosition.width,
             };
           }
+          // Comment: Flip menu upward if not enough space below the viewport.
+          // When flipping, anchor by `bottom` so the menu's bottom hugs the
+          // trigger card's top — independent of menu's actual rendered height.
+          const menuEstimatedHeight = 280;
+          const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
           return createPortal(
             <div
               data-booking-menu
-              className="fixed bg-transparent z-50"
+              className="fixed bg-transparent z-[99999]"
               style={{
-                top: `${bookingMenuPosition.top}px`,
+                ...(flipUp
+                  ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
+                  : { top: `${bookingMenuPosition.top}px` }),
                 left: `${bookingMenuPosition.left}px`,
                 width: `${bookingMenuPosition.width}px`,
               }}

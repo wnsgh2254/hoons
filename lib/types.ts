@@ -179,6 +179,7 @@ export interface SalesDetailData {
   cash_amount: number;
   card_amount: number;
   bank_transfer_amount: number;
+  payment_method?: string | null;
   point_accumulation: number;
   memo: string | null;
   items: SalesDetailItem[];

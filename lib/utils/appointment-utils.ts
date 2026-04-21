@@ -178,6 +178,16 @@ export function getSydneyToday(): string {
   return `${year}-${month}-${day}`;
 }
 
+// Comment: Get current time string in Sydney timezone (HH:mm)
+export function getSydneyNowTime(): string {
+  const sydney = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
+  );
+  const hours = String(sydney.getHours()).padStart(2, '0');
+  const minutes = String(sydney.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 // Comment: Format a Date object as YYYY-MM-DD in local timezone (avoids UTC offset issues with toISOString)
 function formatLocalDate(d: Date): string {
   const year = d.getFullYear();

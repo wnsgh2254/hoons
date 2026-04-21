@@ -1229,7 +1229,7 @@ export default function NewBookingModal({
             </div>
           )}
 
-          {/* Single block 내부에 service/designer 선택 행만 추가 */}
+          {/* 각 행이 디자이너/시작시간/소요시간/서비스를 독립적으로 가짐 */}
           <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
             {/* Top row: 디자이너 + 시작시간 + 소요시간 + 추가 */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -1325,8 +1325,8 @@ export default function NewBookingModal({
                 key={idx}
                 className={
                   idx === 0
-                    ? 'space-y-4'
-                    : 'space-y-4 pt-4 border-t border-gray-200'
+                    ? 'space-y-3'
+                    : 'space-y-3 pt-4 border-t border-gray-200'
                 }
               >
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
@@ -1359,31 +1359,128 @@ export default function NewBookingModal({
                               <span>{s.name}</span>
                             </label>
                           );
-                        })
+                          if (newDesignerId && !shopManuallySet.current) {
+                            const designer = newBookingDesigners.find((d: any) => d.id === newDesignerId);
+                            if (designer?.shop_id) setShopId(designer.shop_id);
+                          }
+                        }}
+                        wrapperClassName="flex-1 min-w-0"
+                      />
+                      {!editingBooking && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const base = slot;
+                              const nextSlot: NewBookingTimeSlot = {
+                                ...DEFAULT_NEW_BOOKING_TIME_SLOT,
+                                time: base.time,
+                                duration: base.duration,
+                                selectedItems: [],
+                                serviceId: null,
+                                designerId: null,
+                              };
+                              setNewBookingTimeSlots((prev) => {
+                                const next = [...prev];
+                                next.splice(idx + 1, 0, nextSlot);
+                                return next;
+                              });
+                              setSlotServiceSelections((prev) => {
+                                const next = [...prev];
+                                next.splice(idx + 1, 0, []);
+                                return next;
+                              });
+                            }}
+                            className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors shrink-0"
+                            title="추가"
+                          >
+                            <span className="material-symbols-outlined text-base">add</span>
+                          </button>
+                          {newBookingTimeSlots.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewBookingTimeSlots((prev) => prev.filter((_, i) => i !== idx));
+                                setSlotServiceSelections((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="w-8 h-8 flex items-center justify-center border border-gray-300 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors shrink-0"
+                              title="삭제"
+                            >
+                              <span className="material-symbols-outlined text-base">close</span>
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
-                    {slotServiceSelections[idx]?.length > 0 && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {getServiceNameSummary(slotServiceSelections[idx])}
-                      </p>
-                    )}
                   </div>
 
-                  <div className="min-w-0 md:col-span-2 flex justify-end">
-                    {idx > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewBookingTimeSlots((prev) => prev.filter((_, i) => i !== idx));
-                          setSlotServiceSelections((prev) => prev.filter((_, i) => i !== idx));
-                        }}
-                        className="w-8 h-8 flex items-center justify-center border border-gray-300 text-gray-500 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-300 transition-colors"
-                        title="삭제"
-                      >
-                        <span className="material-symbols-outlined text-base">close</span>
-                      </button>
-                    )}
+                  <div className="min-w-0 md:col-span-4">
+                    <Select
+                      label="시작시간"
+                      options={timeOptions}
+                      value={slot.time ?? ''}
+                      onChange={(e) => {
+                        const nextTime = e.target.value;
+                        setNewBookingTimeSlots((prev) =>
+                          prev.map((s, i) => (i === idx ? { ...s, time: nextTime } : s)),
+                        );
+                      }}
+                      wrapperClassName="min-w-0"
+                    />
                   </div>
+
+                  <div className="min-w-0 md:col-span-3">
+                    <Select
+                      label="소요시간"
+                      options={durationSelectOptions}
+                      value={slot.duration ?? 30}
+                      onChange={(e) => {
+                        const nextDuration = Number(e.target.value);
+                        setNewBookingTimeSlots((prev) =>
+                          prev.map((s, i) => (i === idx ? { ...s, duration: nextDuration } : s)),
+                        );
+                      }}
+                      wrapperClassName="min-w-0"
+                    />
+                  </div>
+                </div>
+
+                {/* 서비스 pills */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
+                  {newBookingLoadingOptions ? (
+                    <p className="text-sm text-gray-500 px-1 py-2">로딩 중...</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {categoryServices.map((s) => {
+                        const isChecked = (slotServiceSelections[idx] || []).includes(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setSlotServiceSelections((prev) => {
+                                const next = [...prev];
+                                const current = [...(next[idx] || [])];
+                                next[idx] = isChecked
+                                  ? current.filter((serviceId) => serviceId !== s.id)
+                                  : [...current, s.id];
+                                return next;
+                              });
+                            }}
+                            aria-pressed={isChecked}
+                            className={`px-3 py-1 text-sm rounded-full border transition-colors ${
+                              isChecked
+                                ? 'bg-black text-white border-black'
+                                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
