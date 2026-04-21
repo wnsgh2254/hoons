@@ -885,7 +885,7 @@ function ByStaffSalesTab({
         <div className="flex flex-col gap-6">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+              <table className="w-full min-w-[980px] text-sm [&_td]:whitespace-nowrap [&_td]:border-l [&_td]:border-gray-200 [&_th]:whitespace-nowrap [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-200">
                     <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]" rowSpan={2}>직원</th>
@@ -1144,7 +1144,7 @@ function ByItemSalesTab({
         <div className="flex flex-col gap-6">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+              <table className="w-full min-w-[760px] text-sm [&_td]:whitespace-nowrap [&_td]:border-l [&_td]:border-gray-200 [&_th]:whitespace-nowrap [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-200">
                     <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>분류</th>
