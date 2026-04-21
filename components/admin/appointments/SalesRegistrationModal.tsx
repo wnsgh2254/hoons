@@ -327,10 +327,6 @@ export default function SalesRegistrationModal({
 
   useEffect(() => {
     if (isOpen) {
-      const initialDeposit =
-        initialData && editSaleId ? 0 : Math.max(0, Number(bookingDepositPaid) || 0);
-      setDepositCredit(initialDeposit);
-
       // 서브 모달 상태 초기화 (공통)
       setIsDiscountModalOpen(false);
       setSelectedItemForDiscount(null);
@@ -366,7 +362,6 @@ export default function SalesRegistrationModal({
         const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
         const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
         const gross = newSalesAmount - newDiscountAmount;
-        const netDue = netDueAfterDeposit(gross, 0);
 
         // Fallback: legacy sales saved with payment_method but no per-method amount.
         // Treat them as fully paid via that method so edit view mirrors the original payment.
@@ -374,13 +369,23 @@ export default function SalesRegistrationModal({
         const rawCard = initialData.card_amount || 0;
         const rawBank = initialData.bank_transfer_amount || 0;
         const rawMethod = (initialData.payment_method || '').toLowerCase();
-        const netPayable = Math.max(0, netDue - newPrepaidDeduction);
         const hasExplicitAmount = rawCash !== 0 || rawCard !== 0 || rawBank !== 0;
         const restoredAmounts = {
           cash: rawCash,
           card: rawCard,
           bank_transfer: rawBank,
         };
+        // Infer deposit only when per-method amounts exist (card 44 + gross 55 → deposit 11).
+        // Legacy rows with no amounts: fill one method below with no deposit implied.
+        const grossFromHeader = Number(initialData.total_amount);
+        const headerGross = Number.isFinite(grossFromHeader) ? grossFromHeader : gross;
+        const draftPaid = restoredAmounts.cash + restoredAmounts.card + restoredAmounts.bank_transfer;
+        const impliedDepositCredit = hasExplicitAmount
+          ? Math.max(0, headerGross - newPrepaidDeduction - draftPaid)
+          : 0;
+        setDepositCredit(impliedDepositCredit);
+        const netDue = netDueAfterDeposit(gross, impliedDepositCredit);
+        const netPayable = Math.max(0, netDue - newPrepaidDeduction);
         if (!hasExplicitAmount && netPayable > 0 && (rawMethod === 'cash' || rawMethod === 'card' || rawMethod === 'bank_transfer')) {
           restoredAmounts[rawMethod] = netPayable;
         }
@@ -433,10 +438,13 @@ export default function SalesRegistrationModal({
         const grossT = newSalesAmount - newDiscountAmount;
         setTotal(grossT);
         const totalPaid = (tempSaveData.paymentAmounts.cash || 0) + (tempSaveData.paymentAmounts.card || 0) + (tempSaveData.paymentAmounts.bank_transfer || 0);
+        const initialDeposit = Math.max(0, Number(bookingDepositPaid) || 0);
+        setDepositCredit(initialDeposit);
         const netDueT = netDueAfterDeposit(grossT, initialDeposit);
         setAmountToReceive(netDueT - totalPaid - newPrepaidDeduction);
       } else {
         // 등록 모드: 모든 상태 초기화
+        setDepositCredit(Math.max(0, Number(bookingDepositPaid) || 0));
         setSalesItems([]);
         setSalesAmount(0);
         setDiscountAmount(0);
@@ -494,8 +502,8 @@ export default function SalesRegistrationModal({
     const netDue = netDueAfterDeposit(grossTotal, depositCredit);
     const currentAmountToReceive = netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
 
-    // 받을 금액이 남아있으면 확인 알림 표시
-    if (currentAmountToReceive > 0) {
+    // 받을 금액이 남아있으면 확인 알림 표시 (수정 모드는 기존 완료 건 — 미수 확인 생략)
+    if (currentAmountToReceive > 0 && !editSaleId) {
       const aud = formatAudAmount(currentAmountToReceive);
       setConfirmationAlertData({
         title: '알림',
@@ -619,6 +627,12 @@ export default function SalesRegistrationModal({
       // 따라서 이미 계산된 newAmountToReceive로 판단 후 performSaleRegistration()을 직접 호출.
       if (newAmountToReceive <= 0) {
         // 판매 등록 완료
+        await performSaleRegistration({
+          paymentAmountsOverride: newAmounts,
+          paymentMethodOverride: paymentMethod,
+        });
+        setIsPaymentInputModalOpen(false);
+      } else if (editSaleId) {
         await performSaleRegistration({
           paymentAmountsOverride: newAmounts,
           paymentMethodOverride: paymentMethod,

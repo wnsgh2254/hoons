@@ -6,6 +6,13 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
 
+/** Same rule as SalesRegistrationModal — gross minus deposit credit (capped) */
+function netDueAfterDeposit(grossTotal: number, depositPaid: number): number {
+  const g = Math.max(0, grossTotal);
+  const d = Math.max(0, depositPaid);
+  return Math.max(0, g - Math.min(d, g));
+}
+
 interface SalesDetailModalProps {
   isOpen: boolean;
   salesData: SalesDetailData | null;
@@ -79,13 +86,18 @@ export default function SalesDetailModal({
   const rawCard = data.card_amount || 0;
   const rawBank = data.bank_transfer_amount || 0;
   const rawMethod = (data.payment_method || '').toLowerCase();
+  const grossTotal = Math.max(0, Number(data.total_amount || 0));
+  const prepaidItemTotal =
+    (data.items || []).reduce((s, it) => s + Number(it.prepaid_deduction || 0), 0) || 0;
   const hasExplicitAmount = rawCash !== 0 || rawCard !== 0 || rawBank !== 0;
-  const netPayable = Math.max(0, data.total_amount || 0);
-  const displayCash = !hasExplicitAmount && rawMethod === 'cash' && netPayable > 0 ? netPayable : rawCash;
-  const displayCard = !hasExplicitAmount && rawMethod === 'card' && netPayable > 0 ? netPayable : rawCard;
-  const displayBank = !hasExplicitAmount && rawMethod === 'bank_transfer' && netPayable > 0 ? netPayable : rawBank;
+  const displayCash = !hasExplicitAmount && rawMethod === 'cash' && grossTotal > 0 ? grossTotal : rawCash;
+  const displayCard = !hasExplicitAmount && rawMethod === 'card' && grossTotal > 0 ? grossTotal : rawCard;
+  const displayBank = !hasExplicitAmount && rawMethod === 'bank_transfer' && grossTotal > 0 ? grossTotal : rawBank;
   const totalPayment = displayCash + displayCard + displayBank;
-  const amountToReceive = (data.total_amount || 0) - totalPayment;
+  // Infer deposit credit when POS paid less than gross (e.g. card 44 + deposit 11 = gross 55)
+  const impliedDepositCredit = Math.max(0, grossTotal - prepaidItemTotal - totalPayment);
+  const netDue = netDueAfterDeposit(grossTotal, impliedDepositCredit);
+  const amountToReceive = Math.max(0, netDue - prepaidItemTotal - totalPayment);
 
   return (
     <Modal
@@ -182,6 +194,15 @@ export default function SalesDetailModal({
                   </span>
                 </div>
 
+                {impliedDepositCredit > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-700">예수금 (납부됨)</span>
+                    <span className="text-sm font-medium text-emerald-700">
+                      {Number(impliedDepositCredit).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
                 {(displayCash > 0 || displayCard > 0 || displayBank > 0) && (
                   <div className="space-y-2 pt-1">
                     {displayCash > 0 && (
@@ -212,7 +233,11 @@ export default function SalesDetailModal({
 
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-700">받을 금액</span>
-                  <span className="text-sm font-semibold text-red-600">{amountToReceive.toLocaleString()}</span>
+                  <span
+                    className={`text-sm font-semibold ${amountToReceive > 0 ? 'text-red-600' : 'text-gray-900'}`}
+                  >
+                    {amountToReceive.toLocaleString()}
+                  </span>
                 </div>
               </div>
 

@@ -757,20 +757,26 @@ export default function AppointmentsManagementPage() {
       // Step 2: 상세 통계(예약/정액권)는 백그라운드에서 별도로 계산
       void (async () => {
         try {
-          const [bookingsRes, prepaidRes] = await Promise.all([
+          const [bookingsRes, prepaidRes, salesRes, refundsRes] = await Promise.all([
             fetch(`/api/appointment?customer_id=${customerId}&limit=500`),
             fetch(`/api/prepaid?customer_id=${customerId}`).catch(() => null),
+            fetch(`/api/sales?customer_id=${customerId}`),
+            fetch(`/api/refunds?customer_id=${customerId}`),
           ]);
 
           const bookingsData = await bookingsRes.json();
           const prepaidData = prepaidRes ? await prepaidRes.json() : null;
+          const salesPayload = await salesRes.json().catch(() => ({}));
+          const refundsPayload = await refundsRes.json().catch(() => ({}));
 
           const bookings = bookingsData.bookings || [];
 
-          // Comment: 총 판매액
-          const totalSales = bookings.reduce((sum: number, b: any) => {
-            return sum + Number(b.total_amount || 0);
-          }, 0);
+          // Comment: Net total sales — same as GET /api/customers and SalesHistoryTable (sales minus refunds)
+          const salesList = salesPayload.sales || [];
+          const refundsList = refundsPayload.refunds || [];
+          const totalSales =
+            salesList.reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0) -
+            refundsList.reduce((sum: number, r: any) => sum + Number(r.total_amount || 0), 0);
 
           // Comment: 최근 방문일 / 방문 후 경과일
           const completedBookings = bookings.filter(

@@ -18,7 +18,7 @@ export async function GET(
     const todayStr = now.toISOString().split('T')[0];
     const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
 
-    const [bookingsResult, prepaidResult] = await Promise.all([
+    const [bookingsResult, prepaidResult, salesResult, refundsResult] = await Promise.all([
       supabase
         .from('bookings')
         .select('booking_date, booking_time, status, total_amount')
@@ -28,6 +28,8 @@ export async function GET(
         .select('id, name, points, is_active, expires_at, created_at')
         .eq('customer_id', customerId)
         .eq('is_active', true),
+      supabase.from('sales').select('total_amount').eq('customer_id', customerId),
+      supabase.from('refunds').select('total_amount').eq('customer_id', customerId),
     ]);
 
     type BookingRow = { booking_date: string; booking_time: string | null; status: string | null; total_amount: number | null };
@@ -35,10 +37,12 @@ export async function GET(
 
     const allBookings: BookingRow[] = (bookingsResult.data as BookingRow[]) || [];
 
-    const totalSales = allBookings.reduce((sum: number, b: BookingRow) => {
-      const s = (b.status || '').toLowerCase();
-      return s === 'paid' || s === 'completed' ? sum + Number(b.total_amount || 0) : sum;
-    }, 0);
+    // Comment: Net sales from sales/refunds — same rule as GET /api/customers (list) and SalesHistoryTable
+    const salesRows = (salesResult.data || []) as { total_amount: number | null }[];
+    const refundRows = (refundsResult.data || []) as { total_amount: number | null }[];
+    const totalSales =
+      salesRows.reduce((sum, s) => sum + Number(s.total_amount || 0), 0) -
+      refundRows.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
 
     const lastVisitDate =
       allBookings

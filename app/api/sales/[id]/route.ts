@@ -119,17 +119,7 @@ export async function PUT(
       );
     });
 
-    // 0. Fetch existing edit_history
-    const { data: existingSale } = await supabase
-      .from('sales')
-      .select('edit_history')
-      .eq('id', Number(id))
-      .single();
-
-    const prevHistory: string[] = existingSale?.edit_history || [];
-    const updatedHistory = [...prevHistory, new Date().toISOString()];
-
-    // 1. Update the sales header
+    // 1. Update the sales header (no edit_history column in DB — omit to avoid PGRST204)
     const { data: updatedSale, error: headerError } = await supabase
       .from('sales')
       .update({
@@ -146,7 +136,6 @@ export async function PUT(
         bank_transfer_amount: payment_amounts?.bank_transfer || 0,
         point_accumulation: point_accumulation || 0,
         memo: memo || null,
-        edit_history: updatedHistory,
       })
       .eq('id', Number(id))
       .select()
