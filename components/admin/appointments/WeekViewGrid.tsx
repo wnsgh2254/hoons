@@ -25,6 +25,7 @@ interface EmptySlotIdentifier {
 
 interface EmptySlotMenuPosition {
   top: number;
+  triggerTop: number;
   left: number;
   width: number;
   scrollTop: number;
@@ -82,7 +83,7 @@ interface WeekViewGridProps {
   setIsRestrictionModalOpen: (open: boolean) => void;
   setHoveredEmptySlot: (slot: EmptySlotIdentifier | null) => void;
   setEmptySlotMenuOpen: (slot: EmptySlotIdentifier | null) => void;
-  setEmptySlotMenuPosition: (pos: EmptySlotMenuPosition | null) => void;
+  setEmptySlotMenuPosition: React.Dispatch<React.SetStateAction<EmptySlotMenuPosition | null>>;
   setHoveredBooking: (id: number | null) => void;
   setBookingMenuOpen: (id: number | null) => void;
   setEditingBooking: (booking: BookingWithRelations | null) => void;
@@ -376,6 +377,7 @@ export default function WeekViewGrid({
                       // 뷰포트 기준 위치 저장 (메뉴 렌더링 시 상대 위치로 변환됨)
                       setEmptySlotMenuPosition({
                         top: rect.bottom,
+                        triggerTop: rect.top,
                         left: menuLeft,
                         width: menuWidth,
                         scrollTop,
@@ -497,9 +499,6 @@ export default function WeekViewGrid({
               }
 
               const isMoveMode = !!movingBooking;
-
-              const slotLeftStyle = slotLeftCovered ? '50%' : '0';
-              const slotRightStyle = slotRightCovered ? '50%' : '0';
 
               return (
                 <div
@@ -641,6 +640,7 @@ export default function WeekViewGrid({
                               // 뷰포트 기준 위치 저장 (메뉴 렌더링 시 상대 위치로 변환됨)
                               setEmptySlotMenuPosition({
                                 top: rect.bottom,
+                                triggerTop: rect.top,
                                 left: menuLeft,
                                 width: menuWidth,
                                 scrollTop,
@@ -1097,6 +1097,7 @@ export default function WeekViewGrid({
                           
                           setBookingMenuPosition({
                             top: Math.max(menuTop, viewportPadding),
+                            triggerTop: cardRect.top,
                             left: menuLeft,
                             width: menuWidth,
                             scrollTop,

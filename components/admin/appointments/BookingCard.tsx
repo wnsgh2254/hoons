@@ -193,6 +193,7 @@ function BookingCard({
 
               setBookingMenuPosition({
                 top: Math.max(menuTop, viewportPadding),
+                triggerTop: cardRect.top,
                 left: menuLeft,
                 width: menuWidth,
                 scrollTop,

@@ -1809,6 +1809,7 @@ export default function AppointmentsManagementPage() {
             : cardRect.width;
           setBookingMenuPosition({
             top: Math.max(menuTop, viewportPadding),
+            triggerTop: cardRect.top,
             left: menuLeft,
             width: menuWidth,
             scrollTop,
@@ -2982,9 +2983,6 @@ export default function AppointmentsManagementPage() {
                                 
                                 const isMoveMode = !!movingBooking;
 
-                                const slotLeftStyle = slotLeftCovered ? '50%' : '0';
-                                const slotRightStyle = slotRightCovered ? '50%' : '0';
-
                                 return (
                                   <div
                                     key={slotKey}
@@ -3064,7 +3062,7 @@ export default function AppointmentsManagementPage() {
                                         style={{ zIndex: isMenuOpen ? 10000 : undefined }}
                                       >
                                         {/* 빈 셀 more(≡) 버튼 - 예약 금지 셀, half 슬롯은 미노출 */}
-                                        {!slotLeftCovered && !slotRightCovered && (
+                                        {!occupiedLeft && !occupiedRight && (
                                         <div
                                           className="absolute right-1 top-1/2 -translate-y-1/2 z-[9999] empty-slot-more-button"
                                           style={{ pointerEvents: 'auto' }}
