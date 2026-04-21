@@ -188,36 +188,6 @@ export interface SalesDetailData {
   edit_history?: string[];
 }
 
-// Temporary sales data (임시저장)
-export interface TempSalesData {
-  bookingId: number;
-  customerId: number;
-  customerName: string;
-  customerPhone?: string;
-  salesItems: Array<{
-    id: string;
-    type: SalesItemType;
-    name: string;
-    unitPrice: number;
-    quantity: number;
-    discount: number;
-    discountType?: 'percentage' | 'amount' | 'category';
-    discountValue?: number | string;
-    amount: number;
-    manager: string;
-    salesClassification: string;
-    prepaidDeduction: number;
-    prepaidCreditPoints?: number;
-    prepaidExpiresAt?: string | null;
-  }>;
-  paymentAmounts: { cash: number; card: number; bank_transfer: number };
-  pointAccumulation: number;
-  memo: string;
-  salesDate: string;
-  salesTime: string;
-  selectedShopId?: number | null;
-}
-
 // New booking modal time slot (shared by appointments + customers pages)
 export interface NewBookingTimeSlotSelectedItem {
   id: number;

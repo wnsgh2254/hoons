@@ -528,43 +528,141 @@ export async function getPrepaidPassByCustomerId(customerId: number) {
   return data;
 }
 
-// Comment: Create a new prepaid pass member
+function isPrepaidPassUsable(row: { expires_at?: string | null }): boolean {
+  if (!row.expires_at) return true;
+  const exp = new Date(row.expires_at);
+  return !Number.isNaN(exp.getTime()) && exp >= new Date();
+}
+
+/** If any expiry is open-ended (null/empty), merged pass has no expiry; else use latest date */
+function mergePrepaidExpiryDates(
+  ...dates: (string | null | undefined)[]
+): string | null {
+  if (dates.some((d) => d == null || String(d).trim() === '')) return null;
+  const ms = dates
+    .filter((d): d is string => d != null && String(d).trim() !== '')
+    .map((d) => new Date(d).getTime())
+    .filter((t) => !Number.isNaN(t));
+  if (ms.length === 0) return null;
+  return new Date(Math.max(...ms)).toISOString().split('T')[0];
+}
+
+// Comment: Add prepaid credit for a customer — merges into existing active row(s), never duplicates per customer
 export async function createPrepaidPass(payload: {
-  name: string;
+  customerId: number;
+  name?: string | null;
   phone?: string | null;
   email?: string | null;
   points: number;
   expiresAt?: string | null;
-}) {
-  const { name, phone, email, points, expiresAt } = payload;
+}): Promise<{ member: any; merged: boolean }> {
+  const { customerId, name, phone, email, points, expiresAt } = payload;
 
-  if (!name || !name.trim()) {
-    throw new Error('이름은 필수입니다.');
+  if (!customerId || Number.isNaN(Number(customerId))) {
+    throw new Error('고객을 선택해야 합니다.');
   }
 
   if (points < 0) {
     throw new Error('정액제 포인트는 0 이상이어야 합니다.');
   }
 
-  const normalizedPhone = phone?.trim() ? phone.trim().replace(/\D/g, '') : null;
-  let customerId: number | null = null;
+  const addAmount = Number(points) || 0;
+
+  const { data: customer, error: cErr } = await supabase
+    .from('customers')
+    .select('id, name, phone')
+    .eq('id', customerId)
+    .maybeSingle();
+
+  if (cErr || !customer) {
+    throw new Error('존재하지 않는 고객입니다.');
+  }
+
+  const normalizedPhone =
+    (phone?.trim() ? phone.trim().replace(/\D/g, '') : null) ||
+    String(customer.phone || '').replace(/\D/g, '') ||
+    null;
+  const displayName = (name?.trim() || customer.name || '').trim();
+  if (!displayName) {
+    throw new Error('이름은 필수입니다.');
+  }
+
+  const { data: rowsByCustomer } = await supabase
+    .from('prepaid_passes')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('is_active', true);
+
+  let legacyRows: any[] = [];
   if (normalizedPhone) {
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('id')
+    const { data: byPhone } = await supabase
+      .from('prepaid_passes')
+      .select('*')
+      .is('customer_id', null)
       .eq('phone', normalizedPhone)
-      .maybeSingle();
-    customerId = customer?.id ?? null;
+      .eq('is_active', true);
+    legacyRows = byPhone || [];
+  }
+
+  const byId = new Map<number, any>();
+  for (const r of [...(rowsByCustomer || []), ...legacyRows]) {
+    if (r?.id != null) byId.set(Number(r.id), r);
+  }
+  const unique = [...byId.values()];
+  const usable = unique.filter(isPrepaidPassUsable);
+
+  if (usable.length > 0) {
+    const keeper = [...usable].sort((a, b) => Number(a.id) - Number(b.id))[0];
+    const others = usable.filter((r) => Number(r.id) !== Number(keeper.id));
+    const totalPoints =
+      usable.reduce((sum, r) => sum + Number(r.points || 0), 0) + addAmount;
+    const mergedExpiry = mergePrepaidExpiryDates(
+      ...usable.map((r) => r.expires_at),
+      expiresAt,
+    );
+
+    const { data: updated, error: upErr } = await supabase
+      .from('prepaid_passes')
+      .update({
+        points: totalPoints,
+        name: displayName,
+        phone: normalizedPhone,
+        email: email?.trim() || null,
+        expires_at: mergedExpiry,
+        customer_id: customerId,
+      })
+      .eq('id', keeper.id)
+      .select()
+      .single();
+
+    if (upErr) {
+      throw new Error(upErr.message);
+    }
+
+    if (others.length > 0) {
+      const { error: deactErr } = await supabase
+        .from('prepaid_passes')
+        .update({ is_active: false })
+        .in(
+          'id',
+          others.map((r) => Number(r.id)),
+        );
+      if (deactErr) {
+        console.error('Failed to deactivate merged prepaid rows:', deactErr);
+      }
+    }
+
+    return { member: updated, merged: true };
   }
 
   const { data, error } = await supabase
     .from('prepaid_passes')
     .insert({
-      name: name.trim(),
+      name: displayName,
       phone: normalizedPhone,
       customer_id: customerId,
       email: email?.trim() || null,
-      points: Number(points) || 0,
+      points: addAmount,
       is_active: true,
       expires_at: expiresAt || null,
     })
@@ -575,7 +673,7 @@ export async function createPrepaidPass(payload: {
     throw new Error(error.message);
   }
 
-  return data;
+  return { member: data, merged: false };
 }
 
 /**
@@ -626,6 +724,7 @@ export async function issuePrepaidPassFromSale(params: {
 export async function updatePrepaidPass(
   id: number,
   updates: {
+    customerId?: number;
     name?: string;
     phone?: string | null;
     email?: string | null;
@@ -640,19 +739,37 @@ export async function updatePrepaidPass(
 
   const updateData: any = {};
 
+  if (updates.customerId !== undefined) {
+    const cid = Number(updates.customerId);
+    if (!Number.isFinite(cid)) {
+      throw new Error('유효하지 않은 고객 ID입니다.');
+    }
+    const { data: customer, error: cErr } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('id', cid)
+      .maybeSingle();
+    if (cErr || !customer) {
+      throw new Error('존재하지 않는 고객입니다.');
+    }
+    updateData.customer_id = cid;
+  }
+
   if (updates.name !== undefined) updateData.name = updates.name.trim();
   if (updates.phone !== undefined) {
     const normalizedPhone = updates.phone?.trim() ? updates.phone.trim().replace(/\D/g, '') : null;
     updateData.phone = normalizedPhone;
-    if (normalizedPhone) {
-      const { data: customer } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('phone', normalizedPhone)
-        .maybeSingle();
-      updateData.customer_id = customer?.id ?? null;
-    } else {
-      updateData.customer_id = null;
+    if (updates.customerId === undefined) {
+      if (normalizedPhone) {
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone', normalizedPhone)
+          .maybeSingle();
+        updateData.customer_id = customer?.id ?? null;
+      } else {
+        updateData.customer_id = null;
+      }
     }
   }
   if (updates.email !== undefined) updateData.email = updates.email?.trim() || null;

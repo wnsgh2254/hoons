@@ -8,7 +8,7 @@ import ManagerPickerModal from './ManagerPickerModal';
 import PrepaidDeductionModal from './PrepaidDeductionModal';
 import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
 import { Z } from '@/lib/constants';
-import type { SalesDetailData, TempSalesData } from '@/lib/types';
+import type { SalesDetailData } from '@/lib/types';
 import { getSydneyToday } from '@/lib/utils/appointment-utils';
 
 function formatAudAmount(value: number): string {
@@ -69,20 +69,17 @@ interface SalesRegistrationModalProps {
   } | null;
   onClose: () => void;
   onOpenItemPicker?: (tab: 'service' | 'product' | 'prepaid') => void;
-  onComplete?: () => void; // 판매 등록 완료 시 호출
+  onComplete?: () => void | Promise<void>; // 판매 등록 완료 시 호출
+  /** Called after successful sale edit — parent can refresh detail modal without closing it conceptually */
+  onEditComplete?: (saleId: number) => void | Promise<void>;
   initialData?: SalesDetailData | null;
   editSaleId?: number | null;
   shopId?: number | null;
-  // 임시저장 관련
   bookingId?: number | null;
   defaultSalesDate?: string | null;
   defaultSalesTime?: string | null;
   /** Already-paid deposit for linked booking (AUD); reduces net due / 합계 */
   bookingDepositPaid?: number | null;
-  tempSaveData?: TempSalesData | null;
-  /** Comment: Called after temp save/delete so parent can update temp-sale flags without bulk fetch */
-  onTemporarySave?: (bookingId: number) => void;
-  onDeleteTempSave?: (bookingId: number) => void;
 }
 
 export default function SalesRegistrationModal({
@@ -91,6 +88,7 @@ export default function SalesRegistrationModal({
   onClose,
   onOpenItemPicker,
   onComplete,
+  onEditComplete,
   initialData,
   editSaleId,
   shopId,
@@ -98,9 +96,6 @@ export default function SalesRegistrationModal({
   defaultSalesDate,
   defaultSalesTime,
   bookingDepositPaid,
-  tempSaveData,
-  onTemporarySave,
-  onDeleteTempSave,
 }: SalesRegistrationModalProps) {
   const getCurrentLocalTime = () => {
     const now = new Date();
@@ -155,6 +150,7 @@ export default function SalesRegistrationModal({
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
   const [depositCredit, setDepositCredit] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
   // 정액권 잔액 확인 헬퍼 함수
   const validatePrepaidBalance = (newDeductionAmount: number): boolean => {
@@ -400,48 +396,6 @@ export default function SalesRegistrationModal({
         setTotal(gross);
         const totalPaid = restoredAmounts.cash + restoredAmounts.card + restoredAmounts.bank_transfer;
         setAmountToReceive(netDue - totalPaid - newPrepaidDeduction);
-      } else if (tempSaveData) {
-        // 임시저장 복원 모드
-        const mappedItems: SalesItem[] = tempSaveData.salesItems.map((item) => ({
-          id: item.id,
-          type: item.type,
-          name: item.name,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          discount: item.discount,
-          discountType: item.discountType,
-          discountValue: item.discountValue,
-          amount: item.amount,
-          manager: item.manager,
-          salesClassification: item.salesClassification,
-          prepaidDeduction: item.prepaidDeduction,
-          prepaidCreditPoints: item.prepaidCreditPoints,
-          prepaidExpiresAt: item.prepaidExpiresAt,
-        }));
-        setSalesItems(mappedItems);
-        setMemo(tempSaveData.memo);
-        setSalesDate(tempSaveData.salesDate);
-        setSalesTime(tempSaveData.salesTime);
-        setPointAccumulation(tempSaveData.pointAccumulation);
-        setPaymentAmounts(tempSaveData.paymentAmounts);
-        if (tempSaveData.selectedShopId != null) setSelectedShopId(tempSaveData.selectedShopId);
-        const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
-        setPrepaidDeductionAmount(newPrepaidDeduction);
-        setSelectedDeduction(null);
-        setPaymentMethod(null);
-        setActiveTab('service');
-        // 금액 계산
-        const newSalesAmount = mappedItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-        const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
-        setSalesAmount(newSalesAmount);
-        setDiscountAmount(newDiscountAmount);
-        const grossT = newSalesAmount - newDiscountAmount;
-        setTotal(grossT);
-        const totalPaid = (tempSaveData.paymentAmounts.cash || 0) + (tempSaveData.paymentAmounts.card || 0) + (tempSaveData.paymentAmounts.bank_transfer || 0);
-        const initialDeposit = Math.max(0, Number(bookingDepositPaid) || 0);
-        setDepositCredit(initialDeposit);
-        const netDueT = netDueAfterDeposit(grossT, initialDeposit);
-        setAmountToReceive(netDueT - totalPaid - newPrepaidDeduction);
       } else {
         // 등록 모드: 모든 상태 초기화
         setDepositCredit(Math.max(0, Number(bookingDepositPaid) || 0));
@@ -465,7 +419,11 @@ export default function SalesRegistrationModal({
         setActiveTab('service');
       }
     }
-  }, [isOpen, initialData, editSaleId, tempSaveData, bookingDepositPaid, defaultSalesDate, defaultSalesTime]);
+  }, [isOpen, initialData, editSaleId, bookingDepositPaid, defaultSalesDate, defaultSalesTime]);
+
+  useEffect(() => {
+    if (!isOpen) setIsSaving(false);
+  }, [isOpen]);
 
   // 외부에서 호출할 수 있도록 window에 등록 (useEffect 사용)
   // 주의: 모든 hooks는 early return 이전에 호출되어야 함
@@ -490,6 +448,7 @@ export default function SalesRegistrationModal({
   };
 
   const handleComplete = async () => {
+    if (isSaving) return;
     if (!customer || salesItems.length === 0) {
       alert('고객 정보와 판매 항목이 필요합니다.');
       return;
@@ -534,6 +493,7 @@ export default function SalesRegistrationModal({
     const paymentMethodToSave =
       options?.paymentMethodOverride !== undefined ? options.paymentMethodOverride : paymentMethod;
 
+    setIsSaving(true);
     try {
       const url = isEditMode ? `/api/sales/${editSaleId}` : '/api/sales';
       const method = isEditMode ? 'PUT' : 'POST';
@@ -583,23 +543,21 @@ export default function SalesRegistrationModal({
         throw new Error(errorData.error || (isEditMode ? '판매 수정에 실패했습니다.' : '판매 등록에 실패했습니다.'));
       }
 
-      // 임시저장이 있으면 삭제
-      if (bookingId) {
-        try {
-          await fetch(`/api/temp-sales?booking_id=${bookingId}`, { method: 'DELETE' });
-          onDeleteTempSave?.(bookingId);
-        } catch {
-          // 임시저장 삭제 실패해도 판매는 완료된 것으로 처리
-        }
+      if (isEditMode && onEditComplete && editSaleId) {
+        await onEditComplete(editSaleId);
+        onClose();
+        return;
       }
 
       if (onComplete) {
-        onComplete();
+        await onComplete();
       }
       onClose();
     } catch (error: any) {
       console.error(isEditMode ? '판매 수정 오류:' : '판매 등록 오류:', error);
       alert(error.message || '판매 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -678,107 +636,15 @@ export default function SalesRegistrationModal({
   };
 
   const handleCancel = () => {
+    if (isSaving) return;
     onClose();
-  };
-
-  const handleTemporarySave = async () => {
-    if (!customer || !bookingId) {
-      setErrorAlertData({
-        title: '알림',
-        message: '예약 정보가 없어 임시 저장할 수 없습니다.',
-      });
-      setIsErrorAlertOpen(true);
-      return;
-    }
-
-    try {
-      const tempData = {
-        bookingId,
-        customerId: customer.id,
-        customerName: customer.name,
-        customerPhone: customer.phone ?? undefined,
-        salesItems: salesItems.map((item) => ({
-          id: item.id,
-          type: item.type,
-          name: item.name,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          discount: item.discount,
-          discountType: item.discountType,
-          discountValue: item.discountValue,
-          amount: item.amount,
-          manager: item.manager,
-          salesClassification: item.salesClassification,
-          prepaidDeduction: item.prepaidDeduction,
-          ...(item.type === 'prepaid'
-            ? {
-                prepaidCreditPoints: item.prepaidCreditPoints,
-                prepaidExpiresAt: item.prepaidExpiresAt ?? null,
-              }
-            : {}),
-        })),
-        paymentAmounts,
-        pointAccumulation,
-        memo,
-        salesDate,
-        salesTime,
-        selectedShopId,
-      };
-
-      const response = await fetch('/api/temp-sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          booking_id: bookingId,
-          customer_id: customer.id,
-          data: tempData,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('임시 저장에 실패했습니다.');
-      }
-
-      onTemporarySave?.(bookingId);
-      onClose();
-    } catch (error: any) {
-      console.error('임시 저장 오류:', error);
-      setErrorAlertData({
-        title: '오류',
-        message: error.message || '임시 저장 중 오류가 발생했습니다.',
-      });
-      setIsErrorAlertOpen(true);
-    }
-  };
-
-  const handleDeleteTempSave = async () => {
-    if (!bookingId) return;
-
-    try {
-      const response = await fetch(`/api/temp-sales?booking_id=${bookingId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('임시저장 삭제에 실패했습니다.');
-      }
-
-      onDeleteTempSave?.(bookingId);
-      onClose();
-    } catch (error: any) {
-      console.error('임시저장 삭제 오류:', error);
-      setErrorAlertData({
-        title: '오류',
-        message: error.message || '임시저장 삭제 중 오류가 발생했습니다.',
-      });
-      setIsErrorAlertOpen(true);
-    }
   };
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={() => {
+        if (isSaving) return;
         if (!isPaymentInputModalOpen && !isManagerPickerModalOpen && !isSalesClassificationModalOpen && !isDiscountModalOpen) {
           onClose();
         }
@@ -1222,22 +1088,17 @@ export default function SalesRegistrationModal({
               </div>
 
               <div className="space-y-2">
-                <Button className="w-full" onClick={handleComplete}>
-                  {editSaleId ? '수정 완료' : '계산 완료'}
+                <Button
+                  className="w-full"
+                  onClick={handleComplete}
+                  disabled={isSaving}
+                  loading={isSaving}
+                >
+                  {editSaleId ? (isSaving ? '저장 중...' : '수정 완료') : isSaving ? '처리 중...' : '계산 완료'}
                 </Button>
-                <Button variant="ghost" className="w-full" onClick={handleCancel}>
+                <Button variant="ghost" className="w-full" onClick={handleCancel} disabled={isSaving}>
                   취소
                 </Button>
-                {bookingId && (
-                  <Button variant="secondary" className="w-full" onClick={handleTemporarySave}>
-                    임시 저장
-                  </Button>
-                )}
-                {tempSaveData && bookingId && (
-                  <Button variant="danger" className="w-full" onClick={handleDeleteTempSave}>
-                    임시저장 삭제
-                  </Button>
-                )}
               </div>
             </div>
           </div>

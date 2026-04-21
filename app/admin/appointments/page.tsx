@@ -41,6 +41,7 @@ import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
 import RefundRegistrationModal from '@/components/admin/appointments/RefundRegistrationModal';
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
+import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
 import { isCancelledBookingStatus, isUpcomingBookingStatus } from '@/lib/booking-status';
 import {
   GRID_START_HOUR,
@@ -351,9 +352,6 @@ export default function AppointmentsManagementPage() {
   const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
 
   // Temporary Sales State (임시저장)
-  const [tempSaleBookingIds, setTempSaleBookingIds] = useState<Set<number>>(new Set());
-  const [currentTempSaleBookingId, setCurrentTempSaleBookingId] = useState<number | null>(null);
-  const [currentTempSaleData, setCurrentTempSaleData] = useState<any | null>(null);
   /** 예약 카드에서 판매등록 열 때 연결할 bookings.id (계산완료 플래그용) */
   const [salesLinkedBookingId, setSalesLinkedBookingId] = useState<number | null>(null);
   /** 예약에 이미 납부된 예수금 (AUD), 판매 모달 합계 차감용 */
@@ -629,8 +627,6 @@ export default function AppointmentsManagementPage() {
         const nextBookings = data.bookings || [];
         setBookings(nextBookings);
         setFilteredBookings(nextBookings);
-        setTempSaleBookingIds(new Set<number>(data.tempSaleBookingIds || []));
-
         try {
           if (Array.isArray(data.designers) && data.designers.length > 0) {
             sessionStorage.setItem('haeyoom_designers', JSON.stringify(data.designers));
@@ -893,8 +889,6 @@ export default function AppointmentsManagementPage() {
       console.error('Error saving recent search:', err);
     }
   }, []);
-
-  // Comment: tempSaleBookingIds — seeded from initial-data; updated locally on temp save / delete / sale complete (no bulk booking_ids fetch)
 
   // Comment: Handle customer selection from autocomplete
   const handleCustomerSelect = useCallback(
@@ -4151,8 +4145,6 @@ export default function AppointmentsManagementPage() {
           setSalesRegistrationShopId(null);
           setEditingSaleData(null);
           setEditingSaleId(null);
-          setCurrentTempSaleBookingId(null);
-          setCurrentTempSaleData(null);
           setSalesLinkedBookingId(null);
           setSalesLinkedDepositPaid(0);
           setSalesDefaultDate(null);
@@ -4187,27 +4179,31 @@ export default function AppointmentsManagementPage() {
             }
           }
         }}
+        onEditComplete={async (saleId) => {
+          try {
+            const res = await fetch(`/api/sales/${saleId}`);
+            const data = await res.json();
+            if (!res.ok || !data.sale) {
+              throw new Error(data.error || '판매를 불러오지 못했습니다.');
+            }
+            const nameFallback = viewingCustomer?.name || '';
+            setSalesDetailData(mapSaleRecordToDetailData(data.sale, nameFallback));
+            setIsSalesDetailModalOpen(true);
+            if (viewingCustomerId) {
+              await loadCustomerInfo(viewingCustomerId);
+            }
+            await refreshBookings();
+          } catch (e: any) {
+            console.error(e);
+            alert(e?.message || '수정된 판매를 표시하지 못했습니다.');
+          }
+        }}
         initialData={editingSaleData}
         editSaleId={editingSaleId}
-        bookingId={salesLinkedBookingId ?? currentTempSaleBookingId}
+        bookingId={salesLinkedBookingId ?? undefined}
         defaultSalesDate={salesDefaultDate}
         defaultSalesTime={salesDefaultTime}
         bookingDepositPaid={salesLinkedDepositPaid}
-        tempSaveData={currentTempSaleData}
-        onTemporarySave={(bid) => {
-          setTempSaleBookingIds((prev) => new Set([...prev, bid]));
-          setCurrentTempSaleBookingId(null);
-          setCurrentTempSaleData(null);
-        }}
-        onDeleteTempSave={(bid) => {
-          setTempSaleBookingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(bid);
-            return next;
-          });
-          setCurrentTempSaleBookingId(null);
-          setCurrentTempSaleData(null);
-        }}
       />
 
       {/* Edit Prepaid Member Modal */}
@@ -4246,8 +4242,6 @@ export default function AppointmentsManagementPage() {
             setSalesRegistrationShopId(null);
             setEditingSaleData(null);
             setEditingSaleId(null);
-            setCurrentTempSaleBookingId(null);
-            setCurrentTempSaleData(null);
             setSalesLinkedBookingId(null);
             setSalesLinkedDepositPaid(0);
             setSalesDefaultManager(null);
@@ -4370,10 +4364,6 @@ export default function AppointmentsManagementPage() {
           if (!salesDetailData) return;
           setDeletingSaleId(salesDetailData.id);
           setIsDeleteSaleAlertOpen(true);
-        }}
-        onSendStatement={() => {
-          // TODO: 판매내역서 발송 기능 구현
-          console.log('Send statement:', salesDetailData);
         }}
       />
 

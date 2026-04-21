@@ -5,6 +5,69 @@ import {
   adjustPrepaidBalance,
 } from '@/lib/sales-reconciliation';
 
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+    const saleId = Number(id);
+    if (!saleId || Number.isNaN(saleId)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 판매 ID 입니다.' },
+        { status: 400 }
+      );
+    }
+
+    const { data: sale, error } = await supabase
+      .from('sales')
+      .select(
+        `
+        *,
+        sales_items (*)
+      `
+      )
+      .eq('id', saleId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching sale:', error);
+      return NextResponse.json(
+        { error: '판매를 불러오지 못했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    if (!sale) {
+      return NextResponse.json(
+        { error: '판매를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    let customer_name = '';
+    if (sale.customer_id) {
+      const { data: c } = await supabase
+        .from('customers')
+        .select('name')
+        .eq('id', sale.customer_id)
+        .maybeSingle();
+      customer_name = c?.name || '';
+    }
+
+    return NextResponse.json(
+      { sale: { ...sale, customer_name } },
+      { status: 200 }
+    );
+  } catch (e: any) {
+    console.error('Error in sales GET:', e);
+    return NextResponse.json(
+      { error: e.message || '오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }

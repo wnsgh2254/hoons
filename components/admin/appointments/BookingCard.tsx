@@ -54,8 +54,6 @@ interface BookingCardProps {
   onCancelBooking?: (booking: BookingWithRelations) => void;
   onRegisterSale?: (booking: BookingWithRelations) => void;
   onViewSaleDetail?: (booking: BookingWithRelations) => void;
-  hasTempSale?: boolean;
-  onOpenTempSale?: (booking: BookingWithRelations) => void;
 }
 
 function BookingCard({
@@ -85,8 +83,6 @@ function BookingCard({
   onCancelBooking,
   onRegisterSale,
   onViewSaleDetail,
-  hasTempSale,
-  onOpenTempSale,
 }: BookingCardProps) {
   const b = booking;
   if (!b.booking_time) return null;
@@ -206,35 +202,16 @@ function BookingCard({
         }}
       >
         {/* Top-right indicators container */}
-        {(hasDepositPaid || hasTempSale) && (
+        {hasDepositPaid && (
           <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
-            {/* Deposit paid indicator */}
-            {hasDepositPaid && (
-              <div
-                className="w-5 h-5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold"
-                title={`Deposit paid: ${depositPaid.toLocaleString('ko-KR')} / Total: ${totalAmount.toLocaleString(
-                  'ko-KR',
-                )}`}
-              >
-                D
-              </div>
-            )}
-            {/* Temp sale indicator */}
-            {hasTempSale && (
-              <button
-                type="button"
-                className="w-5 h-5 flex items-center justify-center rounded bg-red-500 hover:bg-red-600 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenTempSale?.(b);
-                }}
-                title="임시 저장된 판매 등록"
-              >
-                <span className="material-symbols-outlined text-white" style={{ fontSize: '14px' }}>
-                  credit_card
-                </span>
-              </button>
-            )}
+            <div
+              className="w-5 h-5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold"
+              title={`Deposit paid: ${depositPaid.toLocaleString('ko-KR')} / Total: ${totalAmount.toLocaleString(
+                'ko-KR',
+              )}`}
+            >
+              D
+            </div>
           </div>
         )}
 

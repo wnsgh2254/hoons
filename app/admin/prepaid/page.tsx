@@ -12,6 +12,7 @@ import {
   Input,
   FormAlert,
   Badge,
+  AlertModal,
 } from '@/components/ui';
 
 export default function PrepaidPassManagementPage() {
@@ -226,18 +227,55 @@ function AddMemberModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerResults, setCustomerResults] = useState<any[]>([]);
+  const [searchingCustomer, setSearchingCustomer] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<{
+    id: number;
+    name: string;
+    phone?: string | null;
+  } | null>(null);
   const [email, setEmail] = useState('');
   const [points, setPoints] = useState<string>('0');
   const [expiresAt, setExpiresAt] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setCustomerQuery('');
+      setCustomerResults([]);
+      setSelectedCustomer(null);
+      setError(null);
+      return;
+    }
+    const q = customerQuery.trim();
+    if (q.length < 2) {
+      setCustomerResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSearchingCustomer(true);
+      try {
+        const res = await fetch(
+          `/api/customers?search=${encodeURIComponent(q)}&limit=15`
+        );
+        const data = await res.json();
+        if (res.ok) setCustomerResults(data.customers || []);
+        else setCustomerResults([]);
+      } catch {
+        setCustomerResults([]);
+      } finally {
+        setSearchingCustomer(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [customerQuery, isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError('이름은 필수입니다.');
+    if (!selectedCustomer) {
+      setError('고객 관리에 등록된 고객을 검색하여 선택하세요.');
       return;
     }
     if (Number(points) < 0) {
@@ -253,8 +291,9 @@ function AddMemberModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim() || null,
+          customer_id: selectedCustomer.id,
+          name: selectedCustomer.name,
+          phone: selectedCustomer.phone ?? null,
           email: email.trim() || null,
           points: Number(points) || 0,
           expiresAt: expiresAt || null,
@@ -304,21 +343,65 @@ function AddMemberModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <FormAlert message={error} variant="error" />}
-        <Input
-          label="이름 *"
-          type="text"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="회원 이름 입력"
-        />
-        <Input
-          label="연락처"
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="연락처 입력"
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            고객 선택 * (고객 관리에 등록된 고객만)
+          </label>
+          <Input
+            type="text"
+            value={customerQuery}
+            onChange={(e) => setCustomerQuery(e.target.value)}
+            placeholder="이름 또는 전화번호로 검색 (2자 이상)"
+          />
+          {searchingCustomer && (
+            <p className="text-xs text-gray-500 mt-1">검색 중...</p>
+          )}
+          {customerResults.length > 0 && (
+            <ul className="mt-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {customerResults.map((c: any) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                      selectedCustomer?.id === c.id ? 'bg-gray-100' : ''
+                    }`}
+                    onClick={() => {
+                      setSelectedCustomer({
+                        id: c.id,
+                        name: c.name || '',
+                        phone: c.phone,
+                      });
+                      setCustomerResults([]);
+                      setCustomerQuery('');
+                    }}
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-gray-500 text-xs ml-2">#{c.id}</span>
+                    {c.phone && (
+                      <span className="block text-xs text-gray-600">{c.phone}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {selectedCustomer && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm">
+              <span className="font-semibold">선택됨:</span> {selectedCustomer.name}{' '}
+              <span className="text-gray-500">(ID {selectedCustomer.id})</span>
+              {selectedCustomer.phone && (
+                <span className="block text-gray-600">{selectedCustomer.phone}</span>
+              )}
+              <button
+                type="button"
+                className="text-xs text-blue-600 mt-1"
+                onClick={() => setSelectedCustomer(null)}
+              >
+                선택 해제
+              </button>
+            </div>
+          )}
+        </div>
         <Input
           label="이메일"
           type="email"
@@ -374,6 +457,8 @@ function EditMemberModal({
   const [isActive, setIsActive] = useState(member?.is_active ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Reset form when member changes
   useEffect(() => {
@@ -385,6 +470,7 @@ function EditMemberModal({
       setExpiresAt(member.expires_at ? member.expires_at.split('T')[0] : '');
       setIsActive(member.is_active ?? true);
       setError(null);
+      setDeleteConfirmOpen(false);
     }
   }, [member]);
 
@@ -407,6 +493,7 @@ function EditMemberModal({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          customer_id: member.customer_id ?? undefined,
           name: name.trim(),
           phone: phone.trim() || null,
           email: email.trim() || null,
@@ -430,9 +517,32 @@ function EditMemberModal({
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!member || deleteLoading) return;
+    try {
+      setDeleteLoading(true);
+      setError(null);
+      const res = await fetch(`/api/prepaid?id=${member.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '정액권 삭제에 실패했습니다.');
+      }
+      setDeleteConfirmOpen(false);
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || '정액권 삭제에 실패했습니다.');
+      setDeleteConfirmOpen(false);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   if (!member) return null;
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -512,8 +622,34 @@ function EditMemberModal({
             <span className="text-sm font-medium text-gray-700">Active</span>
           </label>
         </div>
+        <div className="pt-4 border-t border-gray-100">
+          <Button
+            type="button"
+            variant="danger"
+            disabled={loading || deleteLoading}
+            onClick={() => {
+              setError(null);
+              setDeleteConfirmOpen(true);
+            }}
+            className="w-full sm:w-auto"
+          >
+            이 정액권 삭제
+          </Button>
+          <p className="text-xs text-gray-500 mt-2">
+            이 행만 삭제됩니다. 되돌릴 수 없습니다.
+          </p>
+        </div>
       </form>
     </Modal>
+    <AlertModal
+      isOpen={deleteConfirmOpen}
+      onClose={() => !deleteLoading && setDeleteConfirmOpen(false)}
+      title="정액권 삭제"
+      message={`${name.trim() || '이 회원'}의 이 정액권 행을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+      variant="confirm"
+      onConfirm={handleDeleteConfirm}
+    />
+    </>
   );
 }
 

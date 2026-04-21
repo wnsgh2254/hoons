@@ -105,18 +105,6 @@ export async function GET(request: NextRequest) {
     }
 
     const weekBookings = weekBookingsRes.data || [];
-    const bookingIds = weekBookings.map((b: any) => b.id).filter((id: any) => Number.isFinite(id));
-
-    let tempSaleBookingIds: number[] = [];
-    if (bookingIds.length > 0) {
-      const { data: tempSaleRows, error: tempSalesError } = await supabase
-        .from('temp_sales')
-        .select('booking_id')
-        .in('booking_id', bookingIds);
-      if (!tempSalesError) {
-        tempSaleBookingIds = (tempSaleRows || []).map((row: any) => row.booking_id);
-      }
-    }
 
     const shops = shopsRes.data || [];
     const availableDesignerIdsByShop: Record<number, number[]> = {};
@@ -156,7 +144,6 @@ export async function GET(request: NextRequest) {
         bookingRestrictions: restrictionsRes.data || [],
         dayCounts,
         availableDesignerIdsByShop,
-        tempSaleBookingIds,
       },
       { status: 200 },
     );

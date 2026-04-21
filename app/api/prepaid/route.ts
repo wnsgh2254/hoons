@@ -127,9 +127,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, phone, email, points, expiresAt } = body;
+    const { customer_id, name, phone, email, points, expiresAt } = body;
 
-    const member = await createPrepaidPass({
+    if (customer_id == null || customer_id === '') {
+      return NextResponse.json(
+        { error: '고객을 선택해야 합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const { member, merged } = await createPrepaidPass({
+      customerId: Number(customer_id),
       name,
       phone,
       email,
@@ -137,7 +145,7 @@ export async function POST(request: NextRequest) {
       expiresAt,
     });
 
-    return NextResponse.json({ member }, { status: 201 });
+    return NextResponse.json({ member, merged }, { status: merged ? 200 : 201 });
   } catch (error: any) {
     console.error('Error in prepaid POST route:', error);
     return NextResponse.json(
@@ -159,9 +167,11 @@ export async function PATCH(request: NextRequest) {
 
     const memberId = Number(id);
     const body = await request.json();
-    const { name, phone, email, points, expiresAt, isActive } = body;
+    const { customer_id, name, phone, email, points, expiresAt, isActive } = body;
 
     const member = await updatePrepaidPass(memberId, {
+      customerId:
+        customer_id != null && customer_id !== '' ? Number(customer_id) : undefined,
       name,
       phone,
       email,

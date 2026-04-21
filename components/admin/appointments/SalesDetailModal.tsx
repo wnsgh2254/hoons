@@ -19,7 +19,6 @@ interface SalesDetailModalProps {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  onSendStatement?: () => void;
 }
 
 export default function SalesDetailModal({
@@ -28,7 +27,6 @@ export default function SalesDetailModal({
   onClose,
   onEdit,
   onDelete,
-  onSendStatement,
 }: SalesDetailModalProps) {
   const [loading, setLoading] = useState(false);
   const [detailData, setDetailData] = useState<SalesDetailData | null>(null);
@@ -298,11 +296,6 @@ export default function SalesDetailModal({
                   )}
                   {onDelete && (
                     <Button variant="outline" onClick={onDelete} className="w-full">삭제</Button>
-                  )}
-                  {onSendStatement && (
-                    <Button variant="outline" onClick={onSendStatement} className="w-full">
-                      판매내역서 발송
-                    </Button>
                   )}
                 </div>
               </div>

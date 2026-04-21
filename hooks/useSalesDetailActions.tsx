@@ -6,6 +6,7 @@ import SalesRegistrationModal from '@/components/admin/appointments/SalesRegistr
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesDetailData } from '@/lib/types';
+import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
 
 type SalesRegistrationCustomer = {
   id: number;
@@ -80,11 +81,6 @@ export function useSalesDetailActions({
     setIsDeleteAlertOpen(true);
   };
 
-  const handleSendStatement = () => {
-    // TODO: 판매내역서 발송 기능 구현
-    console.log('Send statement:', detailData);
-  };
-
   const confirmDelete = async () => {
     if (!deletingId) return;
     try {
@@ -112,7 +108,6 @@ export function useSalesDetailActions({
         onClose={closeDetail}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        onSendStatement={handleSendStatement}
       />
 
       <AlertModal
@@ -138,6 +133,21 @@ export function useSalesDetailActions({
         onComplete={async () => {
           resetRegistration();
           await onRefresh?.();
+        }}
+        onEditComplete={async (saleId) => {
+          try {
+            const res = await fetch(`/api/sales/${saleId}`);
+            const data = await res.json();
+            if (!res.ok || !data.sale) {
+              throw new Error(data.error || '판매를 불러오지 못했습니다.');
+            }
+            setDetailData(mapSaleRecordToDetailData(data.sale));
+            setIsDetailOpen(true);
+            await onRefresh?.();
+          } catch (e: any) {
+            console.error(e);
+            alert(e?.message || '수정된 판매를 표시하지 못했습니다.');
+          }
         }}
       />
     </>
