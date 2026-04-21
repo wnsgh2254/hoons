@@ -37,23 +37,9 @@ export default function CustomersPage() {
   const [customerInfoTab, setCustomerInfoTab] = useState<'sales' | 'bookings' | 'prepaid'>('sales');
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [bookingCustomer, setBookingCustomer] = useState<{ id: number; name: string; phone: string } | null>(null);
-
-  // NewBookingModal state (same shape as admin/appointments page)
-  const [newBookingCustomerSearch, setNewBookingCustomerSearch] = useState('');
-  const [newBookingDate, setNewBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newBookingTimeSlots, setNewBookingTimeSlots] = useState<NewBookingTimeSlot[]>([
     { ...DEFAULT_NEW_BOOKING_TIME_SLOT },
   ]);
-  const [newBookingDesigners, setNewBookingDesigners] = useState<any[]>([]);
-  const [newBookingServices, setNewBookingServices] = useState<{ id: number; name: string; duration_minutes: number }[]>([]);
-  const [newBookingMemo, setNewBookingMemo] = useState('');
-  const [newBookingSubmitting, setNewBookingSubmitting] = useState(false);
-  const [newBookingLoadingOptions, setNewBookingLoadingOptions] = useState(false);
-  const [newBookingShopId, setNewBookingShopId] = useState<number | null>(null);
-  const [newBookingSelectedCustomerId, setNewBookingSelectedCustomerId] = useState<number | null>(null);
-  const [newBookingCustomerSearchResults, setNewBookingCustomerSearchResults] = useState<any[]>([]);
-  const [newBookingIsCustomerSearching, setNewBookingIsCustomerSearching] = useState(false);
-  const [isCustomerRegistrationModalOpen, setIsCustomerRegistrationModalOpen] = useState(false);
 
   // Sales Detail Modal + edit/delete actions (shared hook)
   const salesActions = useSalesDetailActions({
@@ -110,46 +96,6 @@ export default function CustomersPage() {
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
-  // Comment: Load shops/designers/services when New Booking modal opens
-  useEffect(() => {
-    if (!isBookingModalOpen) return;
-    setNewBookingLoadingOptions(true);
-    const targetDate = newBookingDate || new Date().toISOString().split('T')[0];
-    const loadShops = async () => {
-      const res = await fetch('/api/shops');
-      const json = await res.json();
-      if (res.ok) {
-        const shops = json.shops || [];
-        if (shops.length > 0) setNewBookingShopId((prev) => prev ?? shops[0].id);
-      }
-    };
-    const loadDesigners = async () => {
-      const res = await fetch(`/api/working-designers?date=${encodeURIComponent(targetDate)}`);
-      const json = await res.json();
-      if (res.ok) setNewBookingDesigners(json.designers || []);
-    };
-    const loadServices = async () => {
-      const res = await fetch('/api/booking-modal-services');
-      const json = await res.json();
-      if (res.ok) {
-        const activeServices = (json.services || []).filter((s: any) => s.is_active !== false);
-        setNewBookingServices(activeServices);
-      }
-    };
-    Promise.all([loadShops(), loadDesigners(), loadServices()]).finally(() =>
-      setNewBookingLoadingOptions(false)
-    );
-  }, [isBookingModalOpen, newBookingDate]);
-
-  // Comment: Pre-fill customer when opening booking modal from customer row
-  useEffect(() => {
-    if (isBookingModalOpen && bookingCustomer) {
-      setNewBookingSelectedCustomerId(bookingCustomer.id);
-      setNewBookingCustomerSearchResults([bookingCustomer]);
-      setNewBookingCustomerSearch(bookingCustomer.name);
-    }
-  }, [isBookingModalOpen, bookingCustomer]);
-
   // Comment: Format phone number for display
   const formatPhone = (phone: string | null) => {
     if (!phone) return '-';
@@ -178,7 +124,10 @@ export default function CustomersPage() {
     setCustomerInfoLoading(true);
     setViewingCustomerId(customerId);
     try {
-      const customerRes = await fetch(`/api/customers/${customerId}`);
+      const [customerRes, statsRes] = await Promise.all([
+        fetch(`/api/customers/${customerId}`),
+        fetch(`/api/customers/${customerId}/stats`),
+      ]);
       const customerData = await customerRes.json();
 
       if (!customerRes.ok || !customerData.customer) {
@@ -187,98 +136,18 @@ export default function CustomersPage() {
         return;
       }
 
-      const baseCustomer = customerData.customer;
-      setViewingCustomer(baseCustomer);
-
-      // Background: detailed stats
-      void (async () => {
-        try {
-          const [bookingsRes, prepaidRes, salesRes, refundsRes] = await Promise.all([
-            fetch(`/api/appointment?customer_id=${customerId}&limit=500`),
-            fetch(`/api/prepaid?customer_id=${customerId}`).catch(() => null),
-            fetch(`/api/sales?customer_id=${customerId}`).catch(() => null),
-            fetch(`/api/refunds?customer_id=${customerId}`).catch(() => null),
-          ]);
-
-          const bookingsData = await bookingsRes.json();
-          const prepaidData = prepaidRes ? await prepaidRes.json() : null;
-          const salesData = salesRes ? await salesRes.json().catch(() => null) : null;
-          const refundsData = refundsRes ? await refundsRes.json().catch(() => null) : null;
-          const bookings = bookingsData.bookings || [];
-
-          const salesTotal = (salesData?.sales || []).reduce(
-            (sum: number, s: any) => sum + Number(s.total_amount || 0),
-            0,
-          );
-          const refundsTotal = (refundsData?.refunds || []).reduce(
-            (sum: number, r: any) => sum + Number(r.total_amount || 0),
-            0,
-          );
-          const totalSales = salesTotal - refundsTotal;
-
-          const completedBookings = bookings.filter(
-            (b: any) => b.status === 'PAID' || b.status === 'COMPLETED',
-          );
-          const lastBooking = completedBookings.sort((a: any, b: any) => {
-            const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);
-            const dateB = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-            return dateB.getTime() - dateA.getTime();
-          })[0];
-
-          const lastVisitDate = lastBooking ? lastBooking.booking_date : null;
-          let daysSinceLastVisit = null as number | null;
-          if (lastVisitDate) {
-            const diffTime = new Date().getTime() - new Date(lastVisitDate).getTime();
-            daysSinceLastVisit = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          }
-
-          const oneYearAgo = new Date();
-          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-          const recentBookings = bookings.filter((b: any) => new Date(b.booking_date) >= oneYearAgo);
-          const appointmentsCount = recentBookings.length;
-          const cancelledCount = recentBookings.filter((b: any) => b.status === 'CANCELLED').length;
-
-          const upcomingBookings = bookings
-            .filter((b: any) => {
-              const bookingDate = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-              return bookingDate > new Date() && (b.status === 'BOOKED' || b.status === 'CONFIRMED' || !b.status);
-            })
-            .sort((a: any, b: any) => {
-              const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);
-              const dateB = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-              return dateA.getTime() - dateB.getTime();
-            });
-          const nextAppointment = upcomingBookings[0]
-            ? { date: upcomingBookings[0].booking_date, time: upcomingBookings[0].booking_time || '' }
-            : null;
-
-          const prepaidTickets = prepaidData?.prepaid || [];
-          const totalPrepaidBalance =
-            Number(prepaidData?.totalPoints ?? 0) ||
-            prepaidTickets.reduce(
-              (sum: number, ticket: any) =>
-                sum + (Number(ticket.balance ?? ticket.points) || 0),
-              0,
-            );
-
-          setViewingCustomer((prev: any) => {
-            if (!prev || prev.id !== baseCustomer.id) return prev;
-            return {
-              ...prev,
-              last_visit_date: lastVisitDate,
-              days_since_last_visit: daysSinceLastVisit,
-              appointments_count: appointmentsCount,
-              cancelled_count: cancelledCount,
-              next_appointment: nextAppointment,
-              prepaid_tickets: prepaidTickets,
-              prepaid_balance: totalPrepaidBalance,
-              total_sales: totalSales,
-            };
-          });
-        } catch (err) {
-          console.error('Error loading detailed customer stats:', err);
-        }
-      })();
+      const statsData = statsRes.ok ? await statsRes.json() : {};
+      setViewingCustomer({
+        ...customerData.customer,
+        last_visit_date: statsData.last_visit_date ?? null,
+        days_since_last_visit: statsData.days_since_last_visit ?? null,
+        appointments_count: statsData.appointments_count ?? 0,
+        cancelled_count: statsData.cancelled_count ?? 0,
+        next_appointment: statsData.next_appointment ?? null,
+        prepaid_tickets: statsData.prepaid_tickets ?? [],
+        prepaid_balance: statsData.prepaid_balance ?? 0,
+        total_sales: statsData.total_sales ?? 0,
+      });
     } catch (err) {
       console.error('Error loading customer info:', err);
       alert('고객 정보를 불러오는 중 오류가 발생했습니다.');
@@ -426,36 +295,11 @@ export default function CustomersPage() {
         onClose={() => {
           setIsBookingModalOpen(false);
           setBookingCustomer(null);
-          setNewBookingSelectedCustomerId(null);
-          setNewBookingCustomerSearchResults([]);
-          setNewBookingCustomerSearch('');
           setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
         }}
         selectedDate={new Date().toISOString().split('T')[0]}
-        newBookingCustomerSearch={newBookingCustomerSearch}
-        newBookingDate={newBookingDate}
         newBookingTimeSlots={newBookingTimeSlots}
-        newBookingDesigners={newBookingDesigners}
-        newBookingServices={newBookingServices}
-        newBookingMemo={newBookingMemo}
-        newBookingSubmitting={newBookingSubmitting}
-        newBookingLoadingOptions={newBookingLoadingOptions}
-        newBookingShopId={newBookingShopId}
-        newBookingSelectedCustomerId={newBookingSelectedCustomerId}
-        newBookingCustomerSearchResults={newBookingCustomerSearchResults}
-        newBookingIsCustomerSearching={newBookingIsCustomerSearching}
-        setNewBookingCustomerSearch={setNewBookingCustomerSearch}
-        setNewBookingDate={setNewBookingDate}
         setNewBookingTimeSlots={setNewBookingTimeSlots}
-        setNewBookingMemo={setNewBookingMemo}
-        setNewBookingSubmitting={setNewBookingSubmitting}
-        setIsCustomerRegistrationModalOpen={setIsCustomerRegistrationModalOpen}
-        setBookingSuccessMessage={() => {}}
-        setBookings={() => {}}
-        setFilteredBookings={() => {}}
-        setNewBookingSelectedCustomerId={setNewBookingSelectedCustomerId}
-        setNewBookingCustomerSearchResults={setNewBookingCustomerSearchResults}
-        setNewBookingIsCustomerSearching={setNewBookingIsCustomerSearching}
         onSuccess={(message) => {
           setIsBookingModalOpen(false);
           setBookingCustomer(null);

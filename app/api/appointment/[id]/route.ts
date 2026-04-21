@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { calculatePolicyRefundAmount } from '@/lib/cancellation-policy';
 import { refundStripeDepositForBooking } from '@/lib/refund-stripe-deposit';
+import { isCancelledBookingStatus } from '@/lib/booking-status';
 
 // Comment: Update a single booking (date/time/status etc.)
 export async function PATCH(
@@ -126,7 +128,7 @@ export async function PATCH(
     const refundStripeDeposit =
       body.refund_stripe_deposit === true || body.refund_stripe_deposit === 'true';
     const statusRaw = typeof body.status === 'string' ? body.status.trim() : '';
-    const isCancelling = /^(cancelled|canceled)$/i.test(statusRaw);
+    const isCancelling = isCancelledBookingStatus(statusRaw);
 
     if (refundStripeDeposit && isCancelling) {
       // Comment: Use * so missing optional columns (before SQL migration) does not break the query.
@@ -150,12 +152,17 @@ export async function PATCH(
 
       const depositPaid = Math.max(0, Number((refundRow as any).deposit_paid) || 0);
       const alreadyRefundedDb = (refundRow as any).deposit_refunded_at != null;
+      const policyRefund = calculatePolicyRefundAmount(
+        depositPaid,
+        typeof (refundRow as any).booking_date === 'string' ? (refundRow as any).booking_date : null,
+      );
 
       if (!alreadyRefundedDb && depositPaid > 0) {
         const result = await refundStripeDepositForBooking({
           bookingId: Number(id),
           stripePaymentIntentId: (refundRow as any).stripe_payment_intent_id,
           depositPaidAud: depositPaid,
+          refundAmountAud: policyRefund.refundAmountAud,
         });
 
         if (!result.ok) {
@@ -169,6 +176,7 @@ export async function PATCH(
           );
         }
 
+        let refundedAmountAud = 0;
         if ('skipped' in result && result.skipped) {
           if (
             result.reason.includes('fully refunded') ||
@@ -179,6 +187,49 @@ export async function PATCH(
         } else if ('refundId' in result) {
           updates.deposit_refunded_at = new Date().toISOString();
           updates.stripe_refund_id = result.refundId;
+          refundedAmountAud = Math.max(
+            0,
+            Number((result as any).refundedAmountAud || policyRefund.refundAmountAud || 0),
+          );
+        }
+
+        if (refundedAmountAud > 0) {
+          const { data: refundHeader, error: refundHeaderError } = await supabase
+            .from('refunds')
+            .insert({
+              customer_id: (refundRow as any).customer_id || null,
+              shop_id: (refundRow as any).shop_id || null,
+              total_amount: refundedAmountAud,
+              point_deduction: 0,
+              cash_amount: 0,
+              card_amount: refundedAmountAud,
+              bank_transfer_amount: 0,
+              memo: `Booking #${id} deposit refund (${Math.round(policyRefund.refundRate * 100)}%)`,
+              refund_date: new Date().toISOString().split('T')[0],
+              refund_time: new Date().toTimeString().slice(0, 5),
+            })
+            .select('id')
+            .single();
+
+          if (refundHeaderError) {
+            console.error('Failed to create deposit refund header:', refundHeaderError);
+          } else if (refundHeader?.id) {
+            const { error: refundItemError } = await supabase
+              .from('refund_items')
+              .insert({
+                refund_id: refundHeader.id,
+                item_type: 'deposit',
+                item_name: 'Booking deposit refund',
+                unit_price: refundedAmountAud,
+                quantity: 1,
+                amount: refundedAmountAud,
+                manager: null,
+              });
+
+            if (refundItemError) {
+              console.error('Failed to create deposit refund item:', refundItemError);
+            }
+          }
         }
       }
     }

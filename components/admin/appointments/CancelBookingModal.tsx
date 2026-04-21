@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { calculatePolicyRefundAmount } from '@/lib/cancellation-policy';
 import type { BookingWithRelations } from '@/lib/types';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -37,13 +38,15 @@ export default function CancelBookingModal({
     ? Math.max(0, Number(booking.deposit_paid ?? (booking as any).depositPaid ?? 0) || 0)
     : 0;
   const alreadyRefunded = Boolean(booking?.deposit_refunded_at);
-  const canOfferRefund = depositPaid > 0 && !alreadyRefunded;
+  const policyRefund = calculatePolicyRefundAmount(depositPaid, booking?.booking_date);
+  const canOfferRefund = depositPaid > 0 && !alreadyRefunded && policyRefund.refundAmountAud > 0;
 
   useEffect(() => {
     if (!isOpen || !booking) return;
     const paid = Math.max(0, Number(booking.deposit_paid ?? (booking as any).depositPaid ?? 0) || 0);
     const refunded = Boolean(booking.deposit_refunded_at);
-    setRefundStripeDeposit(paid > 0 && !refunded);
+    const policy = calculatePolicyRefundAmount(paid, booking.booking_date);
+    setRefundStripeDeposit(paid > 0 && !refunded && policy.refundAmountAud > 0);
     setSelectedReason('');
   }, [isOpen, booking?.id]);
 
@@ -124,6 +127,21 @@ export default function CancelBookingModal({
             이 예약의 카드 예약금은 이미 환불 처리된 기록이 있습니다.
           </p>
         )}
+        {depositPaid > 0 && !alreadyRefunded && (
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700 space-y-1">
+            <p className="font-medium text-gray-900">Cancellation refund policy</p>
+            <p>{policyRefund.label}</p>
+            <p>
+              Refund amount:{' '}
+              <span className="font-semibold tabular-nums">
+                {policyRefund.refundAmountAud.toLocaleString('en-AU', {
+                  style: 'currency',
+                  currency: 'AUD',
+                })}
+              </span>
+            </p>
+          </div>
+        )}
         {canOfferRefund && (
           <label className="flex items-start gap-2 cursor-pointer text-sm text-gray-800">
             <input
@@ -140,6 +158,11 @@ export default function CancelBookingModal({
               을 Stripe로 환불합니다
             </span>
           </label>
+        )}
+        {depositPaid > 0 && !alreadyRefunded && !canOfferRefund && (
+          <p className="text-xs text-gray-600">
+            This cancellation falls under the same-day cancellation policy, so the paid deposit will not be refunded.
+          </p>
         )}
       </div>
     </Modal>

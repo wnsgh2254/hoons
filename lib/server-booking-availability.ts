@@ -1,13 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isExpiredPendingBooking } from '@/lib/pending-bookings';
 import {
   dbTimeStringToMinutes,
   isStartSlotUnavailable,
   timeLabelToMinutes,
 } from '@/lib/booking-time-math';
 import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
+import { loadDesignerWorkingScheduleRowsForShopDate } from '@/lib/designer-availability';
 import { resolvePerShopTimeOffOutcomes, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import { assertMultiVenueDefaultShopAllowsBooking } from '@/lib/multi-venue-default-shop';
+
+const DESIGNER_TIME_OFF_REASONS = ['\uC784\uC758 \uD734\uC77C', '\uD2B9\uBCC4 \uADF8\uBB34\uC77C'];
 
 /** Comment: Merge overlapping [start,end) minute intervals from midnight */
 function mergeMinuteIntervals(intervals: { start: number; end: number }[]): { start: number; end: number }[] {
@@ -36,25 +40,11 @@ export async function loadDesignerWorkingIntervalsForShopDate(
   supabase: SupabaseClient,
   params: { designerId: number; shopId: number; date: string },
 ): Promise<{ start: number; end: number }[] | null> {
-  const weekday = salonCalendarWeekdayIndex(params.date);
-  const { data, error } = await supabase
-    .from('designer_schedules')
-    .select('start_time, end_time')
-    .eq('designer_id', params.designerId)
-    .eq('shop_id', params.shopId)
-    .eq('weekday', weekday)
-    .lte('effective_from', params.date)
-    .or(`effective_to.is.null,effective_to.gte.${params.date}`);
-
-  if (error) {
-    console.error('loadDesignerWorkingIntervalsForShopDate:', error);
-    return null;
-  }
+  const data = await loadDesignerWorkingScheduleRowsForShopDate(supabase, params);
   const raw: { start: number; end: number }[] = [];
   for (const row of data || []) {
-    const r = row as { start_time?: string | null; end_time?: string | null };
-    const start = dbTimeStringToMinutes(r.start_time);
-    const end = dbTimeStringToMinutes(r.end_time);
+    const start = dbTimeStringToMinutes(row.start_time);
+    const end = dbTimeStringToMinutes(row.end_time);
     if (end > start) {
       raw.push({ start, end });
     }
@@ -138,7 +128,7 @@ export async function loadDesignerAvailabilityForPublicBooking(
 
   const { data: bookings, error: bErr } = await supabase
     .from('bookings')
-    .select('booking_time, status, service:service_id(duration_minutes), custom_service_duration')
+    .select('booking_time, status, created_at, service:service_id(duration_minutes), custom_service_duration')
     .eq('designer_id', designerId)
     .eq('shop_id', shopId)
     .eq('booking_date', date);
@@ -152,6 +142,9 @@ export async function loadDesignerAvailabilityForPublicBooking(
   for (const b of bookings || []) {
     if (!b.booking_time) continue;
     if (isCancelledStatus((b as { status?: string | null }).status)) continue;
+    if (isExpiredPendingBooking((b as { status?: string | null }).status, (b as { created_at?: string | null }).created_at)) {
+      continue;
+    }
     const start = dbTimeStringToMinutes(b.booking_time);
     const dur = bookingDurationMinutes(b as any);
     bookingIntervals.push({ start, end: start + dur });
@@ -209,7 +202,7 @@ export async function assertPublicBookingSlotAvailable(
     .from('designer_time_off')
     .select('id, designer_id, shop_id, reason, created_at')
     .eq('designer_id', params.designerId)
-    .in('reason', ['임의 휴일', '특별 근무일'])
+    .in('reason', DESIGNER_TIME_OFF_REASONS)
     .lte('start_date', params.date)
     .gte('end_date', params.date);
 

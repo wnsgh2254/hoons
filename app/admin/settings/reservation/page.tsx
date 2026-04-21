@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { invalidateStaffCache } from '@/hooks/useStaff';
 import {
   AdminPageLayout,
   PageHeader,
@@ -768,14 +769,15 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       const currentData = await currentRes.json();
       const currentSchedules: any[] = currentData.schedules || [];
 
-      // Expand new schedules to individual (weekday, start_time, end_time) entries
-      const newEntries: { weekday: number; start_time: string; end_time: string }[] = [];
+      // Expand new schedules to individual (weekday, shop_id, start_time, end_time) entries
+      const newEntries: { weekday: number; shop_id: number | null; start_time: string; end_time: string }[] = [];
       for (const sched of data.schedules) {
         for (const day of sched.days) {
           const weekday = KOREAN_TO_WEEKDAY[day];
           if (weekday !== undefined) {
             newEntries.push({
               weekday,
+              shop_id: sched.shopId ?? null,
               start_time: sched.startTime + ':00',
               end_time: sched.endTime + ':00',
             });
@@ -789,7 +791,10 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       for (const cs of activeCurrent) {
         const match = newEntries.find(
           (ne) =>
-            ne.weekday === cs.weekday && ne.start_time === cs.start_time && ne.end_time === cs.end_time,
+            ne.weekday === cs.weekday &&
+            ne.start_time === cs.start_time &&
+            ne.end_time === cs.end_time &&
+            (ne.shop_id == null || cs.shop_id == null || ne.shop_id === cs.shop_id),
         );
         if (!match) deleteIds.push(cs.id);
       }
@@ -798,7 +803,10 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       for (const ne of newEntries) {
         const match = activeCurrent.find(
           (cs) =>
-            cs.weekday === ne.weekday && cs.start_time === ne.start_time && cs.end_time === ne.end_time,
+            cs.weekday === ne.weekday &&
+            cs.start_time === ne.start_time &&
+            cs.end_time === ne.end_time &&
+            (ne.shop_id == null || cs.shop_id == null || cs.shop_id === ne.shop_id),
         );
         if (!match) entriesToAdd.push(ne);
       }
@@ -836,6 +844,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
         }).catch((e) => console.warn('weekday defaults save skipped:', e));
       }
 
+      invalidateStaffCache();
       // Refetch all resources
       fetchResources();
     } catch (err) {

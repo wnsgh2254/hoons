@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
 import { getWeekStart, getWeekEnd } from '@/lib/utils/appointment-utils';
 import { loadDesignerShopsMap, mergeDesignerShopIds } from '@/lib/designer-multi-venue';
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     const dayCounts: Record<number, number> = {};
     (monthBookingsRes.data || []).forEach((b: { booking_date: string; status: string | null }) => {
-      if (String(b.status || '').toLowerCase() === 'cancelled') return;
+      if (isCancelledBookingStatus(b.status)) return;
       const day = new Date(b.booking_date).getDate();
       if (!Number.isNaN(day)) {
         dayCounts[day] = (dayCounts[day] || 0) + 1;

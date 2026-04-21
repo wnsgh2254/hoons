@@ -9,18 +9,19 @@ function getStripe(): Stripe {
 }
 
 export type RefundDepositResult =
-  | { ok: true; refundId: string }
+  | { ok: true; refundId: string; refundedAmountAud: number }
   | { ok: true; skipped: true; reason: string }
   | { ok: false; error: string };
 
 /**
- * Full refund of the card deposit PaymentIntent for a booking.
+ * Refund the card deposit PaymentIntent for a booking.
  * Uses stored stripe_payment_intent_id when present; otherwise Stripe metadata search by booking_id.
  */
 export async function refundStripeDepositForBooking(params: {
   bookingId: number;
   stripePaymentIntentId: string | null | undefined;
   depositPaidAud: number;
+  refundAmountAud?: number | null;
 }): Promise<RefundDepositResult> {
   const { bookingId, depositPaidAud } = params;
   if (!Number.isFinite(depositPaidAud) || depositPaidAud <= 0) {
@@ -77,11 +78,28 @@ export async function refundStripeDepositForBooking(params: {
     return { ok: true, skipped: true, reason: "Deposit was already fully refunded in Stripe." };
   }
 
+  const requestedRefundAud = Math.max(
+    0,
+    Number(params.refundAmountAud ?? depositPaidAud) || 0,
+  );
+  if (requestedRefundAud <= 0) {
+    return { ok: true, skipped: true, reason: "Policy refund amount is zero." };
+  }
+
+  const remainingCents = Math.max(0, received - alreadyRefunded);
+  const requestedRefundCents = Math.round(requestedRefundAud * 100);
+  const refundCents = Math.min(requestedRefundCents, remainingCents);
+
+  if (refundCents <= 0) {
+    return { ok: true, skipped: true, reason: "No refundable deposit remains in Stripe." };
+  }
+
   try {
     const refund = await stripe.refunds.create({
       payment_intent: piId,
+      amount: refundCents,
     });
-    return { ok: true, refundId: refund.id };
+    return { ok: true, refundId: refund.id, refundedAmountAud: refundCents / 100 };
   } catch (e: unknown) {
     const err = e as { code?: string; message?: string };
     const code = err?.code ?? "";

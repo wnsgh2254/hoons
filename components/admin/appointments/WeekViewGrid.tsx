@@ -53,6 +53,7 @@ interface WeekViewGridProps {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null;
   bookingMenuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
   setBookingMenuPosition: (pos: {
@@ -62,6 +63,7 @@ interface WeekViewGridProps {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null) => void;
   menuCloseTimeoutRef: React.RefObject<NodeJS.Timeout | null>;
   menuOriginalPositionRef: React.RefObject<{ top: number; left: number; width: number } | null>;
@@ -311,7 +313,6 @@ export default function WeekViewGrid({
           <div
             key={dayIndex}
             className={`relative h-full overflow-hidden ${isDayOff ? 'bg-gray-100/50' : ''}`}
-            style={isDayOff ? { pointerEvents: 'none' as const } : undefined}
           >
             {/* Comment: Render restriction blocks (greyout) - skip on holidays */}
             {!isDayOff && dayRestrictions.map((restriction: any) => {
@@ -405,10 +406,8 @@ export default function WeekViewGrid({
               const slotTop = (slotMinutes / 30) * GRID_30MIN_HEIGHT + 8;
               const slotHeight = GRID_30MIN_HEIGHT;
 
-              // Check if this slot is fully covered by bookings (across all sub-columns).
-              // We still render the empty-slot layer for partially-covered slots so the
-              // visible empty area (next to a half-width card) remains clickable.
-              const coveringBookings = dayBookings.filter((b) => {
+              // Check if this slot has a booking
+              const activeSlotBookings = dayBookings.filter((b) => {
                 if (!b.booking_time) return false;
                 const [bHour, bMin] = b.booking_time.split(':').map(Number);
                 const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
@@ -416,34 +415,48 @@ export default function WeekViewGrid({
                 const bEndMinutes = bStartMinutes + bDuration;
                 return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
               });
-              let slotFullyCovered = false;
-              let slotLeftCovered = false;
-              let slotRightCovered = false;
-              for (const cb of coveringBookings) {
-                let cbHasOverlap = false;
-                let cbPlaceOnRight = false;
-                const [cbhStr, cbmStr] = (cb.booking_time as string).split(':');
-                const cbStart =
-                  (Number(cbhStr) - GRID_START_HOUR) * 60 + Number(cbmStr);
-                const cbEnd = cbStart + getBookingDurationMinutes(cb as any);
+              let occupiedLeft = false;
+              let occupiedRight = false;
+              let occupiedFull = false;
+              activeSlotBookings.forEach((booking) => {
+                const [hourStr, minuteStr] = (booking.booking_time || '').split(':');
+                const hour = Number(hourStr);
+                const minutes = Number(minuteStr);
+                if (Number.isNaN(hour) || Number.isNaN(minutes)) return;
+                const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
+                const durationMinutes = getBookingDurationMinutes(booking as any);
+                const endMinutes = startMinutes + durationMinutes;
+                let hasOverlap = false;
+                let placeOnRight = false;
                 dayBookings.forEach((other: any) => {
-                  if (other === cb || !other.booking_time) return;
-                  const [ohStr, omStr] = other.booking_time.split(':');
-                  const oStart = (Number(ohStr) - GRID_START_HOUR) * 60 + Number(omStr);
-                  const oEnd = oStart + getBookingDurationMinutes(other);
-                  if (Math.max(cbStart, oStart) < Math.min(cbEnd, oEnd)) {
-                    cbHasOverlap = true;
-                    if ((other as any).id < (cb as any).id) cbPlaceOnRight = true;
+                  if (other === booking || !other.booking_time) return;
+                  const [ohStr, omStr] = other.booking_time.split(':').map(Number);
+                  if (Number.isNaN(ohStr) || Number.isNaN(omStr)) return;
+                  const otherStart = (ohStr - GRID_START_HOUR) * 60 + omStr;
+                  const otherDuration = getBookingDurationMinutes(other as any);
+                  const otherEnd = otherStart + otherDuration;
+                  const overlap =
+                    Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);
+                  if (overlap) {
+                    hasOverlap = true;
+                    if ((other as any).id < (booking as any).id) {
+                      placeOnRight = true;
+                    }
                   }
                 });
-                if (!cbHasOverlap) {
-                  slotFullyCovered = true;
-                  break;
+                if (!hasOverlap) {
+                  occupiedFull = true;
+                  return;
                 }
-                if (cbPlaceOnRight) slotRightCovered = true;
-                else slotLeftCovered = true;
-              }
-              const hasBooking = slotFullyCovered || (slotLeftCovered && slotRightCovered);
+                if (placeOnRight) {
+                  occupiedRight = true;
+                } else {
+                  occupiedLeft = true;
+                }
+              });
+              const hasEmptyLane = !occupiedFull && !(occupiedLeft && occupiedRight);
+              const emptyLeftPercent = occupiedLeft && !occupiedRight ? 50 : 0;
+              const emptyWidthPercent = occupiedLeft || occupiedRight ? 50 : 100;
 
               // Check if this slot is restricted and get restriction info
               const slotRestriction = dayRestrictions.find((r: any) => {
@@ -459,7 +472,7 @@ export default function WeekViewGrid({
               });
               const isRestricted = !!slotRestriction;
 
-              if (hasBooking || !weekViewDesignerId || isDayOff) return null;
+              if (!hasEmptyLane || !weekViewDesignerId || isDayOff) return null;
 
               const slotKey = `week-${dateStr}-${weekViewDesignerId}-${slotTime}`;
               const isHovered =
@@ -495,8 +508,8 @@ export default function WeekViewGrid({
                   style={{
                     top: slotTop,
                     height: slotHeight,
-                    left: slotLeftStyle,
-                    right: slotRightStyle,
+                    left: `${emptyLeftPercent}%`,
+                    width: `${emptyWidthPercent}%`,
                     pointerEvents:
                       (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction)
                         ? 'none'
@@ -993,7 +1006,7 @@ export default function WeekViewGrid({
                   key={b.id}
                   booking={b}
                   className="absolute"
-                  style={{ top, height, zIndex: 1, left: `${leftPercent}%`, width: `${widthPercent}%`, paddingLeft: 4, paddingRight: 4 }}
+                  style={{ top, height, zIndex: 1, left: `${leftPercent}%`, width: `${widthPercent}%`, paddingLeft: 4, paddingRight: 4, pointerEvents: 'auto' }}
                   hoveredBooking={hoveredBooking}
                   bookingMenuOpen={bookingMenuOpen}
                   hoverCardPosition={hoverCardPosition}
@@ -1070,17 +1083,25 @@ export default function WeekViewGrid({
                           const scrollTop = scrollContainer?.scrollTop || 0;
                           const scrollLeft = scrollContainer?.scrollLeft || 0;
                           
-                          const menuTop = cardRect.bottom + 4;
+                          const menuEstimatedHeight = 280;
+                          const viewportPadding = 12;
+                          const spaceBelow = window.innerHeight - cardRect.bottom;
+                          const spaceAbove = cardRect.top;
+                          const placement =
+                            spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+                          const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
                           const menuLeft = cardRect.left;
-                          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+                          const menuWidth = cellContainer
+                            ? Math.max(cellContainer.getBoundingClientRect().width - 8, 180)
+                            : cardRect.width;
                           
                           setBookingMenuPosition({
-                            top: menuTop,
-                            triggerTop: cardRect.top,
+                            top: Math.max(menuTop, viewportPadding),
                             left: menuLeft,
                             width: menuWidth,
                             scrollTop,
                             scrollLeft,
+                            placement,
                           });
                         }
                       setBookingMenuOpen(b.id);
@@ -1238,6 +1259,7 @@ export default function WeekViewGrid({
                             className="bg-white border border-gray-200 rounded-lg shadow-lg"
                             style={{
                               width: '100%',
+                              transform: bookingMenuPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
                             }}
                             onNewBooking={() => {
                             setIsNewBookingOpen?.(true);

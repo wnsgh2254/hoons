@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { invalidateStaffCache } from '@/hooks/useStaff';
 import Link from 'next/link';
 import {
   AdminPageLayout,
@@ -176,6 +177,7 @@ export default function SalarySettingsPage() {
         return;
       }
       await fetchStaff();
+      invalidateStaffCache();
       alert('저장되었습니다.');
       closeEditModal();
     } catch (e) {

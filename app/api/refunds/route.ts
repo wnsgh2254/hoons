@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import {
+  adjustInventoryStockForSaleItem,
+  adjustPrepaidBalance,
+} from '@/lib/sales-reconciliation';
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
 
@@ -156,6 +160,76 @@ export async function POST(request: NextRequest) {
       console.error('Error creating refund items:', itemsError);
       await supabase.from('refunds').delete().eq('id', refundHeader.id);
       return NextResponse.json({ error: 'Failed to register refund items.' }, { status: 500 });
+    }
+
+    const appliedInventoryAdjustments: Array<{ itemName: string; quantity: number }> = [];
+    const appliedPrepaidAdjustments: Array<{ passLabel: string; points: number }> = [];
+
+    try {
+      for (const item of items as any[]) {
+        const qty = Math.max(1, Number(item.quantity || 1));
+        const itemType = String(item.type || '');
+
+        if (itemType === 'product') {
+          await adjustInventoryStockForSaleItem(supabase, {
+            itemName: item.name,
+            quantityDelta: qty,
+          });
+          appliedInventoryAdjustments.push({
+            itemName: String(item.name || ''),
+            quantity: qty,
+          });
+          continue;
+        }
+
+        if (itemType === 'prepaid') {
+          const perCredit = Math.round(Number(item.prepaid_credit_points || 0));
+          const totalCredit = perCredit * qty;
+          if (totalCredit > 0) {
+            await adjustPrepaidBalance(supabase, {
+              customerId: Number(customer_id),
+              passLabel: String(item.name || 'Prepaid'),
+              pointsDelta: -totalCredit,
+            });
+            appliedPrepaidAdjustments.push({
+              passLabel: String(item.name || 'Prepaid'),
+              points: totalCredit,
+            });
+          }
+        }
+      }
+    } catch (reconciliationError: any) {
+      console.error('Error reconciling refund side effects:', reconciliationError);
+
+      for (const adjustment of appliedInventoryAdjustments.reverse()) {
+        try {
+          await adjustInventoryStockForSaleItem(supabase, {
+            itemName: adjustment.itemName,
+            quantityDelta: -adjustment.quantity,
+          });
+        } catch (rollbackError) {
+          console.error('Failed to rollback refund inventory adjustment:', rollbackError);
+        }
+      }
+
+      for (const adjustment of appliedPrepaidAdjustments.reverse()) {
+        try {
+          await adjustPrepaidBalance(supabase, {
+            customerId: Number(customer_id),
+            passLabel: adjustment.passLabel,
+            pointsDelta: adjustment.points,
+          });
+        } catch (rollbackError) {
+          console.error('Failed to rollback refund prepaid adjustment:', rollbackError);
+        }
+      }
+
+      await supabase.from('refund_items').delete().eq('refund_id', refundHeader.id);
+      await supabase.from('refunds').delete().eq('id', refundHeader.id);
+      return NextResponse.json(
+        { error: reconciliationError.message || 'Failed to reconcile refund.' },
+        { status: 400 },
+      );
     }
 
     return NextResponse.json(

@@ -41,6 +41,7 @@ import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
 import RefundRegistrationModal from '@/components/admin/appointments/RefundRegistrationModal';
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
+import { isCancelledBookingStatus, isUpcomingBookingStatus } from '@/lib/booking-status';
 import {
   GRID_START_HOUR,
   GRID_END_HOUR,
@@ -357,6 +358,8 @@ export default function AppointmentsManagementPage() {
   const [salesLinkedBookingId, setSalesLinkedBookingId] = useState<number | null>(null);
   /** 예약에 이미 납부된 예수금 (AUD), 판매 모달 합계 차감용 */
   const [salesLinkedDepositPaid, setSalesLinkedDepositPaid] = useState(0);
+  const [salesDefaultDate, setSalesDefaultDate] = useState<string | null>(null);
+  const [salesDefaultTime, setSalesDefaultTime] = useState<string | null>(null);
 
   // Shop ID for sales/refund modals
   const [salesRegistrationShopId, setSalesRegistrationShopId] = useState<number | null>(null);
@@ -527,6 +530,7 @@ export default function AppointmentsManagementPage() {
     width: number;
     scrollTop: number;
     scrollLeft: number;
+    placement: 'top' | 'bottom';
   } | null>(null);
   const bookingMenuOriginalPositionRef = useRef<{ top: number; left: number; width: number } | null>(null);
 
@@ -802,7 +806,7 @@ export default function AppointmentsManagementPage() {
           });
           const appointmentsCount = recentBookings.length;
           const cancelledCount = recentBookings.filter(
-            (b: any) => b.status === 'CANCELLED',
+            (b: any) => isCancelledBookingStatus(b.status),
           ).length;
 
           // Comment: 다음 예약
@@ -813,9 +817,7 @@ export default function AppointmentsManagementPage() {
               );
               return (
                 bookingDate > new Date() &&
-                (b.status === 'BOOKED' ||
-                  b.status === 'CONFIRMED' ||
-                  !b.status)
+                isUpcomingBookingStatus(b.status)
               );
             })
             .sort((a: any, b: any) => {
@@ -1050,7 +1052,7 @@ export default function AppointmentsManagementPage() {
 
         const counts: Record<number, number> = {};
         (data.bookings || []).forEach((b: { booking_date: string; status: string }) => {
-          if (b.status === 'cancelled') return;
+          if (isCancelledBookingStatus(b.status)) return;
           const d = new Date(b.booking_date);
           if (Number.isNaN(d.getTime())) return;
           counts[d.getDate()] = (counts[d.getDate()] || 0) + 1;
@@ -1612,7 +1614,7 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Filter upcoming bookings (exclude cancelled + past times for today in Sydney)
   const upcomingBookings = useMemo(() => {
-    const base = sortedBookings.filter((b) => b.status !== 'cancelled');
+    const base = sortedBookings.filter((b) => !isCancelledBookingStatus(b.status));
 
     const todaySydney = getSydneyToday();
     if (selectedDate !== todaySydney) {
@@ -1794,16 +1796,24 @@ export default function AppointmentsManagementPage() {
           const scrollContainer = document.getElementById('schedule-scroll-container');
           const scrollTop = scrollContainer?.scrollTop || 0;
           const scrollLeft = scrollContainer?.scrollLeft || 0;
-          const menuTop = cardRect.bottom + 4;
+          const menuEstimatedHeight = 280;
+          const viewportPadding = 12;
+          const spaceBelow = window.innerHeight - cardRect.bottom;
+          const spaceAbove = cardRect.top;
+          const placement =
+            spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+          const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
           const menuLeft = cardRect.left;
-          const menuWidth = cellContainer ? cellContainer.getBoundingClientRect().width - 8 : cardRect.width;
+          const menuWidth = cellContainer
+            ? Math.max(cellContainer.getBoundingClientRect().width - 8, 180)
+            : cardRect.width;
           setBookingMenuPosition({
-            top: menuTop,
-            triggerTop: cardRect.top,
+            top: Math.max(menuTop, viewportPadding),
             left: menuLeft,
             width: menuWidth,
             scrollTop,
             scrollLeft,
+            placement,
           });
         }
         setBookingMenuOpen(bookingId);
@@ -2038,19 +2048,35 @@ export default function AppointmentsManagementPage() {
         if (booking.id) {
           setSalesLinkedBookingId(booking.id);
         }
+        setSalesDefaultDate((booking as any).booking_date || selectedDate);
+        setSalesDefaultTime(
+          typeof (booking as any).booking_time === 'string' && (booking as any).booking_time.length >= 5
+            ? (booking as any).booking_time.slice(0, 5)
+            : null,
+        );
         setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
         setSalesDefaultManager((booking as any).designer?.name || null);
         setSalesLinkedDepositPaid(
           Math.max(0, Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0),
         );
-        setViewingCustomerId(customerId);
-        loadCustomerInfo(customerId);
-        setSalesRegistrationCustomer({
-          id: customerId,
-          name: customerName,
-          phone: customerPhone,
-        });
-        setIsSalesRegistrationModalOpen(true);
+        if (customerId) {
+          setCloseSalesFlowOnPickerClose(true);
+          setViewingCustomerId(customerId);
+          loadCustomerInfo(customerId);
+          setSalesRegistrationCustomer({
+            id: customerId,
+            name: customerName,
+            phone: customerPhone,
+          });
+          setIsSalesRegistrationModalOpen(true);
+          setSalesItemPickerTab('service');
+          setIsSalesItemPickerModalOpen(true);
+        } else {
+          alert('고객 정보가 없어 판매 등록을 할 수 없습니다.\n예약 수정에서 고객을 연결해 주세요.');
+        }
+        setBookingMenuOpen(null);
+        setBookingMenuPosition(null);
+        bookingMenuOriginalPositionRef.current = null;
       },
       onViewSaleDetail: async (booking) => {
         setBookingMenuOpen(null);
@@ -2708,14 +2734,26 @@ export default function AppointmentsManagementPage() {
                                 Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0,
                               ),
                             );
-                            setViewingCustomerId(customerId);
-                            loadCustomerInfo(customerId);
-                            setSalesRegistrationCustomer({
-                              id: customerId,
-                              name: customerName,
-                              phone: customerPhone,
-                            });
-                            setIsSalesRegistrationModalOpen(true);
+                            if (customerId) {
+                              setCloseSalesFlowOnPickerClose(true);
+                              setViewingCustomerId(customerId);
+                              loadCustomerInfo(customerId);
+                              setSalesRegistrationCustomer({
+                                id: customerId,
+                                name: customerName,
+                                phone: customerPhone,
+                              });
+                              setIsSalesRegistrationModalOpen(true);
+                              setSalesItemPickerTab('service');
+                              setIsSalesItemPickerModalOpen(true);
+                            } else {
+                              alert('고객 정보가 없어 판매 등록을 할 수 없습니다.\n예약 수정에서 고객을 연결해 주세요.');
+                            }
+                            setBookingMenuOpen(null);
+                            setBookingMenuPosition(null);
+                            if (bookingMenuOriginalPositionRef.current) {
+                              bookingMenuOriginalPositionRef.current = null;
+                            }
                           }}
                           movingBooking={movingBooking}
                           onSelectMoveTarget={(target) => {
@@ -2767,7 +2805,6 @@ export default function AppointmentsManagementPage() {
                                       className={`relative h-full overflow-hidden border-r ${isShopBoundary ? 'border-r-[3px] border-[#64748b]' : 'border-[#e2e8f0]'} last:border-r-0 ${isDesignerOff ? 'bg-gray-100/50' : ''}`}
                                       style={{
                                         minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px`,
-                                        ...(isDesignerOff ? { pointerEvents: 'none' as const } : {}),
                                       }}
                             >
                               {/* Comment: Render restriction blocks (greyout) */}
@@ -2860,11 +2897,9 @@ export default function AppointmentsManagementPage() {
                                 const slotTop = (slotMinutes / 30) * GRID_30MIN_HEIGHT + 8;
                                 const slotHeight = GRID_30MIN_HEIGHT;
                                 
-                                // Determine which sub-columns (left/right halves) of this slot
-                                // are covered by bookings. We render the empty-slot layer for
-                                // partially-covered slots so the visible empty area next to a
-                                // half-width card stays clickable.
-                                const coveringBookings = designerBookings.filter((b) => {
+                                // Comment: Track which half of the slot is occupied so partially empty space
+                                // remains clickable for overlapping bookings.
+                                const activeSlotBookings = designerBookings.filter((b) => {
                                   if (!b.booking_time) return false;
                                   const [bHour, bMin] = b.booking_time.split(':').map(Number);
                                   const bStartMinutes = (bHour - GRID_START_HOUR) * 60 + bMin;
@@ -2872,36 +2907,50 @@ export default function AppointmentsManagementPage() {
                                   const bEndMinutes = bStartMinutes + bDuration;
                                   return slotMinutes >= bStartMinutes && slotMinutes < bEndMinutes;
                                 });
-                                let slotFullyCovered = false;
-                                let slotLeftCovered = false;
-                                let slotRightCovered = false;
-                                for (const cb of coveringBookings) {
-                                  let cbHasOverlap = false;
-                                  let cbPlaceOnRight = false;
-                                  const [cbhStr, cbmStr] = (cb.booking_time as string).split(':');
-                                  const cbStart =
-                                    (Number(cbhStr) - GRID_START_HOUR) * 60 + Number(cbmStr);
-                                  const cbEnd = cbStart + getBookingDurationMinutes(cb as any);
+                                let occupiedLeft = false;
+                                let occupiedRight = false;
+                                let occupiedFull = false;
+                                activeSlotBookings.forEach((booking) => {
+                                  const [hourStr, minuteStr] = (booking.booking_time || '').split(':');
+                                  const hour = Number(hourStr);
+                                  const minutes = Number(minuteStr);
+                                  if (Number.isNaN(hour) || Number.isNaN(minutes)) return;
+                                  const startMinutes = (hour - GRID_START_HOUR) * 60 + minutes;
+                                  const durationMinutes = getBookingDurationMinutes(booking as any);
+                                  const endMinutes = startMinutes + durationMinutes;
+                                  let hasOverlap = false;
+                                  let placeOnRight = false;
                                   designerBookings.forEach((other: any) => {
-                                    if (other === cb || !other.booking_time) return;
-                                    const [ohStr, omStr] = other.booking_time.split(':');
-                                    const oStart =
-                                      (Number(ohStr) - GRID_START_HOUR) * 60 + Number(omStr);
-                                    const oEnd = oStart + getBookingDurationMinutes(other);
-                                    if (Math.max(cbStart, oStart) < Math.min(cbEnd, oEnd)) {
-                                      cbHasOverlap = true;
-                                      if ((other as any).id < (cb as any).id) cbPlaceOnRight = true;
+                                    if (other === booking || !other.booking_time) return;
+                                    const [ohStr, omStr] = other.booking_time.split(':').map(Number);
+                                    if (Number.isNaN(ohStr) || Number.isNaN(omStr)) return;
+                                    const otherStart = (ohStr - GRID_START_HOUR) * 60 + omStr;
+                                    const otherDuration = getBookingDurationMinutes(other as any);
+                                    const otherEnd = otherStart + otherDuration;
+                                    const overlap =
+                                      Math.max(startMinutes, otherStart) < Math.min(endMinutes, otherEnd);
+                                    if (overlap) {
+                                      hasOverlap = true;
+                                      if ((other as any).id < (booking as any).id) {
+                                        placeOnRight = true;
+                                      }
                                     }
                                   });
-                                  if (!cbHasOverlap) {
-                                    slotFullyCovered = true;
-                                    break;
+                                  if (!hasOverlap) {
+                                    occupiedFull = true;
+                                    return;
                                   }
-                                  if (cbPlaceOnRight) slotRightCovered = true;
-                                  else slotLeftCovered = true;
-                                }
-                                const hasBooking =
-                                  slotFullyCovered || (slotLeftCovered && slotRightCovered);
+                                  if (placeOnRight) {
+                                    occupiedRight = true;
+                                  } else {
+                                    occupiedLeft = true;
+                                  }
+                                });
+                                const hasEmptyLane =
+                                  !occupiedFull && !(occupiedLeft && occupiedRight);
+                                const emptyLeftPercent = occupiedLeft && !occupiedRight ? 50 : 0;
+                                const emptyWidthPercent =
+                                  occupiedLeft || occupiedRight ? 50 : 100;
                                 
                                 // Check if this slot is restricted and get restriction info
                                 const slotRestriction = designerRestrictions.find((r) => {
@@ -2917,7 +2966,7 @@ export default function AppointmentsManagementPage() {
                                 });
                                 const isRestricted = !!slotRestriction;
                                 
-                                if (hasBooking || !designerId || isDesignerOff) return null;
+                                if (!hasEmptyLane || !designerId || isDesignerOff) return null;
                                 
                                 const slotKey = `${dateStr}-${col.columnKey}-${slotTime}`;
                                 const isHovered = hoveredEmptySlot?.date === dateStr && 
@@ -2939,13 +2988,12 @@ export default function AppointmentsManagementPage() {
                                 return (
                                   <div
                                     key={slotKey}
-                                    data-empty-slot-cell
                                     className="absolute z-0 select-none"
-                                    style={{
-                                      top: slotTop,
+                                    style={{ 
+                                      top: slotTop, 
                                       height: slotHeight,
-                                      left: slotLeftStyle,
-                                      right: slotRightStyle,
+                                      left: `${emptyLeftPercent}%`,
+                                      width: `${emptyWidthPercent}%`,
                                       pointerEvents: (emptySlotMenuOpen && !isMenuOpen) || (isRestricted && slotRestriction) ? 'none' : 'auto',
                                       cursor: !isRestricted && designerId ? 'pointer' : 'default',
                                       userSelect: 'none',
@@ -3615,6 +3663,7 @@ export default function AppointmentsManagementPage() {
         setNewBookingDate={setNewBookingDate}
         setNewBookingTimeSlots={setNewBookingTimeSlots}
         setNewBookingMemo={setNewBookingMemo}
+        setNewBookingShopId={setNewBookingShopId}
         setNewBookingSubmitting={setNewBookingSubmitting}
         setIsCustomerRegistrationModalOpen={setIsCustomerRegistrationModalOpen}
         setBookingSuccessMessage={setBookingSuccessMessage}
@@ -4018,6 +4067,8 @@ export default function AppointmentsManagementPage() {
           if (viewingCustomer) {
             setSalesLinkedBookingId(null);
             setSalesLinkedDepositPaid(0);
+            setSalesDefaultDate(selectedDate);
+            setSalesDefaultTime(null);
             setSalesDefaultManager(null);
             setSalesRegistrationCustomer({
               id: viewingCustomer.id,
@@ -4100,6 +4151,8 @@ export default function AppointmentsManagementPage() {
           setCurrentTempSaleData(null);
           setSalesLinkedBookingId(null);
           setSalesLinkedDepositPaid(0);
+          setSalesDefaultDate(null);
+          setSalesDefaultTime(null);
           setSalesDefaultManager(null);
           setCloseSalesFlowOnPickerClose(false);
         }}
@@ -4133,6 +4186,8 @@ export default function AppointmentsManagementPage() {
         initialData={editingSaleData}
         editSaleId={editingSaleId}
         bookingId={salesLinkedBookingId ?? currentTempSaleBookingId}
+        defaultSalesDate={salesDefaultDate}
+        defaultSalesTime={salesDefaultTime}
         bookingDepositPaid={salesLinkedDepositPaid}
         tempSaveData={currentTempSaleData}
         onTemporarySave={(bid) => {

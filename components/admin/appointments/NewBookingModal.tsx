@@ -57,35 +57,33 @@ interface NewBookingModalProps {
   selectedDate: string;
   /** When set, modal saves via PATCH and pre-fills from this booking */
   editingBooking?: BookingWithRelations | null;
-  // State values
-  newBookingCustomerSearch: string;
-  newBookingDate: string;
-  newBookingTimeSlots: NewBookingTimeSlot[];
-  newBookingDesigners: any[];
-  newBookingServices: {
-    id: number;
-    name: string;
-  }[];
-  newBookingMemo: string;
-  newBookingSubmitting: boolean;
-  newBookingLoadingOptions: boolean;
-  newBookingShopId: number | null;
-  newBookingSelectedCustomerId: number | null;
-  newBookingCustomerSearchResults: any[];
-  newBookingIsCustomerSearching: boolean;
-  // State setters
-  setNewBookingCustomerSearch: (value: string) => void;
-  setNewBookingDate: (value: string) => void;
-  setNewBookingTimeSlots: React.Dispatch<React.SetStateAction<NewBookingTimeSlot[]>>;
-  setNewBookingMemo: (value: string) => void;
-  setNewBookingSubmitting: (value: boolean) => void;
-  setIsCustomerRegistrationModalOpen: (value: boolean) => void;
-  setBookingSuccessMessage: (value: string | null) => void;
-  setBookings: (value: any[]) => void;
-  setFilteredBookings: (value: any[]) => void;
-  setNewBookingSelectedCustomerId: (value: number | null) => void;
-  setNewBookingCustomerSearchResults: (value: any[]) => void;
-  setNewBookingIsCustomerSearching: (value: boolean) => void;
+  // State values (all optional — modal self-loads data when not provided)
+  newBookingCustomerSearch?: string;
+  newBookingDate?: string;
+  newBookingTimeSlots?: NewBookingTimeSlot[];
+  newBookingDesigners?: any[];
+  newBookingServices?: { id: number; name: string }[];
+  newBookingMemo?: string;
+  newBookingSubmitting?: boolean;
+  newBookingLoadingOptions?: boolean;
+  newBookingShopId?: number | null;
+  newBookingSelectedCustomerId?: number | null;
+  newBookingCustomerSearchResults?: any[];
+  newBookingIsCustomerSearching?: boolean;
+  // State setters (all optional — default to no-op when parent doesn't need sync)
+  setNewBookingCustomerSearch?: (value: string) => void;
+  setNewBookingDate?: (value: string) => void;
+  setNewBookingTimeSlots?: React.Dispatch<React.SetStateAction<NewBookingTimeSlot[]>>;
+  setNewBookingMemo?: (value: string) => void;
+  setNewBookingShopId?: (value: number | null) => void;
+  setNewBookingSubmitting?: (value: boolean) => void;
+  setIsCustomerRegistrationModalOpen?: (value: boolean) => void;
+  setBookingSuccessMessage?: (value: string | null) => void;
+  setBookings?: (value: any[]) => void;
+  setFilteredBookings?: (value: any[]) => void;
+  setNewBookingSelectedCustomerId?: (value: number | null) => void;
+  setNewBookingCustomerSearchResults?: (value: any[]) => void;
+  setNewBookingIsCustomerSearching?: (value: boolean) => void;
   onViewCustomer?: (customerId: number) => void;
   onOpenCustomerRegistration?: () => void;
   /** Called when booking is created successfully (e.g. from customers page) */
@@ -96,34 +94,38 @@ interface NewBookingModalProps {
   onBookingsRefresh?: () => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+const noop = () => {};
+
 export default function NewBookingModal({
   isOpen,
   onClose,
   selectedDate,
-  newBookingCustomerSearch,
-  newBookingDate,
-  newBookingTimeSlots,
-  newBookingDesigners,
-  newBookingServices,
-  newBookingMemo,
-  newBookingSubmitting,
-  newBookingLoadingOptions,
-  newBookingShopId,
-  newBookingSelectedCustomerId,
-  newBookingCustomerSearchResults,
-  newBookingIsCustomerSearching,
-  setNewBookingCustomerSearch,
-  setNewBookingDate,
-  setNewBookingTimeSlots,
-  setNewBookingMemo,
-  setNewBookingSubmitting,
-  setIsCustomerRegistrationModalOpen,
-  setBookingSuccessMessage,
-  setBookings,
-  setFilteredBookings,
-  setNewBookingSelectedCustomerId,
-  setNewBookingCustomerSearchResults,
-  setNewBookingIsCustomerSearching,
+  newBookingCustomerSearch = '',
+  newBookingDate = '',
+  newBookingTimeSlots = [{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }],
+  newBookingDesigners = [],
+  newBookingServices = [],
+  newBookingMemo = '',
+  newBookingSubmitting = false,
+  newBookingLoadingOptions = false,
+  newBookingShopId = null,
+  newBookingSelectedCustomerId = null,
+  newBookingCustomerSearchResults = [],
+  newBookingIsCustomerSearching = false,
+  setNewBookingCustomerSearch = noop,
+  setNewBookingDate = noop,
+  setNewBookingTimeSlots = noop,
+  setNewBookingMemo = noop,
+  setNewBookingShopId = noop,
+  setNewBookingSubmitting = noop,
+  setIsCustomerRegistrationModalOpen = noop,
+  setBookingSuccessMessage = noop,
+  setBookings = noop,
+  setFilteredBookings = noop,
+  setNewBookingSelectedCustomerId = noop,
+  setNewBookingCustomerSearchResults = noop,
+  setNewBookingIsCustomerSearching = noop,
   onViewCustomer,
   onOpenCustomerRegistration,
   onSuccess,
@@ -154,6 +156,100 @@ export default function NewBookingModal({
   const [shops, setShops] = useState<any[]>([]);
   const [shopId, setShopId] = useState<number | null>(null);
   const shopManuallySet = useRef(false);
+
+  // Self-load designers/services/shops when parent doesn't provide them
+  const [selfLoadedDesigners, setSelfLoadedDesigners] = useState<any[]>([]);
+  const [selfLoadedServices, setSelfLoadedServices] = useState<any[]>([]);
+  const [selfLoadingBaseOptions, setSelfLoadingBaseOptions] = useState(false);
+  const [selfLoadingDesigners, setSelfLoadingDesigners] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const needsShops = shops.length === 0;
+    const needsServices = newBookingServices.length === 0 && selfLoadedServices.length === 0;
+    if (!needsShops && !needsServices) return;
+
+    let cancelled = false;
+    setSelfLoadingBaseOptions(true);
+
+    Promise.all([
+      needsShops ? fetch('/api/shops').then((r) => r.json()) : Promise.resolve({ shops }),
+      needsServices ? fetch('/api/services').then((r) => r.json()) : Promise.resolve({ services: selfLoadedServices }),
+    ])
+      .then(([shopsData, servicesData]) => {
+        if (cancelled) return;
+
+        const shopList = shopsData.shops || [];
+        if (needsShops && shopList.length > 0) {
+          setShops(shopList);
+        }
+
+        if (needsServices) {
+          setSelfLoadedServices(servicesData.services || []);
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (!cancelled) setSelfLoadingBaseOptions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, shops, shops.length, newBookingServices.length, selfLoadedServices, selfLoadedServices.length]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (newBookingShopId == null) return;
+    setShopId(newBookingShopId);
+  }, [isOpen, newBookingShopId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (shopId != null || shopManuallySet.current) return;
+
+    const defaultShopId = newBookingShopId ?? shops[0]?.id ?? null;
+    if (defaultShopId == null) return;
+
+    setShopId(defaultShopId);
+    setNewBookingShopId(defaultShopId);
+  }, [isOpen, shopId, newBookingShopId, shops, setNewBookingShopId]);
+
+  useEffect(() => {
+    if (!isOpen || newBookingDesigners.length > 0 || !shopId) return;
+
+    let cancelled = false;
+    const targetDate = bookingDate || selectedDate || new Date().toISOString().split('T')[0];
+    setSelfLoadingDesigners(true);
+
+    fetch(
+      `/api/available-designers?date=${encodeURIComponent(targetDate)}&shopId=${encodeURIComponent(String(shopId))}`,
+    )
+      .then(async (response) => {
+        const data = await response.json();
+        if (cancelled) return;
+        setSelfLoadedDesigners(response.ok ? data.designers || [] : []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error(error);
+          setSelfLoadedDesigners([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSelfLoadingDesigners(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, newBookingDesigners.length, bookingDate, selectedDate, shopId]);
+
+  const effectiveDesigners = newBookingDesigners.length > 0 ? newBookingDesigners : selfLoadedDesigners;
+  const effectiveServices = newBookingServices.length > 0 ? newBookingServices : selfLoadedServices;
+  const effectiveLoadingOptions =
+    newBookingLoadingOptions || selfLoadingBaseOptions || selfLoadingDesigners;
   const editPrefillDoneForIdRef = useRef<number | null>(null);
   // Services are provided via the newBookingServices prop (loaded by initial-data on the parent page)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -284,10 +380,10 @@ export default function NewBookingModal({
     };
   }, [isOpen, editingBooking?.id, editingBooking, selectedDate, setNewBookingDate, setNewBookingMemo, setNewBookingSelectedCustomerId, setNewBookingTimeSlots]);
 
-  // Comment: Resolve service checkboxes when booking_modal_services (newBookingServices) loads after open
+  // Comment: Resolve service checkboxes when booking_modal_services (effectiveServices) loads after open
   useEffect(() => {
     if (!isOpen || !editingBooking?.id) return;
-    const services = Array.isArray(newBookingServices) ? newBookingServices : [];
+    const services = Array.isArray(effectiveServices) ? effectiveServices : [];
     if (services.length === 0) return;
     const b = editingBookingRef.current;
     if (!b?.id) return;
@@ -296,7 +392,7 @@ export default function NewBookingModal({
       if ((prev[0] || []).length > 0) return prev;
       return svcIds.length > 0 ? [svcIds] : prev;
     });
-  }, [isOpen, editingBooking?.id, newBookingServices]);
+  }, [isOpen, editingBooking?.id, effectiveServices]);
 
   // Comment: Sync booking date from parent when modal opens — respects the slot-click date
   const prevIsOpenRef = useRef(false);
@@ -457,7 +553,7 @@ export default function NewBookingModal({
       .join(' / ');
 
   // Comment: Service list for admin booking modal comes from booking_modal_services table.
-  const categoryServices = Array.isArray(newBookingServices) ? newBookingServices : [];
+  const categoryServices = Array.isArray(effectiveServices) ? effectiveServices : [];
 
   const handleCancel = () => {
     onClose();
@@ -760,8 +856,7 @@ export default function NewBookingModal({
   }, [isOpen, isDatePickerOpen]);
 
   const shopOptions = shops.map((s: any) => ({ value: s.id, label: s.name }));
-  // Comment: "자원"은 디자이너/직원 선택인데, 여기서는 부모로부터 내려오는 designer 목록을 사용합니다.
-  const designerOptions = newBookingDesigners.map((d: any) => ({ value: d.id, label: d.name }));
+  const designerOptions = effectiveDesigners.map((d: any) => ({ value: d.id, label: d.name }));
   const timeOptions = EDIT_TIME_OPTIONS.map((label) => ({
     value: label,
     label: label.replace('AM', '오전').replace('PM', '오후'),
@@ -1124,7 +1219,9 @@ export default function NewBookingModal({
                   options={shopOptions}
                   value={shopId ?? ''}
                   onChange={(e) => {
-                    setShopId(Number(e.target.value));
+                    const nextShopId = e.target.value ? Number(e.target.value) : null;
+                    setShopId(nextShopId);
+                    setNewBookingShopId(nextShopId);
                     shopManuallySet.current = true;
                   }}
                 />
@@ -1134,6 +1231,95 @@ export default function NewBookingModal({
 
           {/* 각 행이 디자이너/시작시간/소요시간/서비스를 독립적으로 가짐 */}
           <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+            {/* Top row: 디자이너 + 시작시간 + 소요시간 + 추가 */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="min-w-0 md:col-span-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">디자이너</label>
+                <div className="flex items-end gap-2">
+                  <select
+                    disabled={effectiveLoadingOptions}
+                    value={newBookingTimeSlots[0]?.designerId ?? ''}
+                    onChange={(e) => {
+                      const newDesignerId = e.target.value ? Number(e.target.value) : null;
+                      setNewBookingTimeSlots((prev) =>
+                        prev.map((s, i) => (i === 0 ? { ...s, designerId: newDesignerId } : s)),
+                      );
+                      if (newDesignerId && !shopManuallySet.current) {
+                        const designer = effectiveDesigners.find((d: any) => d.id === newDesignerId);
+                        if (designer?.shop_id) setShopId(designer.shop_id);
+                      }
+                    }}
+                    className="flex-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
+                  >
+                    <option value="">
+                      {effectiveLoadingOptions ? '로딩 중...' : '선택하세요'}
+                    </option>
+                    {!effectiveLoadingOptions &&
+                      effectiveDesigners.map((d: any) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                  </select>
+                  {!editingBooking ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Comment: + button adds one booking row with same time/duration as first row.
+                        const base = newBookingTimeSlots[0] ?? { ...DEFAULT_NEW_BOOKING_TIME_SLOT };
+                        const nextSlot: NewBookingTimeSlot = {
+                          ...DEFAULT_NEW_BOOKING_TIME_SLOT,
+                          time: base.time,
+                          duration: base.duration,
+                          selectedItems: [],
+                          serviceId: null,
+                          designerId: null,
+                        };
+                        const next = [...newBookingTimeSlots, nextSlot];
+                        setNewBookingTimeSlots(next);
+                        setSlotServiceSelections((prev) => [...prev, []]);
+                      }}
+                      className="w-8 h-8 flex items-center justify-center bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                      title="추가"
+                    >
+                      <span className="material-symbols-outlined text-base">add</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="min-w-0 md:col-span-4">
+                <Select
+                  label="시작시간"
+                  options={timeOptions}
+                  value={newBookingTimeSlots[0]?.time ?? ''}
+                  onChange={(e) => {
+                    const nextTime = e.target.value;
+                    setNewBookingTimeSlots((prev) =>
+                      prev.map((s, i) => (i === 0 ? { ...s, time: nextTime } : { ...s, time: nextTime })),
+                    );
+                  }}
+                  wrapperClassName="min-w-0"
+                />
+              </div>
+
+              <div className="min-w-0 md:col-span-3">
+                <Select
+                  label="소요시간"
+                  options={durationSelectOptions}
+                  value={newBookingTimeSlots[0]?.duration ?? 30}
+                  onChange={(e) => {
+                    const nextDuration = Number(e.target.value);
+                    setNewBookingTimeSlots((prev) =>
+                      prev.map((s, i) => (i === 0 ? { ...s, duration: nextDuration } : s)),
+                    );
+                  }}
+                  wrapperClassName="min-w-0"
+                />
+              </div>
+            </div>
+
+            {/* Rows: 서비스 only (designer/duration are managed in top row) */}
             {newBookingTimeSlots.map((slot, idx) => (
               <div
                 key={idx}
@@ -1143,24 +1329,35 @@ export default function NewBookingModal({
                     : 'space-y-3 pt-4 border-t border-gray-200'
                 }
               >
-                {/* Top row: 디자이너 + 추가/삭제 + 시작시간 + 소요시간 */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                  <div className="min-w-0 md:col-span-5">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">디자이너</label>
-                    <div className="flex items-stretch gap-2">
-                      <Select
-                        options={
-                          newBookingLoadingOptions
-                            ? []
-                            : newBookingDesigners.map((d: any) => ({ value: d.id, label: d.name }))
-                        }
-                        placeholder={newBookingLoadingOptions ? '로딩 중...' : '선택하세요'}
-                        disabled={newBookingLoadingOptions}
-                        value={slot.designerId ?? ''}
-                        onChange={(e) => {
-                          const newDesignerId = e.target.value ? Number(e.target.value) : null;
-                          setNewBookingTimeSlots((prev) =>
-                            prev.map((s, i) => (i === idx ? { ...s, designerId: newDesignerId } : s)),
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="min-w-0 md:col-span-10">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
+                    <div className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white max-h-36 overflow-y-auto space-y-2">
+                      {effectiveLoadingOptions ? (
+                        <p className="text-gray-500">로딩 중...</p>
+                      ) : (
+                        categoryServices.map((s) => {
+                          const isChecked = (slotServiceSelections[idx] || []).includes(s.id);
+                          return (
+                            <label key={s.id} className="flex items-center gap-2 text-gray-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSlotServiceSelections((prev) => {
+                                    const next = [...prev];
+                                    const current = [...(next[idx] || [])];
+                                    next[idx] = checked
+                                      ? [...current, s.id]
+                                      : current.filter((serviceId) => serviceId !== s.id);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black accent-black"
+                              />
+                              <span>{s.name}</span>
+                            </label>
                           );
                           if (newDesignerId && !shopManuallySet.current) {
                             const designer = newBookingDesigners.find((d: any) => d.id === newDesignerId);

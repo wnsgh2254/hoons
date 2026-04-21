@@ -145,10 +145,28 @@ function DateFilterBar({
   handleSearch: () => void;
   extraFilters?: React.ReactNode;
 }) {
+  const handleStartDateChange = (nextStartDate: string) => {
+    setStartDate(nextStartDate);
+
+    // Comment: Keep the end date aligned so the range never goes backwards.
+    if (endDate && nextStartDate && endDate < nextStartDate) {
+      setEndDate(nextStartDate);
+    }
+  };
+
+  const handleEndDateChange = (nextEndDate: string) => {
+    if (startDate && nextEndDate && nextEndDate < startDate) {
+      setEndDate(startDate);
+      return;
+    }
+
+    setEndDate(nextEndDate);
+  };
+
   return (
     <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-        <div className="flex gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center">
+        <div className="flex flex-wrap gap-4">
           <label className="flex items-center gap-2">
             <input
               type="radio"
@@ -170,7 +188,7 @@ function DateFilterBar({
         </div>
 
         {dateMode === 'daily' ? (
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
               &lt;
             </Button>
@@ -178,34 +196,44 @@ function DateFilterBar({
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              wrapperClassName="w-auto"
+              wrapperClassName="w-full sm:min-w-[180px]"
             />
             <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
               &gt;
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
             <Input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              wrapperClassName="w-auto"
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              wrapperClassName="w-full min-w-0 sm:min-w-[180px]"
             />
-            <span className="text-gray-400">~</span>
+            <span className="hidden text-center text-gray-400 sm:block">~</span>
             <Input
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              min={startDate}
-              wrapperClassName="w-auto"
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              min={startDate || undefined}
+              wrapperClassName="w-full min-w-0 sm:min-w-[180px]"
             />
           </div>
         )}
 
-        {extraFilters}
+        {extraFilters && (
+          <div className="flex w-full min-w-0 flex-col gap-4 md:flex-1 md:flex-row">
+            {extraFilters}
+          </div>
+        )}
 
-        <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
+        <Button
+          variant="primary"
+          size="sm"
+          icon="search"
+          onClick={handleSearch}
+          className="w-full sm:w-auto"
+        >
           검색
         </Button>
       </div>
@@ -236,9 +264,33 @@ function TotalSalesTab({
   const [loading, setLoading] = useState(false);
   const [salesData, setSalesData] = useState<any>(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(true);
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string>('');
 
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchShops = async () => {
+      try {
+        const res = await fetch('/api/shops');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+        setShops(data.shops || []);
+      } catch (error) {
+        console.error('Error fetching shops for total sales filter:', error);
+      }
+    };
+
+    fetchShops();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSearch = () => {
     if (dateMode === 'daily' && !selectedDate) {
@@ -267,6 +319,9 @@ function TotalSalesTab({
           params.append('start_date', startDate);
           params.append('end_date', endDate);
         }
+        if (selectedShopId) {
+          params.append('shop_id', selectedShopId);
+        }
 
         // Comment: Fetch sales data from API
         const res = await fetch(`/api/sales/total?${params.toString()}`);
@@ -285,7 +340,7 @@ function TotalSalesTab({
     };
 
     fetchData();
-  }, [shouldFetch, dateMode, selectedDate, startDate, endDate]);
+  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedShopId]);
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
@@ -298,6 +353,11 @@ function TotalSalesTab({
       setSelectedDate(date.toISOString().split('T')[0]);
     }
   };
+
+  const shopOptions = shops.map((shop: any) => ({
+    value: String(shop.id),
+    label: shop.name,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -312,6 +372,15 @@ function TotalSalesTab({
         setEndDate={setEndDate}
         handleDateChange={handleDateChange}
         handleSearch={handleSearch}
+        extraFilters={
+          <Select
+            value={selectedShopId}
+            onChange={(e) => setSelectedShopId(e.target.value)}
+            options={shopOptions}
+            placeholder="전체 지점"
+            wrapperClassName="flex-1 min-w-0 md:max-w-xs"
+          />
+        }
       />
 
       {loading ? (
@@ -397,12 +466,13 @@ function SalesSummaryTable({
       }
     : data;
 
-  const tableClass = "table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0";
+  const tableClass = "w-full min-w-[480px] text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0";
   const tableWrapperClass = "bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden";
 
   return (
     <div>
       <div className={tableWrapperClass}>
+        <div className="overflow-x-auto">
         <table className={tableClass}>
           <thead>
             <tr className="bg-gray-100 border-b border-gray-200">
@@ -460,10 +530,12 @@ function SalesSummaryTable({
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       {showPaymentDetails && (
         <div className={`${tableWrapperClass} mt-3`}>
+          <div className="overflow-x-auto">
           <table className={tableClass}>
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200">
@@ -498,6 +570,7 @@ function SalesSummaryTable({
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -530,7 +603,8 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
         <thead>
           <tr className="bg-gray-100 border-b border-gray-200">
             <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]">결제 방법</th>
@@ -584,6 +658,7 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
           </tr>
         </tbody>
       </table>
+      </div>
       <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
         <p className="text-xs text-gray-600">* 미수 발생 합계: 0</p>
       </div>
@@ -621,7 +696,8 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <table className="table-fixed w-full text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm [&_td]:border-l [&_td]:border-gray-200 [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
         <thead>
           <tr className="bg-gray-100 border-b border-gray-200">
             <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[140px]" rowSpan={2}>유형</th>
@@ -677,6 +753,7 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -794,7 +871,7 @@ function ByStaffSalesTab({
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               options={designerOptions}
               placeholder="전체 직원"
-              wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
             />
           </>
         }
@@ -1020,7 +1097,7 @@ function ByItemSalesTab({
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               options={designerOptions}
               placeholder="전체 직원"
-              wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
             />
             <Select
               value={selectedItemType}
@@ -1031,7 +1108,7 @@ function ByItemSalesTab({
                 }
               }}
               options={itemTypeOptions}
-              wrapperClassName="flex-1"
+              wrapperClassName="flex-1 min-w-0"
             />
             <div className="flex gap-4">
               <label className={`flex items-center gap-2 ${selectedItemType !== 'service' ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -1652,13 +1729,14 @@ function SalesHistoryModal({
     {
       key: 'shop',
       header: '지점',
+      className: 'hidden md:table-cell',
       render: (item: any) => getShopName(item.shop_id),
     },
     {
       key: 'date',
       header: '날짜',
       render: (item: any) => (
-        <span>{item.booking_date} {formatTime(item.booking_time)}</span>
+        <span className="whitespace-nowrap">{item.booking_date}<br className="sm:hidden" /><span className="hidden sm:inline"> </span>{formatTime(item.booking_time)}</span>
       ),
     },
     {
@@ -1666,7 +1744,7 @@ function SalesHistoryModal({
       header: '고객명',
       render: (item: any) => (
         <button
-          className="hover:underline cursor-pointer"
+          className="hover:underline cursor-pointer whitespace-nowrap"
           onClick={() => item.customer_id && handleCustomerClick(item.customer_id)}
         >
           {getCustomerName(item.customer_id)}
@@ -1692,6 +1770,7 @@ function SalesHistoryModal({
     {
       key: 'designer',
       header: '담당자',
+      className: 'hidden sm:table-cell',
       render: (item: any) => (
         <div className="flex flex-col gap-1">
           {item.items.map((it: any, i: number) => (
@@ -1703,6 +1782,7 @@ function SalesHistoryModal({
     {
       key: 'salesType',
       header: '영업 구분',
+      className: 'hidden lg:table-cell',
       render: (item: any) => (
         <div className="flex flex-col gap-1">
           {item.items.map((it: any, i: number) => (
@@ -1714,6 +1794,7 @@ function SalesHistoryModal({
     {
       key: 'discount',
       header: '할인',
+      className: 'hidden lg:table-cell',
       render: (item: any) => (
         <div className="flex flex-col gap-1 items-end">
           {item.items.map((it: any, i: number) => (
@@ -1731,7 +1812,7 @@ function SalesHistoryModal({
       render: (item: any) => (
         <div className={`flex flex-col gap-1 items-end ${item._isRefund ? 'text-red-500 font-medium' : ''}`}>
           {item.items.map((it: any, i: number) => (
-            <div key={i}>
+            <div key={i} className="whitespace-nowrap">
               {Number(it.amount ?? it.total_amount)
                 ? (item._isRefund
                     ? `-${Number(it.amount ?? it.total_amount).toLocaleString()}`
@@ -1745,6 +1826,7 @@ function SalesHistoryModal({
     {
       key: 'paymentMethod',
       header: '결제 방법',
+      className: 'hidden sm:table-cell',
       render: (item: any) => {
         const paymentMethods = item.payments.map((p: any) => formatPaymentMethod(p.method)).join(', ') || '-';
         return paymentMethods;
@@ -1759,25 +1841,25 @@ function SalesHistoryModal({
           const refundTotal =
             item.refund_total ||
             item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0);
-          return <span className="text-red-500 font-medium">-{Number(refundTotal).toLocaleString()}</span>;
+          return <span className="text-red-500 font-medium whitespace-nowrap">-{Number(refundTotal).toLocaleString()}</span>;
         }
         const totalAmount = item.items.reduce(
           (sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0),
           0,
         );
         const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-        return totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString();
+        return <span className="whitespace-nowrap">{totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString()}</span>;
       },
     },
     {
       key: 'memo',
       header: '메모',
+      className: 'hidden md:table-cell',
       render: (item: any) => item._isRefund ? (item.refund_memo || '-') : (item.memo || '-'),
     },
     {
       key: 'detail',
       header: '',
-      width: 50,
       render: (item: any) => (
         item._isRefund ? null : (
           <button
@@ -1801,90 +1883,92 @@ function SalesHistoryModal({
     >
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-5.5">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-start">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'daily'}
-                onChange={() => setDateMode('daily')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">일별</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                checked={dateMode === 'period'}
-                onChange={() => setDateMode('period')}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium">기간</span>
-            </label>
+        <div className="flex flex-col gap-3">
+          {/* Row 1: date mode toggle + date inputs */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex gap-4 shrink-0">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  checked={dateMode === 'daily'}
+                  onChange={() => setDateMode('daily')}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">일별</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  checked={dateMode === 'period'}
+                  onChange={() => setDateMode('period')}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">기간</span>
+              </label>
+            </div>
+
+            {dateMode === 'daily' ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
+                  &lt;
+                </Button>
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  wrapperClassName="flex-1 min-w-0 sm:min-w-[180px] sm:flex-none"
+                />
+                <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
+                  &gt;
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2 min-w-0">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  wrapperClassName="min-w-0 sm:min-w-[180px]"
+                />
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate}
+                  wrapperClassName="min-w-0 sm:min-w-[180px]"
+                />
+              </div>
+            )}
           </div>
 
-          {dateMode === 'daily' ? (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleDateChange('prev')}>
-                &lt;
-              </Button>
-              <Input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                wrapperClassName="w-auto"
-              />
-              <Button variant="outline" size="sm" onClick={() => handleDateChange('next')}>
-                &gt;
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                wrapperClassName="w-auto"
-              />
-              <span className="text-gray-400">~</span>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                min={startDate}
-                wrapperClassName="w-auto"
-              />
-            </div>
-          )}
-
-          <Select
-            label="항목"
-            value={selectedItemType}
-            onChange={(e) => setSelectedItemType(e.target.value)}
-            options={itemTypeOptions}
-            wrapperClassName="flex-1"
-          />
-
-          <Select
-            label="결제 방법"
-            value={selectedPaymentMethod}
-            onChange={(e) => setSelectedPaymentMethod(e.target.value)}
-            options={paymentMethodOptions}
-            wrapperClassName="flex-1"
-          />
-
-          <Select
-            label="담당자"
-            value={selectedDesignerId}
-            onChange={(e) => setSelectedDesignerId(e.target.value)}
-            options={designerOptions}
-            placeholder="전체"
-            wrapperClassName="flex-1"
-          />
-
-          <Button variant="primary" size="sm" icon="search" onClick={handleSearch}>
-            검색
-          </Button>
+          {/* Row 2: selects + search */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-end sm:gap-3">
+            <Select
+              label="항목"
+              value={selectedItemType}
+              onChange={(e) => setSelectedItemType(e.target.value)}
+              options={itemTypeOptions}
+              wrapperClassName="min-w-0"
+            />
+            <Select
+              label="결제 방법"
+              value={selectedPaymentMethod}
+              onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+              options={paymentMethodOptions}
+              wrapperClassName="min-w-0"
+            />
+            <Select
+              label="담당자"
+              value={selectedDesignerId}
+              onChange={(e) => setSelectedDesignerId(e.target.value)}
+              options={designerOptions}
+              placeholder="전체"
+              wrapperClassName="min-w-0"
+            />
+            <Button variant="primary" size="sm" icon="search" onClick={handleSearch} className="w-full sm:w-auto sm:self-end">
+              검색
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -9,7 +9,7 @@ import PrepaidDeductionModal from './PrepaidDeductionModal';
 import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesDetailData, TempSalesData } from '@/lib/types';
-import { getSydneyToday, getSydneyNowTime } from '@/lib/utils/appointment-utils';
+import { getSydneyToday } from '@/lib/utils/appointment-utils';
 
 function formatAudAmount(value: number): string {
   return new Intl.NumberFormat('en-AU', {
@@ -75,6 +75,8 @@ interface SalesRegistrationModalProps {
   shopId?: number | null;
   // 임시저장 관련
   bookingId?: number | null;
+  defaultSalesDate?: string | null;
+  defaultSalesTime?: string | null;
   /** Already-paid deposit for linked booking (AUD); reduces net due / 합계 */
   bookingDepositPaid?: number | null;
   tempSaveData?: TempSalesData | null;
@@ -93,11 +95,19 @@ export default function SalesRegistrationModal({
   editSaleId,
   shopId,
   bookingId,
+  defaultSalesDate,
+  defaultSalesTime,
   bookingDepositPaid,
   tempSaveData,
   onTemporarySave,
   onDeleteTempSave,
 }: SalesRegistrationModalProps) {
+  const getCurrentLocalTime = () => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
   const [activeTab, setActiveTab] = useState<'service' | 'product' | 'prepaid'>('service');
   const [salesItems, setSalesItems] = useState<SalesItem[]>([]);
   const [salesAmount, setSalesAmount] = useState(0);
@@ -109,7 +119,7 @@ export default function SalesRegistrationModal({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bank_transfer' | null>(null);
   const [memo, setMemo] = useState('');
   const [salesDate, setSalesDate] = useState(getSydneyToday());
-  const [salesTime, setSalesTime] = useState(getSydneyNowTime());
+  const [salesTime, setSalesTime] = useState(getCurrentLocalTime());
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [selectedItemForDiscount, setSelectedItemForDiscount] = useState<SalesItem | null>(null);
   const [editingQuantityItemId, setEditingQuantityItemId] = useState<string | null>(null);
@@ -436,8 +446,8 @@ export default function SalesRegistrationModal({
         setSelectedDeduction(null);
         setPaymentMethod(null);
         setMemo('');
-        setSalesDate(getSydneyToday());
-        setSalesTime(getSydneyNowTime());
+        setSalesDate(defaultSalesDate || getSydneyToday());
+        setSalesTime(defaultSalesTime || getCurrentLocalTime());
         setPaymentAmounts({
           cash: 0,
           card: 0,
@@ -447,7 +457,7 @@ export default function SalesRegistrationModal({
         setActiveTab('service');
       }
     }
-  }, [isOpen]);
+  }, [isOpen, initialData, editSaleId, tempSaveData, bookingDepositPaid, defaultSalesDate, defaultSalesTime]);
 
   // 외부에서 호출할 수 있도록 window에 등록 (useEffect 사용)
   // 주의: 모든 hooks는 early return 이전에 호출되어야 함
@@ -503,12 +513,18 @@ export default function SalesRegistrationModal({
     await performSaleRegistration();
   };
 
-  const performSaleRegistration = async () => {
+  const performSaleRegistration = async (options?: {
+    paymentAmountsOverride?: typeof paymentAmounts;
+    paymentMethodOverride?: typeof paymentMethod;
+  }) => {
     if (!customer || salesItems.length === 0) {
       return;
     }
 
     const isEditMode = !!editSaleId;
+    const paymentAmountsToSave = options?.paymentAmountsOverride || paymentAmounts;
+    const paymentMethodToSave =
+      options?.paymentMethodOverride !== undefined ? options.paymentMethodOverride : paymentMethod;
 
     try {
       const url = isEditMode ? `/api/sales/${editSaleId}` : '/api/sales';
@@ -545,8 +561,8 @@ export default function SalesRegistrationModal({
           sales_amount: salesAmount,
           discount_amount: discountAmount,
           total: total,
-          payment_method: paymentMethod,
-          payment_amounts: paymentAmounts,
+          payment_method: paymentMethodToSave,
+          payment_amounts: paymentAmountsToSave,
           point_accumulation: pointAccumulation,
           memo: memo,
           sales_date: salesDate,
@@ -603,7 +619,10 @@ export default function SalesRegistrationModal({
       // 따라서 이미 계산된 newAmountToReceive로 판단 후 performSaleRegistration()을 직접 호출.
       if (newAmountToReceive <= 0) {
         // 판매 등록 완료
-        await performSaleRegistration();
+        await performSaleRegistration({
+          paymentAmountsOverride: newAmounts,
+          paymentMethodOverride: paymentMethod,
+        });
         setIsPaymentInputModalOpen(false);
       } else {
         // 받을 금액이 남아있으면 확인 알림 표시
@@ -613,7 +632,10 @@ export default function SalesRegistrationModal({
           message: `미수금이 ${aud} 발생됩니다. 계산완료 하시겠습니까?`,
           highlightText: aud,
           onConfirm: async () => {
-            await performSaleRegistration();
+            await performSaleRegistration({
+              paymentAmountsOverride: newAmounts,
+              paymentMethodOverride: paymentMethod,
+            });
             setIsPaymentInputModalOpen(false);
             setIsConfirmationAlertOpen(false);
             setConfirmationAlertData(null);

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { issuePrepaidPassFromSale } from '@/lib/data';
+import {
+  adjustInventoryStockForSaleItem,
+  adjustPrepaidBalance,
+} from '@/lib/sales-reconciliation';
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
 
@@ -197,96 +201,110 @@ export async function POST(request: NextRequest) {
     }
 
     const rawItems = (items || []) as any[];
-    for (const rawItem of rawItems) {
-      if (String(rawItem.type) !== 'prepaid') continue;
-      const qty = Math.max(1, Math.round(Number(rawItem.quantity || 1)));
-      const perCredit = Math.round(Number(rawItem.prepaid_credit_points ?? rawItem.prepaid_points ?? 0));
-      const totalCredit = perCredit * qty;
-      if (totalCredit <= 0) continue;
-      const passLabel = String(rawItem.name || 'Prepaid').trim();
-      const expiresAt =
-        rawItem.prepaid_expires_at != null && String(rawItem.prepaid_expires_at).trim() !== ''
-          ? String(rawItem.prepaid_expires_at).trim()
-          : null;
-      try {
+    const appliedInventoryAdjustments: Array<{ itemName: string; quantity: number }> = [];
+    const issuedPrepaidCredits: Array<{ passLabel: string; points: number }> = [];
+    let appliedPrepaidDeduction = 0;
+
+    try {
+      for (const rawItem of rawItems) {
+        const itemType = String(rawItem.type || '');
+        const qty = Math.max(1, Math.round(Number(rawItem.quantity || 1)));
+
+        if (itemType === 'product') {
+          await adjustInventoryStockForSaleItem(supabase, {
+            itemName: rawItem.name,
+            quantityDelta: -qty,
+          });
+          appliedInventoryAdjustments.push({
+            itemName: String(rawItem.name || ''),
+            quantity: qty,
+          });
+          continue;
+        }
+
+        if (itemType !== 'prepaid') continue;
+
+        const perCredit = Math.round(
+          Number(rawItem.prepaid_credit_points ?? rawItem.prepaid_points ?? 0),
+        );
+        const totalCredit = perCredit * qty;
+        if (totalCredit <= 0) continue;
+
+        const passLabel = String(rawItem.name || 'Prepaid').trim();
+        const expiresAt =
+          rawItem.prepaid_expires_at != null && String(rawItem.prepaid_expires_at).trim() !== ''
+            ? String(rawItem.prepaid_expires_at).trim()
+            : null;
+
         await issuePrepaidPassFromSale({
           customerId: Number(customer_id),
           passLabel,
           creditPoints: totalCredit,
           expiresAt,
         });
-      } catch (prepaidIssueErr: any) {
-        console.error('Error issuing prepaid pass after sale:', prepaidIssueErr);
-        await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
-        await supabase.from('sales').delete().eq('id', saleHeader.id);
-        return NextResponse.json(
-          {
-            error:
-              prepaidIssueErr?.message ||
-              'Failed to issue prepaid balance. The sale registration was rolled back.',
-          },
-          { status: 400 },
-        );
+        issuedPrepaidCredits.push({ passLabel, points: totalCredit });
       }
-    }
 
-    const totalPrepaidDeduction = saleItems.reduce(
-      (sum: number, item: any) => sum + Number(item.prepaid_deduction || 0),
-      0,
-    );
-    if (totalPrepaidDeduction > 0) {
-      const { data: customerRow } = await supabase
-        .from('customers')
-        .select('id, phone')
-        .eq('id', customer_id)
-        .maybeSingle();
-      const normalizedPhone = String(customerRow?.phone || '').replace(/\D/g, '');
+      const totalPrepaidDeduction = saleItems.reduce(
+        (sum: number, item: any) => sum + Number(item.prepaid_deduction || 0),
+        0,
+      );
 
-      let prepaidQuery = supabase
-        .from('prepaid_passes')
-        .select('id, points, customer_id')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      if (normalizedPhone) {
-        prepaidQuery = prepaidQuery.or(
-          `customer_id.eq.${customer_id},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
-        );
-      } else {
-        prepaidQuery = prepaidQuery.eq('customer_id', customer_id);
+      if (totalPrepaidDeduction > 0) {
+        await adjustPrepaidBalance(supabase, {
+          customerId: Number(customer_id),
+          pointsDelta: -totalPrepaidDeduction,
+        });
+        appliedPrepaidDeduction = totalPrepaidDeduction;
       }
-      const { data: prepaidRows, error: prepaidSelErr } = await prepaidQuery;
+    } catch (reconciliationError: any) {
+      console.error('Error reconciling sale side effects:', reconciliationError);
 
-      if (prepaidSelErr) {
-        console.error('Error fetching prepaid pass for deduction:', prepaidSelErr);
-      } else {
-        const legacyIds = (prepaidRows || [])
-          .filter((row: any) => row.customer_id == null)
-          .map((row: any) => Number(row.id))
-          .filter((id: number) => Number.isFinite(id));
-        if (legacyIds.length > 0) {
-          await supabase
-            .from('prepaid_passes')
-            .update({ customer_id: customer_id })
-            .in('id', legacyIds);
-        }
-        const usableRows = (prepaidRows || []).filter((row: any) => Number(row.points || 0) > 0);
-        let remaining = totalPrepaidDeduction;
-        for (const row of usableRows) {
-          if (remaining <= 0) break;
-          const current = Number(row.points || 0);
-          const deduct = Math.min(current, remaining);
-          const next = current - deduct;
-          const { error: prepaidUpdErr } = await supabase
-            .from('prepaid_passes')
-            .update({ points: next })
-            .eq('id', row.id);
-          if (prepaidUpdErr) {
-            console.error(`Error updating prepaid balance for pass ${row.id}:`, prepaidUpdErr);
-            break;
-          }
-          remaining -= deduct;
+      for (const adjustment of appliedInventoryAdjustments.reverse()) {
+        try {
+          await adjustInventoryStockForSaleItem(supabase, {
+            itemName: adjustment.itemName,
+            quantityDelta: adjustment.quantity,
+          });
+        } catch (rollbackError) {
+          console.error('Failed to rollback inventory adjustment:', rollbackError);
         }
       }
+
+      for (const issued of issuedPrepaidCredits.reverse()) {
+        try {
+          await adjustPrepaidBalance(supabase, {
+            customerId: Number(customer_id),
+            passLabel: issued.passLabel,
+            pointsDelta: -issued.points,
+          });
+        } catch (rollbackError) {
+          console.error('Failed to rollback prepaid issuance:', rollbackError);
+        }
+      }
+
+      if (appliedPrepaidDeduction > 0) {
+        try {
+          await adjustPrepaidBalance(supabase, {
+            customerId: Number(customer_id),
+            pointsDelta: appliedPrepaidDeduction,
+          });
+        } catch (rollbackError) {
+          console.error('Failed to rollback prepaid deduction:', rollbackError);
+        }
+      }
+
+      await supabase.from('sales_items').delete().eq('sale_id', saleHeader.id);
+      await supabase.from('sales').delete().eq('id', saleHeader.id);
+
+      return NextResponse.json(
+        {
+          error:
+            reconciliationError?.message ||
+            'Failed to reconcile sale side effects. The sale registration was rolled back.',
+        },
+        { status: 400 },
+      );
     }
 
     if (booking_id != null && booking_id !== '') {
