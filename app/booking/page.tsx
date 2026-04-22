@@ -168,6 +168,14 @@ export default function BookingPage() {
 
   const paymentIntentFetchedRef = useRef(false); // Comment: Only fetch payment intent once per deposit visit (or on retry)
   const lastFetchedCheckoutRetryRef = useRef<number>(0);
+  const normalizedCustomerPhone = useMemo(
+    () => customerPhone.replace(/\D/g, ''),
+    [customerPhone]
+  );
+  const isValidCustomerPhone = useMemo(
+    () => /^04\d{8}$/.test(normalizedCustomerPhone),
+    [normalizedCustomerPhone]
+  );
 
   // Comment: Refs to enable smooth scrolling to each step section
   const dateSectionRef = useRef<HTMLElement | null>(null);
@@ -963,7 +971,8 @@ export default function BookingPage() {
       !selectedDesigner ||
       !selectedShop ||
       !customerName.trim() ||
-      !customerPhone.trim()
+      !customerPhone.trim() ||
+      !isValidCustomerPhone
     ) {
       return;
     }
@@ -1749,10 +1758,15 @@ export default function BookingPage() {
                   id="customer-phone"
                   type="tel"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9\s]/g, ''))}
                   placeholder="e.g. 0400 000 000"
                   className="w-full bg-white border border-black px-4 py-3 text-slate-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-shadow"
                 />
+                {customerPhone.trim().length > 0 && !isValidCustomerPhone && (
+                  <p className="text-xs text-red-600">
+                    Mobile number must start with 04 and be 10 digits.
+                  </p>
+                )}
               </div>
             </div>
             <div className="pt-10 flex justify-end">
@@ -1768,6 +1782,7 @@ export default function BookingPage() {
         !selectedShop ||
         !customerName.trim() ||
         !customerPhone.trim() ||
+        !isValidCustomerPhone ||
         loadingCustomer
                 }
               >

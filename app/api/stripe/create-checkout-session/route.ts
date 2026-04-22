@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { createPublicBooking, buildPhoneVariants } from "@/lib/data";
+import { createPublicBooking, buildPhoneVariants, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -37,6 +37,20 @@ export async function POST(request: NextRequest) {
     if (!shopId || !day || !timeLabel || !depositAmount || !serviceName) {
       return NextResponse.json(
         { error: "Missing required fields for Stripe checkout session." },
+        { status: 400 },
+      );
+    }
+
+    if (!customerName || !String(customerName).trim() || !customerPhone || !String(customerPhone).trim()) {
+      return NextResponse.json(
+        { error: "Customer name and mobile number are required." },
+        { status: 400 },
+      );
+    }
+
+    if (!isValidAuMobilePhone(customerPhone)) {
+      return NextResponse.json(
+        { error: "Mobile number must start with 04 and be 10 digits." },
         { status: 400 },
       );
     }

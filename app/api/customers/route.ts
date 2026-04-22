@@ -36,12 +36,6 @@ export async function GET(request: NextRequest) {
 
     // Comment: Get prepaid pass balances and total sales for each customer
     const customerIds = (data || []).map((c: any) => c.id);
-    const customerPhoneMap: Record<number, string> = {};
-    (data || []).forEach((c: any) => {
-      const normalized = String(c.phone || '').replace(/\D/g, '');
-      if (normalized) customerPhoneMap[c.id] = normalized;
-    });
-    const phoneValues = Array.from(new Set(Object.values(customerPhoneMap)));
     const prepaidBalances: Record<number, number> = {};
     const totalSales: Record<number, number> = {};
 
@@ -52,39 +46,14 @@ export async function GET(request: NextRequest) {
         .select('customer_id, points, is_active, expires_at')
         .in('customer_id', customerIds)
         .eq('is_active', true);
-      const { data: legacyPrepaidData } = phoneValues.length > 0
-        ? await supabase
-            .from('prepaid_passes')
-            .select('customer_id, phone, points, is_active, expires_at')
-            .is('customer_id', null)
-            .in('phone', phoneValues)
-            .eq('is_active', true)
-        : { data: [] as any[] };
 
-      const now = new Date();
       (linkedPrepaidData || []).forEach((p: any) => {
-        if (p.expires_at) {
-          const expires = new Date(p.expires_at);
-          if (!Number.isNaN(expires.getTime()) && expires < now) return;
-        }
         if (!prepaidBalances[p.customer_id]) {
           prepaidBalances[p.customer_id] = 0;
         }
         // Comment: Sum up points for each customer
         prepaidBalances[p.customer_id] += Number(p.points || 0);
       });
-      (legacyPrepaidData || []).forEach((p: any) => {
-        if (p.expires_at) {
-          const expires = new Date(p.expires_at);
-          if (!Number.isNaN(expires.getTime()) && expires < now) return;
-        }
-        const normalizedPhone = String(p.phone || '').replace(/\D/g, '');
-        const targetCustomerId = customerIds.find((cid: number) => customerPhoneMap[cid] === normalizedPhone);
-        if (!targetCustomerId) return;
-        if (!prepaidBalances[targetCustomerId]) prepaidBalances[targetCustomerId] = 0;
-        prepaidBalances[targetCustomerId] += Number(p.points || 0);
-      });
-
       const [{ data: salesData }, { data: refundData }] = await Promise.all([
         supabase
           .from('sales')
@@ -347,10 +316,94 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const customerId = Number(id);
+    if (!Number.isFinite(customerId)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 고객 ID입니다.' },
+        { status: 400 }
+      );
+    }
+
+    // Comment: Keep strict prepaid rule — customer with prepaid balance cannot be deleted directly.
+    const { count: prepaidCount, error: prepaidError } = await supabase
+      .from('prepaid_passes')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', customerId);
+    if (prepaidError) {
+      throw new Error(prepaidError.message);
+    }
+    if ((prepaidCount || 0) > 0) {
+      return NextResponse.json(
+        { error: '정액권이 연결된 고객은 삭제할 수 없습니다. 먼저 정액권을 정리해주세요.' },
+        { status: 409 }
+      );
+    }
+
+    // Comment: Allow deleting customer when all linked bookings are either past or sale-completed.
+    const { data: linkedBookings, error: bookingLoadError } = await supabase
+      .from('bookings')
+      .select('id, booking_date, booking_time, sale_completed, status')
+      .eq('customer_id', customerId);
+    if (bookingLoadError) {
+      throw new Error(bookingLoadError.message);
+    }
+
+    const now = new Date();
+    const deletableBookingIds: number[] = [];
+    const blockingBookingIds: number[] = [];
+    for (const booking of linkedBookings || []) {
+      const saleCompleted = Number(booking.sale_completed || 0) === 1;
+      const isClosedStatus =
+        booking.status === 'cancelled' || booking.status === 'noshow';
+
+      let isPast = false;
+      if (booking.booking_date) {
+        const timePart = booking.booking_time || '00:00:00';
+        const when = new Date(`${booking.booking_date}T${timePart}`);
+        isPast = !Number.isNaN(when.getTime()) && when < now;
+      }
+
+      if (saleCompleted || isClosedStatus || isPast) {
+        deletableBookingIds.push(Number(booking.id));
+      } else {
+        blockingBookingIds.push(Number(booking.id));
+      }
+    }
+
+    if (blockingBookingIds.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            '미지난/미완료 예약이 있어 고객을 삭제할 수 없습니다. 해당 예약을 먼저 취소 또는 완료 처리해주세요.',
+          blockingBookingCount: blockingBookingIds.length,
+        },
+        { status: 409 }
+      );
+    }
+
+    if (deletableBookingIds.length > 0) {
+      const { error: bookingDetachError } = await supabase
+        .from('bookings')
+        .update({ customer_id: null })
+        .in('id', deletableBookingIds);
+      if (bookingDetachError) {
+        throw new Error(bookingDetachError.message);
+      }
+    }
+
+    // Comment: Detach historical sales records so customer deletion is not blocked by FK.
+    const { error: salesDetachError } = await supabase
+      .from('sales')
+      .update({ customer_id: null })
+      .eq('customer_id', customerId);
+    if (salesDetachError) {
+      throw new Error(salesDetachError.message);
+    }
+
     const { error } = await supabase
       .from('customers')
       .delete()
-      .eq('id', Number(id));
+      .eq('id', customerId);
 
     if (error) {
       throw new Error(error.message);

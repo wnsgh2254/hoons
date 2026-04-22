@@ -2,16 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const normalizeName = (value: string | null | undefined) => String(value || '').trim().toLowerCase();
 
-async function loadCustomerPhone(supabase: SupabaseClient, customerId: number): Promise<string> {
-  const { data } = await supabase
-    .from('customers')
-    .select('phone')
-    .eq('id', customerId)
-    .maybeSingle();
-
-  return String(data?.phone || '').replace(/\D/g, '');
-}
-
 export async function adjustInventoryStockForSaleItem(
   supabase: SupabaseClient,
   params: {
@@ -68,22 +58,12 @@ export async function adjustPrepaidBalance(
   const pointsDelta = Math.round(Number(params.pointsDelta) || 0);
   if (pointsDelta === 0) return;
 
-  const normalizedPhone = await loadCustomerPhone(supabase, params.customerId);
-  let query = supabase
+  const { data, error } = await supabase
     .from('prepaid_passes')
     .select('id, name, points, customer_id')
     .eq('is_active', true)
+    .eq('customer_id', params.customerId)
     .order('created_at', { ascending: false });
-
-  if (normalizedPhone) {
-    query = query.or(
-      `customer_id.eq.${params.customerId},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
-    );
-  } else {
-    query = query.eq('customer_id', params.customerId);
-  }
-
-  const { data, error } = await query;
   if (error) {
     throw new Error(error.message);
   }
@@ -95,18 +75,6 @@ export async function adjustPrepaidBalance(
     (row: any) => normalizeName(row.name) === normalizeName(params.passLabel),
   );
   const targetRows = preferredRows.length > 0 ? preferredRows : rows;
-
-  const legacyIds = rows
-    .filter((row: any) => row.customer_id == null)
-    .map((row: any) => Number(row.id))
-    .filter((id: number) => Number.isFinite(id));
-
-  if (legacyIds.length > 0) {
-    await supabase
-      .from('prepaid_passes')
-      .update({ customer_id: params.customerId })
-      .in('id', legacyIds);
-  }
 
   if (pointsDelta > 0) {
     const target = targetRows[0];

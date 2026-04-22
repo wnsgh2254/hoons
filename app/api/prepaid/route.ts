@@ -33,49 +33,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: '유효하지 않은 고객 ID입니다.' }, { status: 400 });
       }
 
-      // Resolve customer phone to include legacy prepaid rows where customer_id is null
-      const { data: customerRow } = await supabase
-        .from('customers')
-        .select('id, phone')
-        .eq('id', customerIdNum)
-        .maybeSingle();
-
-      const normalizedPhone = String(customerRow?.phone || '').replace(/\D/g, '');
-
-      let query = supabase
+      const { data, error } = await supabase
         .from('prepaid_passes')
         .select('*')
         .eq('is_active', true)
+        .eq('customer_id', customerIdNum)
         .order('created_at', { ascending: false });
-
-      if (normalizedPhone) {
-        // Include both correctly linked rows and legacy null-customer rows matched by phone
-        query = query.or(
-          `customer_id.eq.${customerIdNum},and(customer_id.is.null,phone.eq.${normalizedPhone})`,
-        );
-      } else {
-        query = query.eq('customer_id', customerIdNum);
-      }
-
-      const { data, error } = await query;
 
       if (error) {
         throw new Error(error.message);
       }
 
       const members = data || [];
-      // Opportunistic backfill: attach matched legacy rows to this customer_id
-      const legacyIds = members
-        .filter((m: any) => m.customer_id == null)
-        .map((m: any) => Number(m.id))
-        .filter((id: number) => Number.isFinite(id));
-      if (legacyIds.length > 0) {
-        await supabase
-          .from('prepaid_passes')
-          .update({ customer_id: customerIdNum })
-          .in('id', legacyIds);
-      }
-
       const now = new Date();
       const usableMembers = members.filter((m: any) => {
         if (!m.expires_at) return true;

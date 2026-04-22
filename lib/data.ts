@@ -71,6 +71,12 @@ export function buildPhoneVariants(phoneRaw: string | undefined | null) {
   return { local: digitsOnly, e164: null as string | null, digitsOnly };
 }
 
+// Comment: Validate AU mobile format used by booking flow (must be 10 digits starting with 04).
+export function isValidAuMobilePhone(phoneRaw: string | undefined | null): boolean {
+  const digits = String(phoneRaw || '').replace(/[^0-9]/g, '');
+  return /^04\d{8}$/.test(digits);
+}
+
 // Comment: Look up existing customer by phone (local or e164). Returns id or null.
 export async function getCustomerIdByPhone(phone: string): Promise<number | null> {
   const { local, e164 } = buildPhoneVariants(phone);
@@ -593,19 +599,8 @@ export async function createPrepaidPass(payload: {
     .eq('customer_id', customerId)
     .eq('is_active', true);
 
-  let legacyRows: any[] = [];
-  if (normalizedPhone) {
-    const { data: byPhone } = await supabase
-      .from('prepaid_passes')
-      .select('*')
-      .is('customer_id', null)
-      .eq('phone', normalizedPhone)
-      .eq('is_active', true);
-    legacyRows = byPhone || [];
-  }
-
   const byId = new Map<number, any>();
-  for (const r of [...(rowsByCustomer || []), ...legacyRows]) {
+  for (const r of rowsByCustomer || []) {
     if (r?.id != null) byId.set(Number(r.id), r);
   }
   const unique = [...byId.values()];
@@ -759,18 +754,6 @@ export async function updatePrepaidPass(
   if (updates.phone !== undefined) {
     const normalizedPhone = updates.phone?.trim() ? updates.phone.trim().replace(/\D/g, '') : null;
     updateData.phone = normalizedPhone;
-    if (updates.customerId === undefined) {
-      if (normalizedPhone) {
-        const { data: customer } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('phone', normalizedPhone)
-          .maybeSingle();
-        updateData.customer_id = customer?.id ?? null;
-      } else {
-        updateData.customer_id = null;
-      }
-    }
   }
   if (updates.email !== undefined) updateData.email = updates.email?.trim() || null;
   if (updates.points !== undefined) updateData.points = Number(updates.points) || 0;

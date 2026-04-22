@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicBooking, buildPhoneVariants } from '@/lib/data';
+import { createPublicBooking, buildPhoneVariants, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
 
@@ -34,6 +34,12 @@ export async function POST(request: NextRequest) {
 
     // Comment: Try to resolve or create customer if name/phone are provided
     if (customerPhone && customerName) {
+      if (!isValidAuMobilePhone(customerPhone)) {
+        return NextResponse.json(
+          { error: '전화번호는 04로 시작하는 호주 모바일 번호(10자리)여야 합니다.' },
+          { status: 400 }
+        );
+      }
       const { local, e164 } = buildPhoneVariants(customerPhone);
 
       // Comment: If existingCustomerId is provided, trust and verify it first
