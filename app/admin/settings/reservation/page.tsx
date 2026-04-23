@@ -412,7 +412,7 @@ function ResourceModal({
   initial?: BookingResource;
   title: string;
   shops: ShopOption[];
-  staffList: { id: number; name: string }[];
+  staffList: { id: number; name: string; label: string }[];
   /** When true, save/cancel reflect an async save (edit flow). */
   saveInProgress?: boolean;
   /** When true, delete/cancel reflect an async delete (edit flow). */
