@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const depositPaidDollars = Math.round((paymentIntent.amount ?? 0) / 100);
+  // Comment: Stripe amount is in cents; store exact paid amount in dollars (no integer rounding).
+  const depositPaidDollars = Number(((paymentIntent.amount ?? 0) / 100).toFixed(2));
   const { customer_name: customerName, customer_phone: customerPhone } = metadata ?? {};
 
   let customerId: number | undefined;
