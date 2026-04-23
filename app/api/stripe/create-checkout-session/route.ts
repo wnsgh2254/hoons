@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { createPublicBooking, buildPhoneVariants, isValidAuMobilePhone } from "@/lib/data";
+import { buildPhoneVariants, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -147,28 +147,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Comment: Create a pending booking record (same helper as public booking API)
-    const booking = await createPublicBooking({
-      shopId: Number(shopId),
-      designerId: designerId != null ? Number(designerId) : null,
-      serviceId: serviceId != null ? Number(serviceId) : null,
-      day: Number(day),
-      timeLabel,
-      totalAmount: typeof totalAmount === "number" ? totalAmount : null,
-      depositAmount: typeof depositAmount === "number" ? depositAmount : null,
-      fullDate: typeof fullDate === "string" ? fullDate : undefined,
-      customerId: customerId,
-      customServiceName: serviceName,
-      customServiceDuration: durationMinutes > 0 ? durationMinutes : null,
-    });
-
     const origin =
       request.headers.get("origin") ||
       process.env.NEXT_PUBLIC_SITE_URL ||
       "http://localhost:3000";
 
     const returnOrSuccessUrl = new URL("/booking/confirmed", origin);
-    returnOrSuccessUrl.searchParams.set("booking_id", String(booking.id));
     returnOrSuccessUrl.searchParams.set("shop", shopName || "");
     returnOrSuccessUrl.searchParams.set("designer", designerName || "");
     returnOrSuccessUrl.searchParams.set("service", serviceName || "");
@@ -212,9 +196,29 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      metadata: {
-        booking_id: String(booking.id),
-        deposit_amount: amountInCents.toString(),
+      payment_intent_data: {
+        metadata: {
+          deposit_amount: amountInCents.toString(),
+          shop_id: String(shopId),
+          designer_id: designerId != null ? String(designerId) : "",
+          service_id: serviceId != null ? String(serviceId) : "",
+          day: String(day),
+          full_date: String(fullDate || ""),
+          total_amount: typeof totalAmount === "number" ? String(totalAmount) : "",
+          duration_minutes: String(durationMinutes),
+          service_name: String(serviceName),
+          shop_name: String(shopName || "HAEYOOM"),
+          designer_name: String(designerName || ""),
+          formatted_date: String(formattedDateLabel || fullDate || ""),
+          time_label: String(timeLabel),
+          ...(customerId != null ? { customer_id: String(customerId) } : {}),
+          ...(customerId == null && customerName && customerPhone
+            ? {
+                customer_name: String(customerName).trim(),
+                customer_phone: String(customerPhone).trim(),
+              }
+            : {}),
+        },
       },
     };
 

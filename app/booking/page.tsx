@@ -156,7 +156,6 @@ export default function BookingPage() {
   const [existingCustomerId, setExistingCustomerId] = useState<number | null>(null); // Comment: Existing customer id if found
   const [loadingCustomer, setLoadingCustomer] = useState<boolean>(false); // Comment: Loading state when resolving customer
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null); // Comment: PaymentIntent client_secret for Payment Element
-  const [paymentIntentBookingId, setPaymentIntentBookingId] = useState<number | null>(null); // Comment: booking_id from create-payment-intent (for return_url)
   const [checkoutError, setCheckoutError] = useState<string | null>(null); // Comment: Error when creating payment intent
   const [checkoutLoading, setCheckoutLoading] = useState<boolean>(false); // Comment: Loading state for payment intent
   const [checkoutRetry, setCheckoutRetry] = useState<number>(0); // Comment: Increment to retry creating payment intent
@@ -864,7 +863,6 @@ export default function BookingPage() {
   useEffect(() => {
     if (step !== 'deposit') {
       setCheckoutClientSecret(null);
-      setPaymentIntentBookingId(null);
       setCheckoutError(null);
       setShowPaymentForm(false);
       paymentIntentFetchedRef.current = false;
@@ -933,7 +931,6 @@ export default function BookingPage() {
         }
         if (data.client_secret) {
           setCheckoutClientSecret(data.client_secret);
-          setPaymentIntentBookingId(data.booking_id ?? null);
         } else {
           setCheckoutError('Payment form could not be created.');
         }
@@ -1161,7 +1158,7 @@ export default function BookingPage() {
                     </p>
                   </div>
                 </div>
-                {stripePublishableKey && checkoutClientSecret && showPaymentForm && stripePromise && paymentIntentBookingId != null && (
+                {stripePublishableKey && checkoutClientSecret && showPaymentForm && stripePromise && (
                   <Elements
                     key={checkoutClientSecret}
                     stripe={stripePromise}
@@ -1182,7 +1179,7 @@ export default function BookingPage() {
                     <PaymentForm
                       returnUrl={
                         typeof window !== 'undefined'
-                          ? `${window.location.origin}/booking/confirmed?booking_id=${paymentIntentBookingId}&shop=${encodeURIComponent(shops.find((s) => s.id === selectedShop)?.name ?? '')}&designer=${encodeURIComponent(selectedDesigner?.name ?? '')}&service=${encodeURIComponent(selectedService?.name ?? '')}&date=${encodeURIComponent(selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '')}&time=${encodeURIComponent(selectedTime ?? '')}&deposit=${depositAmount.toFixed(2)}`
+                          ? `${window.location.origin}/booking/confirmed?shop=${encodeURIComponent(shops.find((s) => s.id === selectedShop)?.name ?? '')}&designer=${encodeURIComponent(selectedDesigner?.name ?? '')}&service=${encodeURIComponent(selectedService?.name ?? '')}&date=${encodeURIComponent(selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '')}&time=${encodeURIComponent(selectedTime ?? '')}&deposit=${depositAmount.toFixed(2)}`
                           : ''
                       }
                       depositAmount={depositAmount}
@@ -1205,7 +1202,6 @@ export default function BookingPage() {
                       onClick={() => {
                         setCheckoutError(null);
                         setCheckoutClientSecret(null);
-                        setPaymentIntentBookingId(null);
                         setCheckoutRetry((r) => r + 1);
                       }}
                       className="text-sm font-medium text-black underline hover:no-underline"

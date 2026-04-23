@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { createPublicBooking, getCustomerIdByPhone, isValidAuMobilePhone } from "@/lib/data";
+import { getCustomerIdByPhone, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -109,20 +109,6 @@ export async function POST(request: NextRequest) {
       customerId = await getCustomerIdByPhone(customerPhone);
     }
 
-    const booking = await createPublicBooking({
-      shopId: Number(shopId),
-      designerId: designerId != null ? Number(designerId) : null,
-      serviceId: serviceId != null ? Number(serviceId) : null,
-      day: Number(day),
-      timeLabel,
-      totalAmount: typeof totalAmount === "number" ? totalAmount : null,
-      depositAmount: typeof depositAmount === "number" ? depositAmount : null,
-      fullDate: typeof fullDate === "string" ? fullDate : undefined,
-      customerId: customerId,
-      customServiceName: serviceName,
-      customServiceDuration: durationMinutes > 0 ? durationMinutes : null,
-    });
-
     const amountInCents =
       typeof depositAmount === "number"
         ? Math.round(depositAmount * 100)
@@ -145,13 +131,20 @@ export async function POST(request: NextRequest) {
         card: { request_three_d_secure: "automatic" },
       },
       metadata: {
-        booking_id: String(booking.id),
         deposit_amount: amountInCents.toString(),
+        shop_id: String(shopId),
+        designer_id: designerId != null ? String(designerId) : "",
+        service_id: serviceId != null ? String(serviceId) : "",
+        day: String(day),
+        full_date: String(fullDate || ""),
+        total_amount: typeof totalAmount === "number" ? String(totalAmount) : "",
+        duration_minutes: String(durationMinutes),
         service_name: String(serviceName),
         shop_name: String(shopName || "HAEYOOM"),
         designer_name: String(designerName || ""),
         formatted_date: String(formattedDateLabel || fullDate || ""),
         time_label: String(timeLabel),
+        ...(customerId != null ? { customer_id: String(customerId) } : {}),
         // Comment: For new customers; webhook creates customer and sets booking.customer_id after deposit paid
         ...(customerId == null && customerName && customerPhone
           ? { customer_name: String(customerName).trim(), customer_phone: String(customerPhone).trim() }
@@ -166,19 +159,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Comment: Persist PI id for admin cancel refunds (webhook also sets this on success)
-    const { error: piUpdateError } = await supabase
-      .from("bookings")
-      .update({ stripe_payment_intent_id: paymentIntent.id })
-      .eq("id", booking.id);
-    if (piUpdateError) {
-      console.warn("Could not save stripe_payment_intent_id on booking:", piUpdateError.message);
-    }
-
     return NextResponse.json(
       {
         client_secret: paymentIntent.client_secret,
-        booking_id: booking.id,
       },
       { status: 200 },
     );

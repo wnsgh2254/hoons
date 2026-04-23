@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { updateBookingAfterDepositPaid, getOrCreateCustomerByNameAndPhone } from "@/lib/data";
+import {
+  updateBookingAfterDepositPaid,
+  getOrCreateCustomerByNameAndPhone,
+  createPublicBooking,
+} from "@/lib/data";
+import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -58,28 +63,77 @@ export async function POST(request: NextRequest) {
   }
 
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
-  const bookingIdRaw = paymentIntent.metadata?.booking_id;
-  if (!bookingIdRaw) {
-    console.warn("Stripe webhook: payment_intent.succeeded missing metadata.booking_id");
-    return ok();
+  const metadata = paymentIntent.metadata ?? {};
+  let bookingId: number | null = null;
+  const bookingIdRaw = metadata.booking_id;
+  if (bookingIdRaw) {
+    const parsed = parseInt(bookingIdRaw, 10);
+    if (!Number.isNaN(parsed)) bookingId = parsed;
   }
-  const bookingId = parseInt(bookingIdRaw, 10);
-  if (Number.isNaN(bookingId)) {
-    console.warn("Stripe webhook: invalid metadata.booking_id", bookingIdRaw);
-    return ok();
+
+  if (!bookingId) {
+    // Idempotency: if we already created/updated a booking for this PI, reuse it.
+    const { data: existing } = await supabase
+      .from("bookings")
+      .select("id")
+      .eq("stripe_payment_intent_id", paymentIntent.id)
+      .maybeSingle();
+    if (existing?.id) {
+      bookingId = Number(existing.id);
+    }
   }
 
   const depositPaidDollars = Math.round((paymentIntent.amount ?? 0) / 100);
-  const { customer_name: customerName, customer_phone: customerPhone } = paymentIntent.metadata ?? {};
+  const { customer_name: customerName, customer_phone: customerPhone } = metadata ?? {};
 
   let customerId: number | undefined;
-  if (customerName && customerPhone) {
+  if (metadata.customer_id) {
+    const parsedCustomerId = parseInt(metadata.customer_id, 10);
+    if (!Number.isNaN(parsedCustomerId)) customerId = parsedCustomerId;
+  }
+
+  if (customerId == null && customerName && customerPhone) {
     try {
       customerId = await getOrCreateCustomerByNameAndPhone(customerName, customerPhone);
     } catch (createErr) {
       console.error("Stripe webhook: get/create customer failed", createErr);
       return NextResponse.json({ error: "Failed to create customer." }, { status: 500 });
     }
+  }
+
+  if (!bookingId) {
+    const shopId = parseInt(metadata.shop_id || "", 10);
+    const day = parseInt(metadata.day || "", 10);
+    const timeLabel = metadata.time_label;
+    if (!shopId || !day || !timeLabel) {
+      console.warn("Stripe webhook: missing booking metadata to create booking", metadata);
+      return ok();
+    }
+
+    try {
+      const created = await createPublicBooking({
+        shopId,
+        designerId: metadata.designer_id ? Number(metadata.designer_id) : null,
+        serviceId: metadata.service_id ? Number(metadata.service_id) : null,
+        day,
+        timeLabel,
+        totalAmount: metadata.total_amount ? Number(metadata.total_amount) : null,
+        depositAmount: depositPaidDollars,
+        fullDate: metadata.full_date || undefined,
+        customerId,
+        customServiceName: metadata.service_name || null,
+        customServiceDuration: metadata.duration_minutes ? Number(metadata.duration_minutes) : null,
+        status: "confirmed",
+      });
+      bookingId = Number(created.id);
+    } catch (createErr) {
+      console.error("Stripe webhook: create booking failed", createErr);
+      return NextResponse.json({ error: "Failed to create booking." }, { status: 500 });
+    }
+  }
+  if (!bookingId) {
+    console.warn("Stripe webhook: booking id missing after processing");
+    return ok();
   }
 
   try {
