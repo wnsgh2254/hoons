@@ -33,6 +33,7 @@ interface BookingResource {
   id: number;
   name: string;
   linkedStaff: string;
+  linkedStaffLabel?: string;
   isLinked: boolean;
   isActive: boolean;
   shopId: number | null;
@@ -552,7 +553,7 @@ function ResourceModal({
                   setLinkedStaff(selectedName);
                   if (!name.trim()) setName(selectedName);
                 }}
-                options={staffList.map((s) => ({ value: String(s.id), label: s.name }))}
+                options={staffList.map((s) => ({ value: String(s.id), label: s.label }))}
                 placeholder="직원을 선택하세요"
               />
             </div>
@@ -655,7 +656,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
     [rawBusinessHours],
   );
   const [resources, setResources] = useState<BookingResource[]>([]);
-  const [staffList, setStaffList] = useState<{ id: number; name: string }[]>([]);
+  const [staffList, setStaffList] = useState<{ id: number; name: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInactive, setShowInactive] = useState(false);
   const [editingResource, setEditingResource] = useState<BookingResource | null>(null);
@@ -691,7 +692,13 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       const allDefaults: { designer_id: number; weekday: number; shop_id: number }[] =
         defaultsData.defaults || [];
 
-      setStaffList(staff.map((s: any) => ({ id: s.id, name: s.name })));
+      setStaffList(
+        staff.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          label: s.shop_name ? `${s.name} - ${s.shop_name}` : s.name,
+        })),
+      );
 
       // Comment: Build lookup: "designerId:weekday" → default shop_id
       const defaultsMap = new Map<string, number>();
@@ -748,6 +755,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           id: member.id,
           name: member.name,
           linkedStaff: member.name,
+          linkedStaffLabel: member.shop_name ? `${member.name} - ${member.shop_name}` : member.name,
           isLinked: true,
           isActive: member.is_active ?? true,
           shopId: member.shop_id ?? null,
@@ -952,7 +960,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       header: '연결 직원',
       align: 'center' as const,
       render: (item: BookingResource) => (
-        <span className={!item.isActive ? 'text-gray-400' : ''}>{item.linkedStaff || '-'}</span>
+        <span className={!item.isActive ? 'text-gray-400' : ''}>{item.linkedStaffLabel || item.linkedStaff || '-'}</span>
       ),
     },
     {

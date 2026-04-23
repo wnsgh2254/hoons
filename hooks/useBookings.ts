@@ -27,29 +27,32 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  // Capture the date to skip at mount time via useState (stable — survives React Strict Mode double-invoke)
-  // When skipInitialFetchOnce=true, we skip the auto-fetch for the initial selectedDate only.
-  // When selectedDate later changes, the new date won't match skipForDate → fetch proceeds normally.
-  const [skipForDate] = useState<string | null>(() => skipInitialFetchOnce ? selectedDate : null);
+  // Track whether the initial skip has been consumed. Using a ref (not state) so that
+  // navigating back to the initial date after visiting another date still triggers a fetch.
+  // The old useState+date-comparison approach had a bug: A→B→A would skip the refetch for A
+  // because skipForDate===selectedDate was true again, leaving stale B data on screen.
+  const skipInitialRef = useRef(skipInitialFetchOnce);
 
   // Fetch bookings for selected week
   const fetchBookings = useCallback(async () => {
+    const seq = ++requestSeqRef.current;
     try {
       setLoading(true);
       setError(null);
       const weekStart = getWeekStart(selectedDate);
       const weekEnd = getWeekEnd(selectedDate);
       const res = await fetch(
-        `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+        `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
       );
       const data = await res.json();
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === requestSeqRef.current) {
         if (!res.ok) {
           throw new Error(data.error || 'Failed to load bookings');
         }
@@ -57,21 +60,25 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
         setFilteredBookings(data.bookings || []);
       }
     } catch (err: any) {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === requestSeqRef.current) {
         setError(err.message || 'Failed to load bookings');
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && seq === requestSeqRef.current) {
         setLoading(false);
       }
     }
   }, [selectedDate]);
 
   useEffect(() => {
-    // Skip auto-fetch if this date was already loaded via initial-data (state-based, Strict Mode safe)
-    if (skipForDate !== null && skipForDate === selectedDate) return;
+    // Skip only the very first fetch (initial data already loaded by consolidated API).
+    // Consuming the ref here ensures navigating back to the initial date still triggers a fetch.
+    if (skipInitialRef.current) {
+      skipInitialRef.current = false;
+      return;
+    }
     fetchBookings();
-  }, [fetchBookings, skipForDate]);
+  }, [fetchBookings]);
 
   // Apply shop, designer filter and search
   useEffect(() => {
@@ -99,9 +106,7 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
       });
     }
 
-    if (!searchInput.trim()) {
-      setFilteredBookings(filtered);
-    }
+    setFilteredBookings(filtered);
   }, [designerFilter, shopFilter, shopFilteredDesignerIds, bookings, searchInput, availableDesignerIds]);
 
   return {

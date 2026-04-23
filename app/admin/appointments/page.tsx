@@ -2002,11 +2002,12 @@ export default function AppointmentsManagementPage() {
           const weekStart = getWeekStart(selectedDate);
           const weekEnd = getWeekEnd(selectedDate);
           const res = await fetch(
-            `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+            `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
           );
           const data = await res.json();
           if (data.bookings) {
             setBookings(data.bookings);
+            setFilteredBookings(data.bookings);
           }
           setBookingMenuOpen(null);
           setBookingMenuPosition(null);
@@ -2682,7 +2683,7 @@ export default function AppointmentsManagementPage() {
                               const weekStart = getWeekStart(selectedDate);
                               const weekEnd = getWeekEnd(selectedDate);
                               const res = await fetch(
-                                `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}`
+                                `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
                               );
                               const data = await res.json();
                               if (res.ok && data.bookings) {
@@ -3736,12 +3737,15 @@ export default function AppointmentsManagementPage() {
                 console.error('Failed to delete booking', await resDelete.text());
               }
 
+              const weekStart = getWeekStart(selectedDate);
+              const weekEnd = getWeekEnd(selectedDate);
               const res = await fetch(
-                `/api/appointment?date=${encodeURIComponent(selectedDate)}`
+                `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
               );
               const data = await res.json();
               if (res.ok) {
                 setBookings(data.bookings || []);
+                setFilteredBookings(data.bookings || []);
               }
               setBookingToDelete(null);
             } catch (err) {
@@ -3823,13 +3827,15 @@ export default function AppointmentsManagementPage() {
                     }
 
                     // Refresh day view bookings for selectedDate
-                    const dayRes = await fetch(
-                      `/api/appointment?date=${encodeURIComponent(selectedDate)}`
+                    const weekStart = getWeekStart(selectedDate);
+                    const weekEnd = getWeekEnd(selectedDate);
+                    const weekResForDayView = await fetch(
+                      `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
                     );
-                    const dayData = await dayRes.json();
-                    if (dayRes.ok && dayData.bookings) {
-                      setBookings(dayData.bookings);
-                      setFilteredBookings(dayData.bookings);
+                    const weekDataForDayView = await weekResForDayView.json();
+                    if (weekResForDayView.ok && weekDataForDayView.bookings) {
+                      setBookings(weekDataForDayView.bookings);
+                      setFilteredBookings(weekDataForDayView.bookings);
                     }
 
                     // Refresh week view bookings if in week view mode
