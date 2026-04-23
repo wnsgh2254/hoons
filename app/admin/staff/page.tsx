@@ -15,6 +15,17 @@ import {
   EmptyState,
 } from '@/components/ui';
 
+const STAFF_ROLE_OPTIONS = [
+  { value: 'Director', label: 'Director' },
+  { value: 'Senior Designer', label: 'Senior Designer' },
+  { value: 'Designer', label: 'Designer' },
+  { value: 'Senior Director', label: 'Senior Director' },
+  { value: 'Assistant', label: 'Assistant' },
+  { value: 'Other', label: 'Other' },
+];
+
+const PRESET_ROLE_VALUES = STAFF_ROLE_OPTIONS.map((opt) => opt.value).filter((v) => v !== 'Other');
+
 export default function StaffManagementPage() {
   const [staffMembers, setStaffMembers] = useState<Designer[]>([]);
   const [stats, setStats] = useState({ totalStaff: 0 });
@@ -320,17 +331,8 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
     hourly_rate: '',
     instagramLink: '',
   });
+  const [customRole, setCustomRole] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const roleOptions = [
-    { value: 'Director', label: 'Director' },
-    { value: 'Senior Designer', label: 'Senior Designer' },
-    { value: 'Designer', label: 'Designer' },
-    { value: 'Senior Director', label: 'Senior Director' },
-    { value: 'Top Stylist', label: 'Top Stylist' },
-    { value: 'Stylist', label: 'Stylist' },
-    { value: 'Assistant', label: 'Assistant' },
-  ];
 
   const shopOptions = shops.map((shop) => ({
     value: shop.id,
@@ -352,13 +354,20 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
       setLoading(false);
       return;
     }
+    if (formData.role === 'Other' && !customRole.trim()) {
+      alert('Please enter a custom role');
+      setLoading(false);
+      return;
+    }
+
+    const resolvedRole = formData.role === 'Other' ? customRole.trim() : formData.role.trim();
 
     try {
       const requestBody = {
         name: formData.name.trim(),
         // Comment: English display name for public-facing pages
         english_name: formData.english_name.trim() || null,
-        role: formData.role.trim(),
+        role: resolvedRole,
         shop_id: formData.shop_id ? Number(formData.shop_id) : null,
         wage_type: formData.wage_type,
         percent_rate: formData.wage_type === 'percent' ? Number(formData.percent_rate) : null,
@@ -438,11 +447,25 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
           label="Role"
           required
           value={formData.role}
-          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-          options={roleOptions}
+          onChange={(e) => {
+            const nextRole = e.target.value;
+            setFormData({ ...formData, role: nextRole });
+            if (nextRole !== 'Other') setCustomRole('');
+          }}
+          options={STAFF_ROLE_OPTIONS}
           placeholder="Select Role"
         />
-        {formData.role.toLowerCase().includes('director') ? (
+        {formData.role === 'Other' && (
+          <Input
+            label="Custom Role"
+            type="text"
+            required
+            placeholder="Enter role name"
+            value={customRole}
+            onChange={(e) => setCustomRole(e.target.value)}
+          />
+        )}
+        {(formData.role === 'Other' ? customRole : formData.role).toLowerCase().includes('director') ? (
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Venue (Shop)</label>
             <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">
@@ -501,16 +524,18 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
 
 // Manage Designer Modal Component
 function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; designer: Designer; onClose: () => void }) {
+  const initialRoleIsPreset = PRESET_ROLE_VALUES.includes(designer.role);
   const [formData, setFormData] = useState({
     name: designer.name,
     english_name: designer.english_name || '',
-    role: designer.role,
+    role: initialRoleIsPreset ? designer.role : 'Other',
     shop_id: designer.shop_id?.toString() || '',
     wage_type: designer.wage_type,
     percent_rate: designer.percent_rate?.toString() || '',
     hourly_rate: designer.hourly_rate?.toString() || '',
     instagramLink: designer.instagramLink || '',
   });
+  const [customRole, setCustomRole] = useState(initialRoleIsPreset ? '' : designer.role);
   const [shops, setShops] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -525,16 +550,6 @@ function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; de
       .catch(console.error);
   }, []);
 
-  const roleOptions = [
-    { value: 'Director', label: 'Director' },
-    { value: 'Senior Designer', label: 'Senior Designer' },
-    { value: 'Designer', label: 'Designer' },
-    { value: 'Senior Director', label: 'Senior Director' },
-    { value: 'Top Stylist', label: 'Top Stylist' },
-    { value: 'Stylist', label: 'Stylist' },
-    { value: 'Assistant', label: 'Assistant' },
-  ];
-
   const shopOptions = shops.map((shop) => ({
     value: shop.id,
     label: shop.name,
@@ -548,13 +563,20 @@ function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; de
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    if (formData.role === 'Other' && !customRole.trim()) {
+      alert('Please enter a custom role');
+      setLoading(false);
+      return;
+    }
+
+    const resolvedRole = formData.role === 'Other' ? customRole.trim() : formData.role.trim();
 
     try {
       const requestBody = {
         name: formData.name.trim(),
         // Comment: English display name for public-facing pages
         english_name: formData.english_name.trim() || null,
-        role: formData.role.trim(),
+        role: resolvedRole,
         shop_id: formData.shop_id ? Number(formData.shop_id) : null,
         wage_type: formData.wage_type,
         percent_rate: formData.wage_type === 'percent' ? Number(formData.percent_rate) : null,
@@ -659,11 +681,25 @@ function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; de
           label="Role"
           required
           value={formData.role}
-          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-          options={roleOptions}
+          onChange={(e) => {
+            const nextRole = e.target.value;
+            setFormData({ ...formData, role: nextRole });
+            if (nextRole !== 'Other') setCustomRole('');
+          }}
+          options={STAFF_ROLE_OPTIONS}
           placeholder="Select Role"
         />
-        {formData.role.toLowerCase().includes('director') ? (
+        {formData.role === 'Other' && (
+          <Input
+            label="Custom Role"
+            type="text"
+            required
+            placeholder="Enter role name"
+            value={customRole}
+            onChange={(e) => setCustomRole(e.target.value)}
+          />
+        )}
+        {(formData.role === 'Other' ? customRole : formData.role).toLowerCase().includes('director') ? (
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Venue (Shop)</label>
             <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">

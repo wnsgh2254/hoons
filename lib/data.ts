@@ -251,8 +251,12 @@ export async function getServicesByShop(shopId?: number) {
 }
 
 // Comment: Load all staff members (designers), optionally filtered by shop_id and role
-export async function getAllStaff(shopId?: number, role?: string) {
-  let query = supabase.from('designers').select('*').eq('is_active', true);
+export async function getAllStaff(shopId?: number, role?: string, includeInactive = false) {
+  let query = supabase.from('designers').select('*');
+
+  if (!includeInactive) {
+    query = query.eq('is_active', true);
+  }
 
   if (typeof shopId === 'number') {
     query = query.eq('shop_id', shopId);

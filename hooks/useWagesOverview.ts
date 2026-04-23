@@ -4,12 +4,26 @@ import { useState, useCallback } from 'react';
 import type { OverviewResponse } from '@/types/wages';
 
 interface UseWagesOverviewOptions {
+  dateMode: 'monthly' | 'period';
   year: number;
   month: number;
+  startDate: string;
+  endDate: string;
   wageTypeFilter: 'all' | 'hourly' | 'percent';
+  designerId: string;
+  shopId: string;
 }
 
-export function useWagesOverview({ year, month, wageTypeFilter }: UseWagesOverviewOptions) {
+export function useWagesOverview({
+  dateMode,
+  year,
+  month,
+  startDate,
+  endDate,
+  wageTypeFilter,
+  designerId,
+  shopId,
+}: UseWagesOverviewOptions) {
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,12 +32,22 @@ export function useWagesOverview({ year, month, wageTypeFilter }: UseWagesOvervi
     try {
       setLoading(true);
       setError(null);
-      const params = new URLSearchParams({
-        year: String(year),
-        month: String(month),
-      });
+      const params = new URLSearchParams();
+      if (dateMode === 'monthly') {
+        params.append('year', String(year));
+        params.append('month', String(month));
+      } else {
+        params.append('start_date', startDate);
+        params.append('end_date', endDate);
+      }
       if (wageTypeFilter !== 'all') {
         params.append('wage_type_filter', wageTypeFilter);
+      }
+      if (designerId) {
+        params.append('designer_id', designerId);
+      }
+      if (shopId) {
+        params.append('shop_id', shopId);
       }
       const res = await fetch(`/api/wages/overview?${params.toString()}`);
       if (!res.ok) {
@@ -38,7 +62,7 @@ export function useWagesOverview({ year, month, wageTypeFilter }: UseWagesOvervi
     } finally {
       setLoading(false);
     }
-  }, [year, month, wageTypeFilter]);
+  }, [dateMode, year, month, startDate, endDate, wageTypeFilter, designerId, shopId]);
 
   const toggleSettlement = useCallback(
     async (

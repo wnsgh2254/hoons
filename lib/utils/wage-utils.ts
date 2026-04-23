@@ -67,6 +67,44 @@ export function getWeeksInMonth(year: number, month: number): WeekInfo[] {
   return weeks;
 }
 
+export function getWeeksInRange(startDate: string, endDate: string): WeekInfo[] {
+  if (!startDate || !endDate || startDate > endDate) {
+    return [];
+  }
+
+  const weeks: WeekInfo[] = [];
+  const rangeStart = new Date(startDate + 'T00:00:00');
+  const rangeEnd = new Date(endDate + 'T00:00:00');
+
+  // Start from Sunday of the week containing rangeStart
+  const cursor = new Date(rangeStart);
+  const dayOfWeek = cursor.getDay();
+  if (dayOfWeek !== 0) {
+    cursor.setDate(cursor.getDate() - dayOfWeek);
+  }
+
+  let weekNum = 1;
+  while (cursor <= rangeEnd) {
+    const weekStart = new Date(cursor);
+    const weekEnd = new Date(cursor);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+
+    const rawStart = formatDate(weekStart);
+    const rawEnd = formatDate(weekEnd);
+    const clampedStart = rawStart < startDate ? startDate : rawStart;
+    const clampedEnd = rawEnd > endDate ? endDate : rawEnd;
+
+    if (clampedStart <= clampedEnd) {
+      weeks.push({ weekNum, startDate: clampedStart, endDate: clampedEnd });
+      weekNum++;
+    }
+
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return weeks;
+}
+
 /**
  * Returns all 7 days (Sun–Sat) of the week containing the given date range.
  * Days outside the startDate–endDate range are marked isActive=false.

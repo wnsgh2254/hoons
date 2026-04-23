@@ -395,27 +395,37 @@ function ResourceModal({
   isOpen,
   onClose,
   onSave,
+  onDelete,
   initial,
   title,
   shops,
   staffList,
   saveInProgress = false,
+  deleteInProgress = false,
   businessHours = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: Omit<BookingResource, 'id'>) => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
   initial?: BookingResource;
   title: string;
   shops: ShopOption[];
   staffList: { id: number; name: string }[];
   /** When true, save/cancel reflect an async save (edit flow). */
   saveInProgress?: boolean;
+  /** When true, delete/cancel reflect an async delete (edit flow). */
+  deleteInProgress?: boolean;
   /** Business hours for filtering time options */
   businessHours?: { shopId: number | null; startTime: string; endTime: string; days: string[] }[];
 }) {
   const [isLinked, setIsLinked] = useState(initial?.isLinked ?? true);
+  const initialLinkedStaffId = useMemo(() => {
+    const matched = staffList.find((s) => s.name === (initial?.linkedStaff || ''));
+    return matched ? String(matched.id) : '';
+  }, [initial?.linkedStaff, staffList]);
   const [linkedStaff, setLinkedStaff] = useState(initial?.linkedStaff || '');
+  const [linkedStaffId, setLinkedStaffId] = useState(initialLinkedStaffId);
   const [name, setName] = useState(initial?.name || '');
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [shopId, setShopId] = useState<number | null>(initial?.shopId ?? (shops[0]?.id ?? null));
@@ -450,6 +460,11 @@ function ResourceModal({
     });
   };
 
+  useEffect(() => {
+    setLinkedStaff(initial?.linkedStaff || '');
+    setLinkedStaffId(initialLinkedStaffId);
+  }, [initial?.linkedStaff, initialLinkedStaffId]);
+
   const scheduleColumns = [
     { key: 'startTime', header: '시작시간', align: 'center' as const, render: (item: BusinessHour) => item.startTime },
     { key: 'endTime', header: '종료시간', align: 'center' as const, render: (item: BusinessHour) => item.endTime },
@@ -483,10 +498,15 @@ function ResourceModal({
       zIndex={Z.MODAL_PRIMARY}
       footer={
         <>
-          <Button loading={saveInProgress} onClick={handleSave} className="flex-1">
+          <Button loading={saveInProgress} disabled={deleteInProgress} onClick={handleSave} className="flex-1">
             저장
           </Button>
-          <Button variant="outline" disabled={saveInProgress} onClick={onClose} className="flex-1">
+          {onDelete && (
+            <Button variant="danger" loading={deleteInProgress} disabled={saveInProgress} onClick={onDelete} className="flex-1">
+              삭제
+            </Button>
+          )}
+          <Button variant="outline" disabled={saveInProgress || deleteInProgress} onClick={onClose} className="flex-1">
             취소
           </Button>
         </>
@@ -523,12 +543,16 @@ function ResourceModal({
           {isLinked && (
             <div className="mt-3">
               <Select
-                value={linkedStaff}
+                value={linkedStaffId}
                 onChange={(e) => {
-                  setLinkedStaff(e.target.value);
-                  if (!name.trim()) setName(e.target.value);
+                  const nextId = e.target.value;
+                  const selected = staffList.find((s) => String(s.id) === nextId);
+                  const selectedName = selected?.name || '';
+                  setLinkedStaffId(nextId);
+                  setLinkedStaff(selectedName);
+                  if (!name.trim()) setName(selectedName);
                 }}
-                options={staffList.map((s) => ({ value: s.name, label: s.name }))}
+                options={staffList.map((s) => ({ value: String(s.id), label: s.name }))}
                 placeholder="직원을 선택하세요"
               />
             </div>
@@ -637,6 +661,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
   const [editingResource, setEditingResource] = useState<BookingResource | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [resourceSavePending, setResourceSavePending] = useState(false);
+  const [resourceDeletePending, setResourceDeletePending] = useState(false);
 
   const shopNameMap = Object.fromEntries((shops || []).map((s) => [s.id, s.name]));
   const filteredResources = showInactive ? resources : resources.filter((r) => r.isActive);
@@ -646,7 +671,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
     setLoading(true);
     try {
       const [staffRes, schedulesRes, defaultsRes, designersRes] = await Promise.all([
-        fetch('/api/staff'),
+        fetch('/api/staff?include_inactive=true'),
         fetch('/api/designer-schedules?all=true'),
         fetch('/api/designer-weekday-defaults'),
         fetch('/api/designers'),
@@ -730,7 +755,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           allowedShopIds: info?.shopIdsAt ?? (member.shop_id != null ? [member.shop_id] : []),
           role: info?.role ?? member.role ?? '',
         };
-      });
+      }).filter((resource) => resource.schedules.length > 0);
 
       setResources(mapped);
     } catch (err) {
@@ -745,6 +770,16 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
   }, []);
 
   const handleAdd = (data: Omit<BookingResource, 'id'>) => {
+    if (data.isLinked && data.linkedStaff) {
+      const duplicated = resources.some(
+        (r) => r.isLinked && r.linkedStaff === data.linkedStaff,
+      );
+      if (duplicated) {
+        alert('이미 등록된 직원입니다. 추가하지 말고 기존 자원을 수정해주세요.');
+        return;
+      }
+    }
+
     setResources((prev) => [...prev, { ...data, id: getNextId() }]);
     setIsAdding(false);
   };
@@ -855,27 +890,77 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
     }
   };
 
+  const handleDelete = async () => {
+    if (!editingResource) return;
+    const ok = window.confirm('해당 예약 자원을 삭제하시겠습니까? 사용/미사용 상태와 관계없이 목록에서 제거됩니다.');
+    if (!ok) return;
+
+    setResourceDeletePending(true);
+    try {
+      // Remove reservation schedules only, keep staff member in designers table.
+      const currentRes = await fetch(`/api/designer-schedules?designer_id=${editingResource.id}`);
+      const currentData = await currentRes.json();
+      const currentSchedules: any[] = (currentData.schedules || []).filter((s: any) => !s.effective_to);
+      const deleteIds = currentSchedules.map((s: any) => s.id);
+
+      if (deleteIds.length > 0) {
+        const syncRes = await fetch('/api/designer-schedules/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            designer_id: editingResource.id,
+            delete_ids: deleteIds,
+            entries: [],
+          }),
+        });
+        if (!syncRes.ok) {
+          const errorData = await syncRes.json().catch(() => ({}));
+          throw new Error(errorData?.error || '예약 자원 삭제에 실패했습니다.');
+        }
+      }
+
+      setResources((prev) => prev.filter((r) => r.id !== editingResource.id));
+      invalidateStaffCache();
+      fetchResources();
+    } catch (err) {
+      console.error('Error deleting resource:', err);
+      alert(err instanceof Error ? err.message : '예약 자원 삭제에 실패했습니다.');
+    } finally {
+      setResourceDeletePending(false);
+      setEditingResource(null);
+    }
+  };
+
   const columns = [
     {
       key: 'name',
       header: '자원명',
       align: 'center' as const,
       render: (item: BookingResource) => (
-        <span className={!item.isActive ? 'text-gray-400' : ''}>{item.name}</span>
+        <div className="inline-flex items-center gap-2">
+          <span className={!item.isActive ? 'text-gray-400 font-medium' : ''}>{item.name}</span>
+          {!item.isActive && (
+            <Badge variant="default" size="sm" className="bg-gray-200 text-gray-700">
+              미사용
+            </Badge>
+          )}
+        </div>
       ),
     },
     {
       key: 'linkedStaff',
       header: '연결 직원',
       align: 'center' as const,
-      render: (item: BookingResource) => item.linkedStaff || '-',
+      render: (item: BookingResource) => (
+        <span className={!item.isActive ? 'text-gray-400' : ''}>{item.linkedStaff || '-'}</span>
+      ),
     },
     {
       key: 'schedules',
       header: '예약 가능 시간',
       align: 'left' as const,
       render: (item: BookingResource) => (
-        <div className="space-y-0.5">
+        <div className={`space-y-0.5 ${!item.isActive ? 'opacity-60' : ''}`}>
           {item.schedules.map((s) => (
             <div key={s.id} className="text-sm flex items-center gap-2">
               <span>{s.startTime} ~ {s.endTime} {s.days.join(', ')}</span>
@@ -892,7 +977,14 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       header: '수정',
       align: 'center' as const,
       render: (item: BookingResource) => (
-        <Button variant="outline" size="sm" onClick={() => setEditingResource(item)}>수정</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className={!item.isActive ? 'border-gray-200 text-gray-400' : ''}
+          onClick={() => setEditingResource(item)}
+        >
+          수정
+        </Button>
       ),
     },
   ];
@@ -947,14 +1039,16 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
         <ResourceModal
           isOpen
           onClose={() => {
-            if (!resourceSavePending) setEditingResource(null);
+            if (!resourceSavePending && !resourceDeletePending) setEditingResource(null);
           }}
           onSave={handleUpdate}
+          onDelete={handleDelete}
           initial={editingResource}
           title="자원 수정"
           shops={shops}
           staffList={staffList}
           saveInProgress={resourceSavePending}
+          deleteInProgress={resourceDeletePending}
           businessHours={businessHoursForModal}
         />
       )}

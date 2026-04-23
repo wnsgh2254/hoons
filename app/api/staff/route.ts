@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const shopId = searchParams.get('shop_id');
     const role = searchParams.get('role');
     const includeStats = searchParams.get('include_stats') === 'true';
+    const includeInactive = searchParams.get('include_inactive') === 'true';
 
     // Comment: Single staff member by id
     if (id) {
@@ -26,7 +27,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Comment: Get staff list
-    const staff = await getAllStaff(shopId ? Number(shopId) : undefined, role || undefined);
+    const staff = await getAllStaff(
+      shopId ? Number(shopId) : undefined,
+      role || undefined,
+      includeInactive
+    );
 
     // Comment: Get shops data for venue names
     const shops = await getShops();

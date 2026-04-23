@@ -38,9 +38,12 @@ export default function PayslipCreateModal({
     const [y, m] = today.split('-').map(Number);
     return `${y}-${String(m).padStart(2, '0')}-01`;
   });
-  const periodEnd = useMemo(
-    () => computePeriodEnd(periodStart, getSydneyToday, getLastDayOfMonth),
-    [periodStart, getSydneyToday, getLastDayOfMonth]
+  const [periodEnd, setPeriodEnd] = useState<string>(() =>
+    computePeriodEnd(
+      `${today.split('-')[0]}-${today.split('-')[1]}-01`,
+      getSydneyToday,
+      getLastDayOfMonth
+    )
   );
   const [selectedDesignerId, setSelectedDesignerId] = useState<string>('');
   const [basePay, setBasePay] = useState<string>('');
@@ -71,9 +74,18 @@ export default function PayslipCreateModal({
     : 0;
 
   useEffect(() => {
+    if (!periodStart) return;
+    // Keep the end date within valid range [periodStart, today]
+    if (!periodEnd || periodEnd < periodStart || periodEnd > today) {
+      setPeriodEnd(computePeriodEnd(periodStart, getSydneyToday, getLastDayOfMonth));
+    }
+  }, [periodStart, periodEnd, today, getSydneyToday, getLastDayOfMonth]);
+
+  useEffect(() => {
     if (!selectedDesignerId || !periodStart || !periodEnd) return;
     const fetchIncentive = async () => {
       setLoadingIncentive(true);
+      setIncentive('');
       setIncentiveBreakdown(null);
       try {
         const res = await fetch(
@@ -159,14 +171,17 @@ export default function PayslipCreateModal({
               type="date"
               value={periodStart}
               onChange={(e) => setPeriodStart(e.target.value)}
+              max={today}
               className="w-auto"
             />
             <span className="text-gray-400">~</span>
             <Input
               type="date"
               value={periodEnd}
-              readOnly
-              className="w-auto bg-gray-50 text-gray-700"
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              min={periodStart}
+              max={today}
+              className="w-auto"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -183,6 +198,12 @@ export default function PayslipCreateModal({
             </Button>
           </div>
         </div>
+
+        {loadingIncentive && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2">
+            <p className="text-sm text-blue-700">계산 중입니다. 잠시만 기다려주세요...</p>
+          </div>
+        )}
 
         {/* Salary & Deduction section */}
         <div>

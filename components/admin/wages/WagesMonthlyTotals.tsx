@@ -7,6 +7,7 @@ import type { EmployeeOverviewData } from '@/types/wages';
 interface WagesMonthlyTotalsProps {
   employees: EmployeeOverviewData[];
   grandTotals: { wageSum: number; cashWageSum: number };
+  title?: string;
 }
 
 // Match sticky column widths with WagesWeekTable
@@ -17,7 +18,11 @@ const NAME_SHADOW_BODY = 'shadow-[inset_-1px_0_0_0_#f3f4f6]';
 const TYPE_SHADOW_HEAD = 'shadow-[inset_-1px_0_0_0_#e5e7eb,3px_0_4px_-2px_rgba(0,0,0,0.08)]';
 const TYPE_SHADOW_BODY = 'shadow-[inset_-1px_0_0_0_#f3f4f6,3px_0_4px_-2px_rgba(0,0,0,0.08)]';
 
-export default function WagesMonthlyTotals({ employees, grandTotals }: WagesMonthlyTotalsProps) {
+export default function WagesMonthlyTotals({
+  employees,
+  grandTotals,
+  title = '월간 누적 합계',
+}: WagesMonthlyTotalsProps) {
   return (
     <div className="space-y-4">
       {/* Grand totals */}
@@ -37,7 +42,7 @@ export default function WagesMonthlyTotals({ employees, grandTotals }: WagesMont
       {/* Per-employee monthly accumulated */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <h3 className="text-sm font-bold text-black">월간 누적 합계</h3>
+          <h3 className="text-sm font-bold text-black">{title}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

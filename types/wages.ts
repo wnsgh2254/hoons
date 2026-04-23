@@ -43,8 +43,11 @@ export interface OverviewResponse {
     cashWageSum: number;
   };
   period: {
-    year: number;
-    month: number;
+    mode: 'monthly' | 'period';
+    year?: number;
+    month?: number;
+    startDate?: string;
+    endDate?: string;
     weeks: WeekInfo[];
   };
 }

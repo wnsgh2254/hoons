@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getWeeksInMonth, getFirstDayOfMonth, getLastDayOfMonth } from '@/lib/utils/wage-utils';
+import {
+  getWeeksInMonth,
+  getFirstDayOfMonth,
+  getLastDayOfMonth,
+  getWeeksInRange,
+} from '@/lib/utils/wage-utils';
 
 const toNum = (v: any) => Number(v || 0);
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -27,23 +32,57 @@ function computeMinutesFromAttendance(row: {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const year = Number(searchParams.get('year'));
-    const month = Number(searchParams.get('month'));
+    const yearParam = searchParams.get('year');
+    const monthParam = searchParams.get('month');
+    const startDateParam = searchParams.get('start_date');
+    const endDateParam = searchParams.get('end_date');
     const wageTypeFilter = searchParams.get('wage_type_filter') || 'all';
+    const designerIdParam = searchParams.get('designer_id');
+    const shopIdParam = searchParams.get('shop_id');
 
-    if (!year || !month || month < 1 || month > 12) {
-      return NextResponse.json(
-        { error: 'year와 month 파라미터가 필요합니다.' },
-        { status: 400 }
-      );
+    const hasMonthlyParams = !!yearParam && !!monthParam;
+    const hasPeriodParams = !!startDateParam && !!endDateParam;
+
+    if (!hasMonthlyParams && !hasPeriodParams) {
+      return NextResponse.json({ error: 'year/month 또는 start_date/end_date 파라미터가 필요합니다.' }, { status: 400 });
     }
 
-    const weeks = getWeeksInMonth(year, month);
-    const monthStart = getFirstDayOfMonth(year, month);
-    const monthEnd = getLastDayOfMonth(year, month);
-    // Use full range including any days from adjacent months covered by weeks
-    const fullStart = weeks.length > 0 ? weeks[0].startDate : monthStart;
-    const fullEnd = weeks.length > 0 ? weeks[weeks.length - 1].endDate : monthEnd;
+    let periodMode: 'monthly' | 'period' = 'monthly';
+    let year: number | undefined;
+    let month: number | undefined;
+    let weeks: ReturnType<typeof getWeeksInMonth> = [];
+    let monthStart = '';
+    let monthEnd = '';
+    let fullStart = '';
+    let fullEnd = '';
+
+    if (hasMonthlyParams) {
+      year = Number(yearParam);
+      month = Number(monthParam);
+      if (!year || !month || month < 1 || month > 12) {
+        return NextResponse.json({ error: 'year와 month 파라미터가 유효하지 않습니다.' }, { status: 400 });
+      }
+
+      periodMode = 'monthly';
+      weeks = getWeeksInMonth(year, month);
+      monthStart = getFirstDayOfMonth(year, month);
+      monthEnd = getLastDayOfMonth(year, month);
+      fullStart = weeks.length > 0 ? weeks[0].startDate : monthStart;
+      fullEnd = weeks.length > 0 ? weeks[weeks.length - 1].endDate : monthEnd;
+    } else if (hasPeriodParams) {
+      const startDate = String(startDateParam);
+      const endDate = String(endDateParam);
+      if (startDate > endDate) {
+        return NextResponse.json({ error: 'start_date가 end_date보다 늦을 수 없습니다.' }, { status: 400 });
+      }
+
+      periodMode = 'period';
+      weeks = getWeeksInRange(startDate, endDate);
+      monthStart = startDate;
+      monthEnd = endDate;
+      fullStart = startDate;
+      fullEnd = endDate;
+    }
 
     // 1. Fetch active designers (try with weekly_deduction, fallback without)
     let designers: any[] | null = null;
@@ -59,6 +98,12 @@ export async function GET(request: NextRequest) {
     } else if (wageTypeFilter === 'percent') {
       designersQuery = designersQuery.eq('wage_type', 'percent');
     }
+    if (designerIdParam) {
+      designersQuery = designersQuery.eq('id', Number(designerIdParam));
+    }
+    if (shopIdParam) {
+      designersQuery = designersQuery.eq('shop_id', Number(shopIdParam));
+    }
 
     const result = await designersQuery;
     if (result.error && result.error.code === '42703') {
@@ -71,6 +116,12 @@ export async function GET(request: NextRequest) {
         fallbackQuery = fallbackQuery.eq('wage_type', 'hourly');
       } else if (wageTypeFilter === 'percent') {
         fallbackQuery = fallbackQuery.eq('wage_type', 'percent');
+      }
+      if (designerIdParam) {
+        fallbackQuery = fallbackQuery.eq('id', Number(designerIdParam));
+      }
+      if (shopIdParam) {
+        fallbackQuery = fallbackQuery.eq('shop_id', Number(shopIdParam));
       }
       const fallbackResult = await fallbackQuery;
       designers = fallbackResult.data;
@@ -88,7 +139,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         employees: [],
         grandTotals: { wageSum: 0, cashWageSum: 0 },
-        period: { year, month, weeks },
+        period: {
+          mode: periodMode,
+          year,
+          month,
+          startDate: periodMode === 'period' ? monthStart : undefined,
+          endDate: periodMode === 'period' ? monthEnd : undefined,
+          weeks,
+        },
       });
     }
 
@@ -102,15 +160,21 @@ export async function GET(request: NextRequest) {
       .gte('work_date', fullStart)
       .lte('work_date', fullEnd);
 
-    // 3. Batch fetch settlements for the month (table may not exist yet)
+    // 3. Batch fetch settlements for the selected period (table may not exist yet)
     let allSettlements: any[] | null = null;
     try {
-      const { data, error } = await supabase
+      let settlementsQuery = supabase
         .from('wage_settlements')
         .select('id, designer_id, week_start_date, week_end_date, is_settled')
         .in('designer_id', designerIds)
-        .eq('year', year)
-        .eq('month', month);
+        .gte('week_start_date', monthStart)
+        .lte('week_end_date', monthEnd);
+
+      if (periodMode === 'monthly' && year && month) {
+        settlementsQuery = settlementsQuery.eq('year', year).eq('month', month);
+      }
+
+      const { data, error } = await settlementsQuery;
       if (!error) allSettlements = data;
     } catch {
       // Table doesn't exist yet — settlements will be empty
@@ -267,7 +331,14 @@ export async function GET(request: NextRequest) {
         wageSum: round2(grandWageSum),
         cashWageSum: round2(grandCashWageSum),
       },
-      period: { year, month, weeks },
+      period: {
+        mode: periodMode,
+        year,
+        month,
+        startDate: periodMode === 'period' ? monthStart : undefined,
+        endDate: periodMode === 'period' ? monthEnd : undefined,
+        weeks,
+      },
     });
   } catch (error) {
     console.error('Error in wages overview route:', error);

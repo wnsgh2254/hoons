@@ -849,7 +849,10 @@ function ByStaffSalesTab({
     }
   };
 
-  const designerOptions = designers.map((d) => ({ value: String(d.id), label: d.name }));
+  const designerOptions = designers.map((d: any) => ({
+    value: String(d.id),
+    label: d.shop_name ? `${d.name} - ${d.shop_name}` : d.name,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
