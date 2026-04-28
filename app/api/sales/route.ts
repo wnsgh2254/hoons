@@ -85,12 +85,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ sales: [] }, { status: 200 });
       }
 
+      const targetDesignerId = Number(designerId);
       sales = sales
         .map((sale: any) => ({
           ...sale,
-          sales_items: (sale.sales_items || []).filter((item: any) =>
-            managerMatchesDesigner(item.manager, designer),
-          ),
+          sales_items: (sale.sales_items || []).filter((item: any) => {
+            // Prefer stable id match. Keep legacy manager-name fallback for old rows.
+            if (item.designer_id != null) return Number(item.designer_id) === targetDesignerId;
+            return managerMatchesDesigner(item.manager, designer);
+          }),
         }))
         .filter((sale: any) => (sale.sales_items || []).length > 0);
     }
@@ -181,6 +184,7 @@ export async function POST(request: NextRequest) {
       discount_type: item.discount_type || null,
       discount_value: item.discount_value || null,
       amount: item.amount || 0,
+      designer_id: item.designer_id || null,
       manager: item.manager || null,
       sales_classification: item.sales_classification || null,
       point_deduction: item.point_deduction || 0,

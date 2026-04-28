@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
           item_name,
           quantity,
           amount,
+          designer_id,
           manager,
           prepaid_deduction
         )
@@ -89,8 +90,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const managerMatchesTarget = (manager: string | null | undefined) => {
+    const itemMatchesTarget = (item: any) => {
       if (!targetDesigner) return true;
+      if (item.designer_id != null) {
+        return Number(item.designer_id) === Number(targetDesigner.id);
+      }
+      const manager = item.manager;
       const normalizedManager = normalizeName(manager);
       if (!normalizedManager) return false;
 
@@ -131,7 +136,7 @@ export async function GET(request: NextRequest) {
     (sales || []).forEach((sale: any) => {
       (sale.sales_items || []).forEach((item: any) => {
         if (String(item.item_type) !== normalizedItemType) return;
-        if (!managerMatchesTarget(item.manager)) return;
+        if (!itemMatchesTarget(item)) return;
 
         const quantity = Math.max(1, toNum(item.quantity));
         const amount = toNum(item.amount);

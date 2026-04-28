@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
           item_type,
           quantity,
           amount,
+          designer_id,
           manager,
           prepaid_deduction
         )
@@ -105,6 +106,16 @@ export async function GET(request: NextRequest) {
       );
     };
 
+    const resolveDesignersForItem = (item: any) => {
+      if (item.designer_id != null) {
+        const d = designersMap.get(Number(item.designer_id));
+        if (!d) return [];
+        if (targetDesigner && Number(targetDesigner.id) !== Number(d.id)) return [];
+        return [d];
+      }
+      return matchDesignerByManager(item.manager);
+    };
+
     const staffSalesMap = new Map<number, StaffSalesData>();
 
     const ensureStaffData = (designer: { id: number; name: string }) => {
@@ -136,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     (sales || []).forEach((sale: any) => {
       (sale.sales_items || []).forEach((item: any) => {
-        const matchedDesigners = matchDesignerByManager(item.manager);
+        const matchedDesigners = resolveDesignersForItem(item);
         if (matchedDesigners.length === 0) return;
 
         const quantity = Math.max(1, toNum(item.quantity));

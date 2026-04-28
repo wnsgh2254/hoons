@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
               item_name,
               quantity,
               amount,
+              designer_id,
               manager
             )
           `)
@@ -77,7 +78,9 @@ export async function GET(request: NextRequest) {
     const refundsData = refunds || [];
 
     const designerByManager = new Map<string, { id: number; name: string }>();
+    const designerById = new Map<number, { id: number; name: string }>();
     (designers || []).forEach((designer: any) => {
+      designerById.set(Number(designer.id), { id: designer.id, name: designer.name });
       if (designer.name) {
         designerByManager.set(normalizeName(designer.name), { id: designer.id, name: designer.name });
       }
@@ -141,7 +144,10 @@ export async function GET(request: NextRequest) {
     const applyItem = (item: any, sign: 1 | -1) => {
       const amount = toNum(item.amount) * sign;
       const quantity = Math.max(1, toNum(item.quantity));
-      const designer = designerByManager.get(normalizeName(item.manager));
+      const designer =
+        item.designer_id != null
+          ? designerById.get(Number(item.designer_id)) || null
+          : designerByManager.get(normalizeName(item.manager));
 
       if (designer) {
         const current = stylistMap.get(designer.id) || {
