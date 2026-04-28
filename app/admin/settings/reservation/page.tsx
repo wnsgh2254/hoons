@@ -1021,10 +1021,18 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           keyExtractor={(r) => r.id}
           emptyMessage="등록된 예약 자원이 없습니다."
           draggable
-          onReorder={(reordered) => {
+          onReorder={async (reordered) => {
             const reorderedIds = reordered.map((r) => r.id);
             const rest = resources.filter((r) => !reorderedIds.includes(r.id));
-            setResources([...reordered, ...rest]);
+            const newOrder = [...reordered, ...rest];
+            setResources(newOrder);
+            await fetch('/api/designers/reorder', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                items: newOrder.map((r, i) => ({ id: r.id, sort_order: i })),
+              }),
+            }).catch((err) => console.error('Failed to save resource order:', err));
           }}
         />
       </div>

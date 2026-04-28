@@ -266,7 +266,7 @@ export async function getAllStaff(shopId?: number, role?: string, includeInactiv
     query = query.eq('role', role);
   }
 
-  const { data, error } = await query.order('name');
+  const { data, error } = await query.order('sort_order', { ascending: true }).order('name', { ascending: true });
 
   if (error) {
     throw new Error(error.message);

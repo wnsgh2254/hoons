@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import EmptyState from './EmptyState';
 import Pagination from './Pagination';
@@ -58,16 +58,11 @@ export default function DataTable<T>({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'above' | 'below'>('below');
-  const dragHandleActive = useRef(false);
 
   const showPagination =
     currentPage != null && totalPages != null && onPageChange != null && data.length > 0 && !loading;
 
   const handleDragStart = (e: React.DragEvent<HTMLTableRowElement>, index: number) => {
-    if (!dragHandleActive.current) {
-      e.preventDefault();
-      return;
-    }
     setDragIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(index));
@@ -99,13 +94,11 @@ export default function DataTable<T>({
 
     setDragIndex(null);
     setDragOverIndex(null);
-    dragHandleActive.current = false;
   };
 
   const handleDragEnd = () => {
     setDragIndex(null);
     setDragOverIndex(null);
-    dragHandleActive.current = false;
   };
 
   return (
@@ -165,8 +158,6 @@ export default function DataTable<T>({
                     <td className="w-10 px-2 py-3 text-center">
                       <span
                         className="material-symbols-outlined text-gray-400 cursor-grab active:cursor-grabbing text-lg select-none"
-                        onMouseDown={() => { dragHandleActive.current = true; }}
-                        onMouseUp={() => { dragHandleActive.current = false; }}
                       >
                         drag_indicator
                       </span>
