@@ -144,13 +144,14 @@ export default function PrepaidDeductionModal({
       onClose={onClose}
       title="정액권 차감"
       zIndex={Z.MODAL_NESTED}
-      maxWidth="max-w-4xl"
+      maxWidth="max-w-[95vw] md:max-w-4xl"
     >
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         {/* Left: Prepaid Pass List */}
-        <div className="w-80 flex-shrink-0">
+        <div className="w-full md:w-80 md:flex-shrink-0">
           <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-            <table className="w-full">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[320px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">정액권</th>
@@ -183,12 +184,13 @@ export default function PrepaidDeductionModal({
                   ))
                 )}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
 
         {/* Right: Input and Keypad */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {/* Input Field */}
           <div className="relative flex items-center mb-4">
             <input
@@ -210,7 +212,7 @@ export default function PrepaidDeductionModal({
           </div>
 
           {/* Keypad and Action Buttons */}
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:gap-4">
             <NumericKeypad
               onNumberClick={handleNumberClick}
               onBackspace={handleBackspace}
@@ -218,10 +220,10 @@ export default function PrepaidDeductionModal({
             />
 
             {/* Action Buttons */}
-            <div className="flex flex-col gap-2 w-32">
-              <Button size="lg" onClick={handleComplete}>확인</Button>
-              <Button variant="ghost" size="lg" onClick={handleAdditionalInput}>추가 입력</Button>
-              <Button variant="ghost" size="lg" onClick={onClose}>취소</Button>
+            <div className="grid grid-cols-3 gap-2 md:flex md:flex-col md:gap-2 md:w-32">
+              <Button size="lg" className="w-full" onClick={handleComplete}>확인</Button>
+              <Button variant="ghost" size="lg" className="w-full" onClick={handleAdditionalInput}>추가 입력</Button>
+              <Button variant="ghost" size="lg" className="w-full" onClick={onClose}>취소</Button>
             </div>
           </div>
         </div>
