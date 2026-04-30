@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
       const normalized = {
         designer_id: Number(row.designer_id),
-        shop_id: row.shop_id == null || row.shop_id === '' ? null : Number(row.shop_id),
+        shop_id: row.shop_id == null ? null : Number(row.shop_id),
         start_date: row.start_date,
         end_date: row.end_date,
         reason: row.reason || null,
