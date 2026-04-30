@@ -5,6 +5,7 @@ import { buildPhoneVariants } from '@/lib/data';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const nameInput = body?.name as string | undefined;
     const phoneInput = body?.phone as string | undefined;
 
     if (!phoneInput || !phoneInput.trim()) {
@@ -33,12 +34,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('customers')
       .select('id, name, phone')
-      .or(orParts.join(','))
-      .limit(1)
-      .maybeSingle();
+      .or(orParts.join(','));
+
+    // Comment: If name is provided, resolve by name + phone to avoid wrong matches on shared phone numbers.
+    if (nameInput && nameInput.trim()) {
+      query = query.eq('name', nameInput.trim());
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle();
 
     if (error) {
       console.error('Error looking up customer by phone:', error);

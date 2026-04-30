@@ -79,10 +79,11 @@ export function isValidAuMobilePhone(phoneRaw: string | undefined | null): boole
 
 // Comment: Look up existing customer by phone (local or e164). Returns id or null.
 export async function getCustomerIdByPhone(phone: string): Promise<number | null> {
-  const { local, e164 } = buildPhoneVariants(phone);
+  const { local, e164, digitsOnly } = buildPhoneVariants(phone);
   const orParts: string[] = [];
   if (local) orParts.push(`phone.eq.${local}`);
   if (e164) orParts.push(`phone.eq.${e164}`);
+  if (digitsOnly) orParts.push(`phone.eq.${digitsOnly}`);
   if (orParts.length === 0) return null;
   const { data } = await supabase
     .from('customers')
@@ -93,9 +94,31 @@ export async function getCustomerIdByPhone(phone: string): Promise<number | null
   return data?.id ?? null;
 }
 
-// Comment: Get existing customer by phone or create one with name+phone. Returns customer id.
+// Comment: Look up existing customer by exact name + phone variants. Returns id or null.
+export async function getCustomerIdByNameAndPhone(name: string, phone: string): Promise<number | null> {
+  const normalizedName = String(name || '').trim();
+  if (!normalizedName) return null;
+  const { local, e164, digitsOnly } = buildPhoneVariants(phone);
+  const orParts: string[] = [];
+  if (local) orParts.push(`phone.eq.${local}`);
+  if (e164) orParts.push(`phone.eq.${e164}`);
+  if (digitsOnly) orParts.push(`phone.eq.${digitsOnly}`);
+  if (orParts.length === 0) return null;
+
+  const { data } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('name', normalizedName)
+    .or(orParts.join(','))
+    .limit(1)
+    .maybeSingle();
+
+  return data?.id ?? null;
+}
+
+// Comment: Get existing customer by name+phone or create one with name+phone. Returns customer id.
 export async function getOrCreateCustomerByNameAndPhone(name: string, phone: string): Promise<number> {
-  const existingId = await getCustomerIdByPhone(phone);
+  const existingId = await getCustomerIdByNameAndPhone(name, phone);
   if (existingId != null) return existingId;
   const { local } = buildPhoneVariants(phone);
   const { data, error } = await supabase

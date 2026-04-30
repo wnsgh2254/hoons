@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { getCustomerIdByPhone, isValidAuMobilePhone } from "@/lib/data";
+import { getCustomerIdByNameAndPhone, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -105,8 +105,8 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (existingById?.id) customerId = existingById.id;
     }
-    if (!customerId && customerPhone) {
-      customerId = await getCustomerIdByPhone(customerPhone);
+    if (!customerId && customerName && customerPhone) {
+      customerId = await getCustomerIdByNameAndPhone(customerName, customerPhone);
     }
 
     const amountInCents =

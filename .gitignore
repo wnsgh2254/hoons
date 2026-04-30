@@ -41,3 +41,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .mcp.json
+supabase/*
+!supabase/migrations/
+!supabase/migrations/**
+
+# generated temp artifacts
+supabase/migrations/_*.json
+supabase/migrations/_*.sql
+supabase/migrations/*.csv
+supabase/migrations/*.xlsx
+supabase/migrations/*.py

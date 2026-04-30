@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { buildPhoneVariants, isValidAuMobilePhone } from "@/lib/data";
+import { buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     let customerId: number | null = null;
 
     if (customerPhone && customerName) {
-      const { local, e164 } = buildPhoneVariants(customerPhone);
+      const { local } = buildPhoneVariants(customerPhone);
 
       if (existingCustomerId) {
         const { data: existingById } = await supabase
@@ -115,20 +115,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!customerId) {
-        const orFilterParts: string[] = [];
-        if (local) orFilterParts.push(`phone.eq.${local}`);
-        if (e164) orFilterParts.push(`phone.eq.${e164}`);
-
-        const { data: existingByPhone } = await supabase
-          .from("customers")
-          .select("id, name, phone")
-          .or(orFilterParts.join(","))
-          .limit(1)
-          .maybeSingle();
-
-        if (existingByPhone?.id) {
-          customerId = existingByPhone.id;
-        }
+        customerId = await getCustomerIdByNameAndPhone(customerName, customerPhone);
       }
 
       if (!customerId) {

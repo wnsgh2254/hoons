@@ -135,11 +135,11 @@ def merge_rows_from_excel_files(
     paths: List[Path],
 ) -> Tuple[List[Tuple[Optional[int], str, Optional[str], Optional[str]]], Dict[str, int]]:
     """
-    Read all rows; merge by normalized phone. If the same phone maps to different
-    customer numbers, the first occurrence wins and a conflict is counted.
+    Read all rows; merge by (name, normalized phone). If the same pair maps to
+    different customer numbers, the first occurrence wins and a conflict is counted.
     """
-    by_phone: Dict[str, Tuple[Optional[int], str, Optional[str], Optional[str]]] = {}
-    stats = {"phone_conflicts": 0, "files": len(paths)}
+    by_name_phone: Dict[Tuple[str, str], Tuple[Optional[int], str, Optional[str], Optional[str]]] = {}
+    stats = {"name_phone_conflicts": 0, "files": len(paths)}
 
     for path in paths:
         for row in read_excel_rows(path):
@@ -147,14 +147,15 @@ def merge_rows_from_excel_files(
             phone = normalize_phone(tel_raw) or normalize_phone(mobile_raw)
             if not phone:
                 continue
-            if phone in by_phone:
-                existing_cn = by_phone[phone][0]
+            key = (name.strip(), phone)
+            if key in by_name_phone:
+                existing_cn = by_name_phone[key][0]
                 if customer_number is not None and existing_cn is not None and customer_number != existing_cn:
-                    stats["phone_conflicts"] += 1
+                    stats["name_phone_conflicts"] += 1
                 continue
-            by_phone[phone] = row
+            by_name_phone[key] = row
 
-    merged = list(by_phone.values())
+    merged = list(by_name_phone.values())
     return merged, stats
 
 
@@ -170,7 +171,7 @@ def build_payload(
         "deduped_in_file": 0,
     }
 
-    seen_phone = set()
+    seen_name_phone = set()
     # Column D = landline, column E = mobile — use whichever exists (D first, then E).
     for customer_number, name, mobile_phone, tel_phone in rows:
         phone = normalize_phone(tel_phone) or normalize_phone(mobile_phone)
@@ -178,10 +179,11 @@ def build_payload(
             stats["missing_phone"] += 1
             continue
 
-        if phone in seen_phone:
+        key = (name, phone)
+        if key in seen_name_phone:
             stats["deduped_in_file"] += 1
             continue
-        seen_phone.add(phone)
+        seen_name_phone.add(key)
 
         item: Dict[str, object] = {
             "name": name,
@@ -229,7 +231,7 @@ def upsert_customers(
     available_columns: List[str],
     batch_size: int = 500,
 ) -> int:
-    endpoint = f"{supabase_url.rstrip('/')}/rest/v1/customers?on_conflict=phone"
+    endpoint = f"{supabase_url.rstrip('/')}/rest/v1/customers?on_conflict=name,phone"
     headers = {
         "apikey": supabase_key,
         "Authorization": f"Bearer {supabase_key}",
@@ -297,10 +299,10 @@ def main():
         for p in paths:
             print(f"       - {p.name}")
         rows, merge_stats = merge_rows_from_excel_files(paths)
-        if merge_stats.get("phone_conflicts", 0):
+        if merge_stats.get("name_phone_conflicts", 0):
             print(
-                f"[WARN] Same phone appeared with different 고객 번호 across files: "
-                f"{merge_stats['phone_conflicts']} (first occurrence kept)"
+                f"[WARN] Same name+phone appeared with different 고객 번호 across files: "
+                f"{merge_stats['name_phone_conflicts']} (first occurrence kept)"
             )
     else:
         input_path = migrations_dir / args.file
@@ -322,7 +324,7 @@ def main():
     )
     print(f"[INFO] Source rows: {stats['total_rows']}")
     print(f"[INFO] Skipped (missing phone and no tel fallback): {stats['missing_phone']}")
-    print(f"[INFO] Deduped inside file by phone: {stats['deduped_in_file']}")
+    print(f"[INFO] Deduped inside file by name+phone: {stats['deduped_in_file']}")
     print(f"[INFO] Ready to upsert: {len(payload)}")
 
     if args.dry_run:

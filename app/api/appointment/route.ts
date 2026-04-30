@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicBooking, buildPhoneVariants, isValidAuMobilePhone } from '@/lib/data';
+import { createPublicBooking, buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const { local, e164 } = buildPhoneVariants(customerPhone);
+      const { local } = buildPhoneVariants(customerPhone);
 
       // Comment: If existingCustomerId is provided, trust and verify it first
       if (existingCustomerId) {
@@ -55,21 +55,8 @@ export async function POST(request: NextRequest) {
       }
 
       if (!customerId) {
-        // Comment: Try to find by phone (either local or e164)
-        const orFilterParts: string[] = [];
-        if (local) orFilterParts.push(`phone.eq.${local}`);
-        if (e164) orFilterParts.push(`phone.eq.${e164}`);
-
-        const { data: existingByPhone } = await supabase
-          .from('customers')
-          .select('id, name, phone')
-          .or(orFilterParts.join(','))
-          .limit(1)
-          .maybeSingle();
-
-        if (existingByPhone?.id) {
-          customerId = existingByPhone.id;
-        }
+        // Comment: Resolve by exact name + phone to avoid mismatching customers sharing the same phone number.
+        customerId = await getCustomerIdByNameAndPhone(customerName, customerPhone);
       }
 
       if (!customerId) {
