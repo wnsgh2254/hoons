@@ -58,43 +58,121 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { designer_id, shop_id, start_date, end_date, reason } = body;
+    const rowsInput: Array<{
+      designer_id: number;
+      shop_id?: number | null;
+      start_date: string;
+      end_date: string;
+      reason?: string | null;
+    }> = Array.isArray(body.rows)
+      ? body.rows
+      : [{
+          designer_id: body.designer_id,
+          shop_id: body.shop_id,
+          start_date: body.start_date,
+          end_date: body.end_date,
+          reason: body.reason,
+        }];
 
-    if (!designer_id || !start_date || !end_date) {
+    if (rowsInput.length === 0) {
       return NextResponse.json(
-        { error: '디자이너 ID, 시작일, 종료일은 필수입니다.' },
+        { error: '등록할 휴무 데이터가 없습니다.' },
         { status: 400 }
       );
     }
 
-    if (new Date(end_date) < new Date(start_date)) {
-      return NextResponse.json(
-        { error: '종료일은 시작일보다 이후여야 합니다.' },
-        { status: 400 }
-      );
+    // Comment: De-duplicate request payload to avoid repeated DB work for identical rows.
+    const uniqueRows = new Map<string, {
+      designer_id: number;
+      shop_id: number | null;
+      start_date: string;
+      end_date: string;
+      reason: string | null;
+    }>();
+
+    for (const row of rowsInput) {
+      if (!row?.designer_id || !row?.start_date || !row?.end_date) {
+        return NextResponse.json(
+          { error: '디자이너 ID, 시작일, 종료일은 필수입니다.' },
+          { status: 400 }
+        );
+      }
+      if (new Date(row.end_date) < new Date(row.start_date)) {
+        return NextResponse.json(
+          { error: '종료일은 시작일보다 이후여야 합니다.' },
+          { status: 400 }
+        );
+      }
+
+      const normalized = {
+        designer_id: Number(row.designer_id),
+        shop_id: row.shop_id == null || row.shop_id === '' ? null : Number(row.shop_id),
+        start_date: row.start_date,
+        end_date: row.end_date,
+        reason: row.reason || null,
+      };
+      const key = [
+        normalized.designer_id,
+        normalized.shop_id == null ? 'null' : normalized.shop_id,
+        normalized.start_date,
+        normalized.end_date,
+        normalized.reason ?? 'null',
+      ].join('|');
+      uniqueRows.set(key, normalized);
     }
 
-    const { data, error } = await supabase
-      .from('designer_time_off')
-      .insert({
-        designer_id: Number(designer_id),
-        shop_id: shop_id ? Number(shop_id) : null,
-        start_date,
-        end_date,
-        reason: reason || null,
-      })
-      .select()
-      .single();
+    const savedRows: any[] = [];
+    for (const row of uniqueRows.values()) {
+      // Comment: Keep insert idempotent for same designer/shop/date/reason tuple.
+      let duplicateQuery = supabase
+        .from('designer_time_off')
+        .select('*')
+        .eq('designer_id', row.designer_id)
+        .eq('start_date', row.start_date)
+        .eq('end_date', row.end_date)
+        .eq('reason', row.reason)
+        .limit(1)
+        .maybeSingle();
 
-    if (error) {
-      console.error('Error creating time off:', error);
-      return NextResponse.json(
-        { error: '휴무 등록에 실패했습니다.' },
-        { status: 500 }
-      );
+      duplicateQuery =
+        row.shop_id == null
+          ? duplicateQuery.is('shop_id', null)
+          : duplicateQuery.eq('shop_id', row.shop_id);
+
+      const { data: existingSame, error: existingErr } = await duplicateQuery;
+      if (existingErr) {
+        console.error('Error checking duplicate time off:', existingErr);
+        return NextResponse.json(
+          { error: '휴무 등록에 실패했습니다.' },
+          { status: 500 }
+        );
+      }
+      if (existingSame) {
+        savedRows.push(existingSame);
+        continue;
+      }
+
+      const { data, error } = await supabase
+        .from('designer_time_off')
+        .insert(row)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating time off:', error);
+        return NextResponse.json(
+          { error: '휴무 등록에 실패했습니다.' },
+          { status: 500 }
+        );
+      }
+      savedRows.push(data);
     }
 
-    return NextResponse.json({ timeOff: data }, { status: 201 });
+    if (!Array.isArray(body.rows)) {
+      const first = savedRows[0] ?? null;
+      return NextResponse.json({ timeOff: first }, { status: 201 });
+    }
+    return NextResponse.json({ timeOffs: savedRows }, { status: 201 });
   } catch (error) {
     console.error('Error in designer-time-off POST route:', error);
     return NextResponse.json(

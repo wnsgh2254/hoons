@@ -29,8 +29,7 @@ async function loadResolvedDesignerScheduleRowsForDate(
     .from('designer_schedules')
     .select('designer_id, weekday, shop_id, start_time, end_time')
     .eq('weekday', weekday)
-    .lte('effective_from', params.date)
-    .or(`effective_to.is.null,effective_to.gte.${params.date}`);
+    .is('effective_to', null);
 
   if (params.designerIds && params.designerIds.length > 0) {
     schedulesQuery = schedulesQuery.in('designer_id', params.designerIds);

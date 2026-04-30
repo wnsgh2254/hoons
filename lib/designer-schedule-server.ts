@@ -44,13 +44,16 @@ export async function upsertDesignerScheduleRow(
 
   const { data: existing } = await supabase
     .from('designer_schedules')
-    .select('id')
+    .select('id, effective_from')
     .eq('designer_id', Number(designer_id))
     .eq('weekday', Number(weekday))
     .is('effective_to', null)
     .single();
 
-  const effectiveFrom = effective_from || new Date().toISOString().split('T')[0];
+  // Comment: Preserve existing effective_from on updates unless caller explicitly provides a new one.
+  const effectiveFrom =
+    effective_from ||
+    (existing?.effective_from ? String(existing.effective_from).slice(0, 10) : new Date().toISOString().split('T')[0]);
 
   if (existing) {
     const { data, error } = await supabase

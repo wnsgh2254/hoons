@@ -341,37 +341,41 @@ export default function HolidaySettingModal({
           setSubmitting(false);
           return;
         }
-        const promises = newDates.flatMap((date) =>
-          designersForShop.map((designer) =>
-            fetch('/api/designer-time-off', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                designer_id: designer.id,
-                shop_id: targetShopId,
-                start_date: date,
-                end_date: date,
-                reason: '임의 휴일',
-              }),
-            }),
-          ),
+        const rows = newDates.flatMap((date) =>
+          designersForShop.map((designer) => ({
+            designer_id: designer.id,
+            shop_id: targetShopId,
+            start_date: date,
+            end_date: date,
+            reason: '임의 휴일',
+          })),
         );
-        await Promise.all(promises);
+        const bulkRes = await fetch('/api/designer-time-off', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows }),
+        });
+        if (!bulkRes.ok) {
+          const errData = await bulkRes.json().catch(() => ({}));
+          throw new Error(errData?.error || '휴무 등록에 실패했습니다.');
+        }
       } else if (designerId) {
-        const promises = selectedDates.map((date) =>
-          fetch('/api/designer-time-off', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              designer_id: designerId,
-              shop_id: targetShopId,
-              start_date: date,
-              end_date: date,
-              reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
-            }),
-          }),
-        );
-        await Promise.all(promises);
+        const rows = selectedDates.map((date) => ({
+          designer_id: designerId,
+          shop_id: targetShopId,
+          start_date: date,
+          end_date: date,
+          reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
+        }));
+        const bulkRes = await fetch('/api/designer-time-off', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rows }),
+        });
+        if (!bulkRes.ok) {
+          const errData = await bulkRes.json().catch(() => ({}));
+          throw new Error(errData?.error || '휴무 등록에 실패했습니다.');
+        }
       }
       alert('설정이 완료되었습니다.');
       // Comment: Notify parent to re-fetch ALL shops' availability (covers any targetShopId)

@@ -600,14 +600,23 @@ export default function AppointmentsManagementPage() {
   // so that dependent effects can skip their own fetches on the first render.
   const [hydratedDate, setHydratedDate] = useState<string | null>(null);
   const [hydratedMonthKey, setHydratedMonthKey] = useState<string | null>(null);
+  const selectedDateRef = useRef(selectedDate);
+  const monthKeyRef = useRef(monthKey);
+
+  useEffect(() => {
+    selectedDateRef.current = selectedDate;
+    monthKeyRef.current = monthKey;
+  }, [selectedDate, monthKey]);
 
   // Comment: Consolidated initial load for appointments page to reduce client-side API fan-out
   useEffect(() => {
     let isMounted = true;
+    const requestDate = selectedDate;
+    const requestMonthKey = monthKey;
     const loadInitialData = async () => {
       try {
         const res = await fetch(
-          `/api/appointments/initial-data?date=${encodeURIComponent(selectedDate)}&month=${encodeURIComponent(monthKey)}`,
+          `/api/appointments/initial-data?date=${encodeURIComponent(requestDate)}&month=${encodeURIComponent(requestMonthKey)}`,
         );
         const data = await res.json();
         if (!isMounted) return;
@@ -615,18 +624,25 @@ export default function AppointmentsManagementPage() {
           throw new Error(data.error || 'Failed to load appointments initial data');
         }
 
+        // Comment: Ignore stale initial-data responses if the user already changed date/month.
+        const isStaleRequest =
+          selectedDateRef.current !== requestDate ||
+          monthKeyRef.current !== requestMonthKey;
+
         setUserRole(data.userRole || null);
         setMemo(data.memo || '');
         setAllDesigners(data.designers || []);
         setAllShops(data.shops || []);
         setNewBookingServices(data.bookingModalServices || []);
-        setBookingRestrictions(data.bookingRestrictions || []);
-        setDayCounts(data.dayCounts || {});
-        setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
+        if (!isStaleRequest) {
+          setBookingRestrictions(data.bookingRestrictions || []);
+          setDayCounts(data.dayCounts || {});
+          setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
 
-        const nextBookings = data.bookings || [];
-        setBookings(nextBookings);
-        setFilteredBookings(nextBookings);
+          const nextBookings = data.bookings || [];
+          setBookings(nextBookings);
+          setFilteredBookings(nextBookings);
+        }
         try {
           if (Array.isArray(data.designers) && data.designers.length > 0) {
             sessionStorage.setItem('haeyoom_designers', JSON.stringify(data.designers));
@@ -639,8 +655,10 @@ export default function AppointmentsManagementPage() {
         }
 
         // Record the hydrated date/month so effects can skip redundant fetches
-        setHydratedDate(selectedDate);
-        setHydratedMonthKey(monthKey);
+        if (!isStaleRequest) {
+          setHydratedDate(requestDate);
+          setHydratedMonthKey(requestMonthKey);
+        }
         setUsedInitialDataApi(true);
         setInitialDataReady(true);
       } catch (err) {
