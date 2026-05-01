@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import EmptyState from './EmptyState';
 import Pagination from './Pagination';
@@ -58,11 +58,12 @@ export default function DataTable<T>({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'above' | 'below'>('below');
+  const suppressNextRowClickRef = useRef(false);
 
   const showPagination =
     currentPage != null && totalPages != null && onPageChange != null && data.length > 0 && !loading;
 
-  const handleDragStart = (e: React.DragEvent<HTMLTableRowElement>, index: number) => {
+  const handleDragStart = (e: React.DragEvent, index: number) => {
     setDragIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(index));
@@ -78,20 +79,35 @@ export default function DataTable<T>({
     setDragOverIndex(index);
     const rect = e.currentTarget.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
-    setDragOverPosition(e.clientY < midY ? 'above' : 'below');
+    const pos = e.clientY < midY ? 'above' : 'below';
+    setDragOverPosition(pos);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLTableRowElement>, dropIndex: number) => {
     e.preventDefault();
-    if (dragIndex === null || dragIndex === dropIndex || !onReorder) return;
+    if (dragIndex === null || !onReorder) return;
+
+    // Compute insert position from pointer at drop time (reliable; avoids stale drag-over state)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const pos = e.clientY < midY ? 'above' : 'below';
+    const sourceIndex = dragIndex;
+
+    // Dropping on the same row: only reorder if inserting above vs below changes position
+    if (sourceIndex === dropIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
 
     const newData = [...data];
-    const [draggedItem] = newData.splice(dragIndex, 1);
-    const targetIndex = dragOverPosition === 'above' ? dropIndex : dropIndex + 1;
-    const adjustedIndex = dragIndex < dropIndex ? targetIndex - 1 : targetIndex;
+    const [draggedItem] = newData.splice(sourceIndex, 1);
+    const targetIndex = pos === 'above' ? dropIndex : dropIndex + 1;
+    const adjustedIndex = sourceIndex < dropIndex ? targetIndex - 1 : targetIndex;
     newData.splice(adjustedIndex, 0, draggedItem);
     onReorder(newData);
 
+    suppressNextRowClickRef.current = true;
     setDragIndex(null);
     setDragOverIndex(null);
   };
@@ -140,11 +156,8 @@ export default function DataTable<T>({
               {data.map((item, index) => (
                 <tr
                   key={keyExtractor(item)}
-                  draggable={isDraggable}
-                  onDragStart={isDraggable ? (e) => handleDragStart(e, index) : undefined}
                   onDragOver={isDraggable ? (e) => handleDragOver(e, index) : undefined}
                   onDrop={isDraggable ? (e) => handleDrop(e, index) : undefined}
-                  onDragEnd={isDraggable ? handleDragEnd : undefined}
                   className={cn(
                     'hover:bg-gray-50 transition-colors',
                     onRowClick && 'cursor-pointer',
@@ -152,12 +165,26 @@ export default function DataTable<T>({
                     isDraggable && dragOverIndex === index && dragOverPosition === 'above' && 'border-t-2 !border-t-blue-400',
                     isDraggable && dragOverIndex === index && dragOverPosition === 'below' && 'border-b-2 !border-b-blue-400',
                   )}
-                  onClick={() => onRowClick?.(item)}
+                  onClick={() => {
+                    if (suppressNextRowClickRef.current) {
+                      suppressNextRowClickRef.current = false;
+                      return;
+                    }
+                    onRowClick?.(item);
+                  }}
                 >
                   {isDraggable && (
                     <td className="w-10 px-2 py-3 text-center">
                       <span
-                        className="material-symbols-outlined text-gray-400 cursor-grab active:cursor-grabbing text-lg select-none"
+                        role="button"
+                        tabIndex={0}
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          handleDragStart(e, index);
+                        }}
+                        onDragEnd={handleDragEnd}
+                        className="material-symbols-outlined text-gray-400 cursor-grab active:cursor-grabbing text-lg select-none inline-block"
                       >
                         drag_indicator
                       </span>

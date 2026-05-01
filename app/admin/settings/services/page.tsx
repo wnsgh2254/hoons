@@ -373,7 +373,8 @@ function ServicesTab() {
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
 
   // Fetch both services and category order from DB in one pass
-  const fetchServices = useCallback(async () => {
+  const fetchServices = useCallback(async (): Promise<string[]> => {
+    let nextCategoryNames: string[] = [];
     try {
       setLoading(true);
       setFetchError(null);
@@ -385,17 +386,18 @@ function ServicesTab() {
       const categoriesData = await categoriesRes.json();
 
       if (!servicesRes.ok) throw new Error(servicesData.error || '서비스 목록을 불러오지 못했습니다.');
-      setServices(servicesData.services || []);
+      const servicesList = servicesData.services || [];
+      setServices(servicesList);
 
-      // Load DB-persisted category order; fall back to CATEGORY_ORDER if empty
-      if (categoriesRes.ok && Array.isArray(categoriesData.categories) && categoriesData.categories.length > 0) {
+      const serviceCategories = new Set<string>(servicesList.map((s: ServiceItem) => resolveCategory(s)));
+
+      // Load DB-persisted category order; fall back to CATEGORY_ORDER if DB list is empty
+      if (categoriesRes.ok && Array.isArray(categoriesData.categories)) {
         const dbNames = (categoriesData.categories as Array<{ name: string }>).map((c) => c.name);
-        // Add any categories present in services but not yet in DB
-        const serviceCategories = new Set<string>(
-          (servicesData.services || []).map((s: ServiceItem) => resolveCategory(s))
-        );
-        const extra = Array.from(serviceCategories).filter((c) => !dbNames.includes(c));
-        setCategories([...dbNames, ...extra]);
+        const base = dbNames.length > 0 ? dbNames : [...CATEGORY_ORDER];
+        const extra = Array.from(serviceCategories).filter((c) => !base.includes(c));
+        nextCategoryNames = [...base, ...extra];
+        setCategories(nextCategoryNames);
       }
     } catch (err: any) {
       setFetchError(err.message);
@@ -403,6 +405,7 @@ function ServicesTab() {
     } finally {
       setLoading(false);
     }
+    return nextCategoryNames;
   }, []);
 
   useEffect(() => {
@@ -445,20 +448,51 @@ function ServicesTab() {
     setSelectedCategory(data.name);
     setIsAddingCategory(false);
   };
-  const handleUpdateCategory = (data: { name: string }) => {
+  const handleUpdateCategory = async (data: { name: string }) => {
     if (!editingCategoryName) return;
-    setCategories((prev) => prev.map((c) => (c === editingCategoryName ? data.name : c)));
-    if (selectedCategory === editingCategoryName) setSelectedCategory(data.name);
-    setEditingCategoryName(null);
-  };
-  const handleDeleteCategory = () => {
-    if (!editingCategoryName) return;
-    setCategories((prev) => prev.filter((c) => c !== editingCategoryName));
-    if (selectedCategory === editingCategoryName) {
-      const remaining = categories.filter((c) => c !== editingCategoryName);
-      setSelectedCategory(remaining[0] || '');
+    const oldName = editingCategoryName;
+    const newName = data.name.trim();
+    if (!newName) return;
+    if (oldName === newName) {
+      setEditingCategoryName(null);
+      return;
     }
-    setEditingCategoryName(null);
+    try {
+      const res = await fetch('/api/services/categories', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ renameFrom: oldName, renameTo: newName }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || '분류명 변경에 실패했습니다.');
+      invalidateServicesCache();
+      await fetchServices();
+      if (selectedCategory === oldName) setSelectedCategory(newName);
+      setEditingCategoryName(null);
+    } catch (err: any) {
+      alert(err.message || '분류명 변경에 실패했습니다.');
+    }
+  };
+  const handleDeleteCategory = async () => {
+    if (!editingCategoryName) return;
+    if (!confirm(`분류 "${editingCategoryName}"을(를) 삭제할까요? 해당 분류의 서비스는 "Others"로 옮겨집니다.`)) return;
+    const name = editingCategoryName;
+    try {
+      const res = await fetch(`/api/services/categories?name=${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || '분류 삭제에 실패했습니다.');
+      invalidateServicesCache();
+      const namesAfter = await fetchServices();
+      if (selectedCategory === name) {
+        const remaining = namesAfter.filter((c) => c !== name);
+        setSelectedCategory(remaining[0] || '');
+      }
+      setEditingCategoryName(null);
+    } catch (err: any) {
+      alert(err.message || '분류 삭제에 실패했습니다.');
+    }
   };
 
   // Service delete
@@ -569,17 +603,23 @@ function ServicesTab() {
             draggable
             onReorder={async (reordered) => {
               const names = reordered.map((c) => c.name);
-              setCategories(names); // Optimistic update
+              const prev = [...categories];
+              setCategories(names);
               try {
-                await fetch('/api/services/categories', {
+                const res = await fetch('/api/services/categories', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     items: names.map((name, i) => ({ name, sort_order: i + 1 })),
                   }),
                 });
-              } catch (err) {
-                console.error('Error saving category order:', err);
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.error || '분류 순서 저장에 실패했습니다.');
+                invalidateServicesCache();
+                await fetchServices();
+              } catch (err: any) {
+                setCategories(prev);
+                alert(err.message || '분류 순서 저장에 실패했습니다.');
               }
             }}
           />
@@ -604,25 +644,30 @@ function ServicesTab() {
             emptyMessage="등록된 서비스가 없습니다."
             draggable
             onReorder={async (reordered) => {
-              // Optimistic update: apply new sort_order to local state
-              setServices((prev) => {
-                const updated = [...prev];
+              const prev = services.map((s) => ({ ...s }));
+              setServices((prior) => {
+                const updated = [...prior];
                 reordered.forEach((item, i) => {
                   const idx = updated.findIndex((s) => s.id === item.id);
-                  if (idx !== -1) (updated[idx] as any).sort_order = i + 1;
+                  if (idx !== -1) (updated[idx] as ServiceItem & { sort_order?: number }).sort_order = i + 1;
                 });
                 return updated;
               });
               try {
-                await fetch('/api/services/reorder', {
+                const res = await fetch('/api/services/reorder', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     items: reordered.map((s, i) => ({ id: s.id, sort_order: i + 1 })),
                   }),
                 });
-              } catch (err) {
-                console.error('Error saving service order:', err);
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.error || '서비스 순서 저장에 실패했습니다.');
+                invalidateServicesCache();
+                await fetchServices();
+              } catch (err: any) {
+                setServices(prev);
+                alert(err.message || '서비스 순서 저장에 실패했습니다.');
               }
             }}
           />
@@ -1774,6 +1819,11 @@ function ProductCategoriesTab({
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingBrand, setEditingBrand] = useState<InventoryBrand | null>(null);
+  const [orderedBrands, setOrderedBrands] = useState<InventoryBrand[]>(brands);
+
+  useEffect(() => {
+    setOrderedBrands(brands);
+  }, [brands]);
 
   const handleAdd = async (data: { name: string }) => {
     try {
@@ -1808,14 +1858,16 @@ function ProductCategoriesTab({
   };
   const handleDelete = async () => {
     if (!editingBrand) return;
+    if (!confirm(`분류 "${editingBrand.name}"을(를) 삭제할까요?`)) return;
     try {
       const res = await fetch(`/api/inventory-brands/${editingBrand.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete brand');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || '분류 삭제에 실패했습니다.');
       invalidateInventoryCache();
       await refetch();
       setEditingBrand(null);
-    } catch (err) {
-      console.error('Error deleting brand:', err);
+    } catch (err: any) {
+      alert(err.message || '분류 삭제에 실패했습니다.');
     }
   };
 
@@ -1839,22 +1891,27 @@ function ProductCategoriesTab({
         </div>
         <DataTable
           columns={columns}
-          data={brands}
+          data={orderedBrands}
           keyExtractor={(b) => b.id}
           emptyMessage="등록된 제품 분류가 없습니다."
           draggable
           onReorder={async (reordered) => {
             const order = reordered.map((b, i) => ({ id: b.id, sort_order: i + 1 }));
+            const prev = orderedBrands.map((b) => ({ ...b }));
+            setOrderedBrands(reordered);
             try {
-              await fetch('/api/inventory-brands', {
+              const res = await fetch('/api/inventory-brands', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ order }),
               });
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(body.error || '순서 저장에 실패했습니다.');
               invalidateInventoryCache();
-              refetch();
-            } catch (err) {
-              console.error('Error reordering brands:', err);
+              await refetch();
+            } catch (err: any) {
+              setOrderedBrands(prev);
+              alert(err.message || '순서 저장에 실패했습니다.');
             }
           }}
         />

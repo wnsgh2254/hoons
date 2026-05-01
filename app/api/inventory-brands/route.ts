@@ -67,11 +67,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'order 배열이 필요합니다.' }, { status: 400 });
     }
 
-    await Promise.all(
+    const updates = await Promise.all(
       order.map(({ id, sort_order }) =>
-        supabase.from('inventory_brands').update({ sort_order }).eq('id', id)
-      )
+        supabase.from('inventory_brands').update({ sort_order }).eq('id', id),
+      ),
     );
+
+    const firstError = updates.find((r) => r.error)?.error;
+    if (firstError) {
+      console.error('Error reordering inventory brands:', firstError);
+      return NextResponse.json({ error: firstError.message }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
