@@ -11,6 +11,8 @@ interface ServiceItem {
   category?: string | null;
   is_active?: boolean;
   visible_to?: string;
+  /** Same as admin/settings/services drag order within a category */
+  sort_order?: number | null;
   [key: string]: unknown;
 }
 

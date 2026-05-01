@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { SERVICE_PICKER_CATEGORY_ORDER, getServiceCategoryForPicker } from '@/lib/utils/appointment-utils';
+import { getServiceCategoryForPicker } from '@/lib/utils/appointment-utils';
 import { useServices } from '@/hooks/useServices';
 import { useInventory } from '@/hooks/useInventory';
 import { usePrepaidTemplates } from '@/hooks/usePrepaidTemplates';
@@ -27,6 +27,34 @@ const CATEGORY_NORMALIZE_MAP: Record<string, string> = {
 
 function normalizeCategory(cat: string): string {
   return CATEGORY_NORMALIZE_MAP[cat] || cat;
+}
+
+/** Same fallback as admin/settings/services when DB has no category rows */
+const SERVICE_SETTINGS_FALLBACK_CATEGORY_ORDER = [
+  'Cut',
+  'Dry',
+  'Perm',
+  'Magic',
+  'Hot Perm',
+  'Color',
+  'Clinic',
+  'Package',
+  'Others',
+];
+
+/** Same ordering as admin/settings/services (서비스 tab): sort_order, then card before cash, then name. */
+function compareServiceOrderLikeSettings(
+  a: { name: string; sort_order?: number },
+  b: { name: string; sort_order?: number },
+): number {
+  const aOrder = a.sort_order ?? 0;
+  const bOrder = b.sort_order ?? 0;
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  const aIsCard = a.name.toLowerCase().includes('(card)');
+  const bIsCard = b.name.toLowerCase().includes('(card)');
+  if (aIsCard && !bIsCard) return -1;
+  if (!aIsCard && bIsCard) return 1;
+  return a.name.localeCompare(b.name);
 }
 
 export type PickerSelectedItem = {
@@ -103,6 +131,34 @@ export default function SalesItemPickerModal({
   const [validityPeriod, setValidityPeriod] = useState<number | null>(null);
   const [validityUnit, setValidityUnit] = useState<'month' | 'day'>('month');
   const [isUnlimited, setIsUnlimited] = useState(false);
+  /** Normalized names from GET /api/services/categories (same order as settings/services) */
+  const [dbCategoryOrder, setDbCategoryOrder] = useState<string[] | null>(null);
+
+  // Load category order from DB when service picker is shown (matches admin/settings/services)
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'service') return;
+    let cancelled = false;
+    setDbCategoryOrder(null);
+    (async () => {
+      try {
+        const res = await fetch('/api/services/categories');
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok && Array.isArray(data.categories)) {
+          setDbCategoryOrder(
+            data.categories.map((c: { name: string }) => normalizeCategory(String(c.name || '').trim())),
+          );
+        } else {
+          setDbCategoryOrder([]);
+        }
+      } catch {
+        if (!cancelled) setDbCategoryOrder([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, activeTab]);
 
   // activeTab이 변경되면 초기화
   useEffect(() => {
@@ -195,22 +251,44 @@ export default function SalesItemPickerModal({
 
   const renderServiceTab = () => {
     // 카테고리별로 서비스 그룹화 (DB category 우선, fallback으로 이름 파싱)
-    const servicesByCategory: Record<string, Array<{ id: number; name: string; price: number; duration_minutes?: number | null }>> = {};
+    const servicesByCategory: Record<
+      string,
+      Array<{ id: number; name: string; price: number; duration_minutes?: number | null; sort_order: number }>
+    > = {};
 
     services.forEach((service) => {
       const category = normalizeCategory(service.category || getServiceCategoryForPicker(service.name));
       if (!servicesByCategory[category]) {
         servicesByCategory[category] = [];
       }
-      servicesByCategory[category].push({ id: service.id, name: service.name, price: service.price ?? 0, duration_minutes: service.duration_minutes });
+      const sortOrder =
+        typeof service.sort_order === 'number' && Number.isFinite(service.sort_order)
+          ? service.sort_order
+          : 0;
+      servicesByCategory[category].push({
+        id: service.id,
+        name: service.name,
+        price: service.price ?? 0,
+        duration_minutes: service.duration_minutes,
+        sort_order: sortOrder,
+      });
     });
 
-    // 카테고리 목록 동적 생성 (서비스 데이터에서 추출, 기본 순서 유지 + 새 카테고리 추가)
+    // Category order: DB (same as settings/services), then extras from services not in DB list
     const allCategoryKeys = new Set(Object.keys(servicesByCategory));
-    const orderedCategoryKeys = [
-      ...SERVICE_PICKER_CATEGORY_ORDER.filter((cat) => allCategoryKeys.has(cat)),
-      ...Array.from(allCategoryKeys).filter((cat) => !SERVICE_PICKER_CATEGORY_ORDER.includes(cat)),
-    ];
+    const orderSource =
+      dbCategoryOrder === null
+        ? null
+        : dbCategoryOrder.length > 0
+          ? dbCategoryOrder
+          : SERVICE_SETTINGS_FALLBACK_CATEGORY_ORDER;
+    const orderedCategoryKeys =
+      orderSource === null
+        ? []
+        : [
+            ...orderSource.filter((cat) => allCategoryKeys.has(cat)),
+            ...Array.from(allCategoryKeys).filter((cat) => !orderSource.includes(cat)),
+          ];
 
     const categories: Array<{ key: string; label: string }> = [];
     orderedCategoryKeys.forEach((cat) => {
@@ -220,18 +298,22 @@ export default function SalesItemPickerModal({
     });
 
     const currentItems = selectedCategory
-      ? (servicesByCategory[selectedCategory] || []).filter((service) => {
-          const isCard = service.name.toLowerCase().includes('(card)');
-          return selectedPaymentType === 'card' ? isCard : !isCard;
-        })
+      ? (servicesByCategory[selectedCategory] || [])
+          .filter((service) => {
+            const isCard = service.name.toLowerCase().includes('(card)');
+            return selectedPaymentType === 'card' ? isCard : !isCard;
+          })
+          .sort(compareServiceOrderLikeSettings)
       : [];
+
+    const serviceTabBusy = loading || dbCategoryOrder === null;
 
     return (
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-auto lg:h-[500px]">
         {/* Left: Category Selection */}
         <div className="w-full lg:w-64 border-b lg:border-b-0 lg:border-r border-gray-200 pb-4 lg:pb-0 pr-0 lg:pr-5.5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">분류</h3>
-          {loading ? (
+          {serviceTabBusy ? (
             <div className="text-sm text-gray-500">로딩 중...</div>
           ) : (
             <div className="grid grid-cols-4 lg:grid-cols-2 gap-2 overflow-y-auto max-h-[200px] lg:max-h-[450px]">
@@ -255,7 +337,7 @@ export default function SalesItemPickerModal({
 
         {/* Middle: Item Selection */}
         <div className="flex-1">
-          {loading ? (
+          {serviceTabBusy ? (
             <div className="flex items-center justify-center h-full text-sm text-gray-500">
               로딩 중...
             </div>
