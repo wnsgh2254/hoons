@@ -7,7 +7,6 @@ import { getWeekStart, getWeekEnd } from '@/lib/utils/appointment-utils';
 interface UseBookingsOptions {
   designerFilter?: string;
   shopFilter?: string;
-  shopFilteredDesignerIds?: number[];
   searchInput?: string;
   availableDesignerIds?: number[];
   skipInitialFetchOnce?: boolean;
@@ -17,7 +16,6 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
   const {
     designerFilter = '전체',
     shopFilter = '전체',
-    shopFilteredDesignerIds = [],
     searchInput = '',
     availableDesignerIds = [],
     skipInitialFetchOnce = false,
@@ -84,12 +82,12 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
   useEffect(() => {
     let filtered = bookings;
 
-    // Shop filter
-    if (shopFilter !== '전체' && shopFilteredDesignerIds.length > 0) {
-      filtered = filtered.filter((b) => {
-        const designerId = b.designer?.id;
-        return designerId ? shopFilteredDesignerIds.includes(designerId) : false;
-      });
+    // Shop filter — match booking row venue (shop_id), not "designers assigned to this shop"
+    if (shopFilter !== '전체') {
+      const shopId = Number(shopFilter);
+      filtered = filtered.filter(
+        (b) => b.shop_id != null && !Number.isNaN(shopId) && Number(b.shop_id) === shopId,
+      );
     }
 
     if (designerFilter === '전체') {
@@ -107,7 +105,7 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
     }
 
     setFilteredBookings(filtered);
-  }, [designerFilter, shopFilter, shopFilteredDesignerIds, bookings, searchInput, availableDesignerIds]);
+  }, [designerFilter, shopFilter, bookings, searchInput, availableDesignerIds]);
 
   return {
     bookings,

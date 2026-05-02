@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { handleApiError } from '@/lib/api-utils';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
 
 // Comment: Load supplier list for purchases dropdown / supplier management
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const onlyActive = searchParams.get('onlyActive') !== 'false';
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     let query = supabase
       .from('inventory_suppliers')
       .select('id, name, contact_name, mobile_phone, phone, fax, email, memo, is_active')
+      .eq('shop_id', shopId)
       .order('name', { ascending: true });
 
     if (onlyActive) {
@@ -31,6 +34,8 @@ export async function GET(request: NextRequest) {
 
 type SupplierBody = {
   id?: number;
+  shopId?: number;
+  shop_id?: number;
   name: string;
   contactName?: string;
   mobilePhone?: string;
@@ -51,10 +56,12 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     const { data, error } = await supabase
       .from('inventory_suppliers')
       .insert({
+        shop_id: shopId,
         name: body.name.trim(),
         contact_name: body.contactName ?? null,
         mobile_phone: body.mobilePhone ?? null,
@@ -85,8 +92,9 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id 가 필요합니다.' }, { status: 400 });
     }
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
     if (body.name !== undefined) updates.name = body.name.trim();
     if (body.contactName !== undefined) updates.contact_name = body.contactName ?? null;
     if (body.mobilePhone !== undefined) updates.mobile_phone = body.mobilePhone ?? null;
@@ -100,6 +108,7 @@ export async function PATCH(request: NextRequest) {
       .from('inventory_suppliers')
       .update(updates)
       .eq('id', id)
+      .eq('shop_id', shopId)
       .select()
       .single();
 
@@ -121,11 +130,13 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'id 가 필요합니다.' }, { status: 400 });
     }
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     const { error } = await supabase
       .from('inventory_suppliers')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('shop_id', shopId);
 
     if (error) {
       return handleApiError(error, 'inventory-suppliers DELETE', '매입처를 삭제하지 못했습니다.');

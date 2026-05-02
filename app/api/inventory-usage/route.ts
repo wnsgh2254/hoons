@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getInventoryStatus } from '@/lib/utils/inventory-utils';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
+
+type UsageInventoryItem = {
+  category?: string | null;
+  sku?: string | null;
+  name?: string | null;
+  price?: number | string | null;
+  cost_price?: number | string | null;
+  stock?: number | string | null;
+};
 
 // Comment: Load internal usage entries list
 export async function GET(request: NextRequest) {
@@ -11,12 +21,14 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category');
     const search = searchParams.get('search');
     const staff = searchParams.get('staff');
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     let query = supabase
       .from('inventory_internal_usage_entries')
       .select(
         'id, used_at, staff_name, product_code, product_name, unit_price, quantity, amount, memo'
       )
+      .eq('shop_id', shopId)
       .order('used_at', { ascending: false });
 
     if (from) {
@@ -56,6 +68,8 @@ type CreateUsageBody = {
   staffName?: string;
   memo?: string;
   usedAt?: string;
+  shopId?: number;
+  shop_id?: number;
 };
 
 // Comment: Create a single internal usage entry and update inventory/ movements
@@ -64,6 +78,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as CreateUsageBody;
     const inventoryItemId = Number(body.inventoryItemId);
     const quantity = Number(body.quantity);
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     if (!inventoryItemId || !Number.isFinite(quantity) || quantity <= 0) {
       return NextResponse.json(
@@ -77,6 +92,7 @@ export async function POST(request: NextRequest) {
       .from('inventory_items')
       .select('*')
       .eq('id', inventoryItemId)
+      .eq('shop_id', shopId)
       .single();
 
     if (itemError || !item) {
@@ -88,9 +104,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Comment: Internal usage cost is based on cost price, not retail price.
-    const unitPrice = Number((item as any).cost_price ?? item.price ?? 0);
+    const inventoryItem = item as UsageInventoryItem;
+    const unitPrice = Number(inventoryItem.cost_price ?? inventoryItem.price ?? 0);
     const amount = unitPrice * quantity;
-    const beforeStock = Number(item.stock ?? 0);
+    const beforeStock = Number(inventoryItem.stock ?? 0);
     const newStock = Math.max(0, beforeStock - quantity);
 
     const usedAt =
@@ -102,12 +119,13 @@ export async function POST(request: NextRequest) {
     const { data: usage, error: usageError } = await supabase
       .from('inventory_internal_usage_entries')
       .insert({
+        shop_id: shopId,
         inventory_item_id: inventoryItemId,
         used_at: usedAt.toISOString(),
         staff_name: body.staffName ?? null,
-        category: item.category ?? null,
-        product_code: item.sku ?? null,
-        product_name: item.name ?? null,
+        category: inventoryItem.category ?? null,
+        product_code: inventoryItem.sku ?? null,
+        product_name: inventoryItem.name ?? null,
         unit_price: unitPrice,
         quantity,
         amount,
@@ -128,7 +146,8 @@ export async function POST(request: NextRequest) {
     const { error: updateError } = await supabase
       .from('inventory_items')
       .update({ stock: newStock, status: getInventoryStatus(newStock) })
-      .eq('id', inventoryItemId);
+      .eq('id', inventoryItemId)
+      .eq('shop_id', shopId);
 
     if (updateError) {
       console.error('Error updating inventory stock after internal usage:', updateError);
@@ -138,11 +157,12 @@ export async function POST(request: NextRequest) {
     const { error: movementError } = await supabase
       .from('inventory_movements')
       .insert({
+        shop_id: shopId,
         inventory_item_id: inventoryItemId,
         created_at: usedAt.toISOString(),
         user_id: body.staffName ?? null,
-        product_code: item.sku ?? null,
-        product_name: item.name ?? null,
+        product_code: inventoryItem.sku ?? null,
+        product_name: inventoryItem.name ?? null,
         type: '내부 소모',
         quantity_change: -quantity,
         current_stock: newStock,

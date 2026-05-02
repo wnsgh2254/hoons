@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
 
 // Comment: Load inventory brands list
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
     const { data, error } = await supabase
       .from('inventory_brands')
       .select('id, name')
+      .eq('shop_id', shopId)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
 
@@ -26,6 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name } = body;
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     if (!name || !String(name).trim()) {
       return NextResponse.json({ error: '브랜드명을 입력해주세요.' }, { status: 400 });
@@ -35,13 +40,14 @@ export async function POST(request: NextRequest) {
     const { data: maxData } = await supabase
       .from('inventory_brands')
       .select('sort_order')
+      .eq('shop_id', shopId)
       .order('sort_order', { ascending: false })
       .limit(1);
     const nextSortOrder = (maxData?.[0]?.sort_order ?? 0) + 1;
 
     const { data, error } = await supabase
       .from('inventory_brands')
-      .insert({ name: String(name).trim(), sort_order: nextSortOrder })
+      .insert({ name: String(name).trim(), shop_id: shopId, sort_order: nextSortOrder })
       .select('id, name')
       .single();
 
@@ -62,6 +68,7 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     const order: Array<{ id: number; sort_order: number }> = body.order;
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     if (!Array.isArray(order) || order.length === 0) {
       return NextResponse.json({ error: 'order 배열이 필요합니다.' }, { status: 400 });
@@ -69,7 +76,7 @@ export async function PUT(request: NextRequest) {
 
     const updates = await Promise.all(
       order.map(({ id, sort_order }) =>
-        supabase.from('inventory_brands').update({ sort_order }).eq('id', id),
+        supabase.from('inventory_brands').update({ sort_order }).eq('id', id).eq('shop_id', shopId),
       ),
     );
 

@@ -216,6 +216,7 @@ export async function POST(request: NextRequest) {
 
         if (itemType === 'product') {
           await adjustInventoryStockForSaleItem(supabase, {
+            shopId: shop_id,
             itemName: rawItem.name,
             quantityDelta: -qty,
           });

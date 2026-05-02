@@ -33,6 +33,19 @@ const ICON_OPTIONS = [
 
 type IconName = (typeof ICON_OPTIONS)[number];
 
+type ShopOption = {
+  id: number;
+  name: string;
+};
+
+const DEFAULT_INVENTORY_SHOP_ID = 3;
+
+function buildInventoryUrl(path: string, shopId: number, params?: URLSearchParams): string {
+  const nextParams = new URLSearchParams(params);
+  nextParams.set('shop_id', String(shopId));
+  return `${path}?${nextParams.toString()}`;
+}
+
 // Comment: Format date/time to YYYY-MM-DD HH:mm for display
 function formatDateTime(dateStr: string | null | undefined): string {
   if (dateStr == null || dateStr === '') return '';
@@ -175,6 +188,8 @@ const INVENTORY_VIEWS: Record<string, InventoryView> = {
 };
 
 function InventoryContent() {
+  const [shops, setShops] = useState<ShopOption[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<number>(DEFAULT_INVENTORY_SHOP_ID);
   const [category, setCategory] = useState('전체 카테고리');
   const [status, setStatus] = useState('전체 상태');
   const [brand, setBrand] = useState<string>('전체');
@@ -182,6 +197,7 @@ function InventoryContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<InventoryItem[]>([]);
   const [stockDrafts, setStockDrafts] = useState<Record<number, number>>({});
+  const [internalUsageUnits, setInternalUsageUnits] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +207,29 @@ function InventoryContent() {
   const searchParams = useSearchParams();
   const viewKey = searchParams.get('view') ?? 'overview';
   const activeView = INVENTORY_VIEWS[viewKey] ?? INVENTORY_VIEWS.overview;
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchShops = async () => {
+      try {
+        const res = await fetch('/api/shops');
+        const data = await res.json();
+        if (!isMounted) return;
+        const list: ShopOption[] = Array.isArray(data.shops) ? data.shops : [];
+        setShops(list);
+        if (!list.some((shop) => Number(shop.id) === selectedShopId) && list.length > 0) {
+          setSelectedShopId(Number(list[0].id));
+        }
+      } catch {
+        if (isMounted) setShops([]);
+      }
+    };
+
+    fetchShops();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedShopId]);
 
   // Comment: Load full inventory once on overview; stats always use this, table is filtered client-side
   useEffect(() => {
@@ -204,7 +243,7 @@ function InventoryContent() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch('/api/inventory');
+        const res = await fetch(buildInventoryUrl('/api/inventory', selectedShopId));
         const data = await res.json();
 
         if (isMounted) {
@@ -238,14 +277,42 @@ function InventoryContent() {
     return () => {
       isMounted = false;
     };
-  }, [viewKey]);
+  }, [viewKey, selectedShopId]);
+
+  useEffect(() => {
+    if (viewKey !== 'overview') {
+      return;
+    }
+
+    let isMounted = true;
+    const fetchInternalUsageSummary = async () => {
+      try {
+        const res = await fetch(buildInventoryUrl('/api/inventory-usage', selectedShopId));
+        const data = await res.json();
+        if (!isMounted) return;
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        const totalUnits = rows.reduce(
+          (sum: number, row: { quantity?: number | string | null }) => sum + Number(row.quantity ?? 0),
+          0
+        );
+        setInternalUsageUnits(totalUnits);
+      } catch {
+        if (isMounted) setInternalUsageUnits(0);
+      }
+    };
+
+    fetchInternalUsageSummary();
+    return () => {
+      isMounted = false;
+    };
+  }, [viewKey, selectedShopId]);
 
   // Comment: Load brand options from database
   useEffect(() => {
     let isMounted = true;
     const fetchBrands = async () => {
       try {
-        const res = await fetch('/api/inventory-brands');
+        const res = await fetch(buildInventoryUrl('/api/inventory-brands', selectedShopId));
         const data = await res.json();
         if (isMounted) {
           const names: string[] = Array.isArray(data.brands)
@@ -264,7 +331,7 @@ function InventoryContent() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedShopId]);
 
   const getStatusBadgeVariant = (status: string): 'success' | 'warning' | 'error' | 'default' => {
     switch (status) {
@@ -346,10 +413,10 @@ function InventoryContent() {
         }))
         .filter((item) => item.stock !== products.find((p) => p.id === item.id)?.stock);
 
-      const res = await fetch('/api/inventory', {
+      const res = await fetch(buildInventoryUrl('/api/inventory', selectedShopId), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ shop_id: selectedShopId, items }),
       });
       const data = await res.json();
 
@@ -485,7 +552,14 @@ function InventoryContent() {
       <PageHeader
         title={activeView.title}
         actions={
-          isOverview ? (
+          <>
+            <Select
+              value={String(selectedShopId)}
+              onChange={(e) => setSelectedShopId(Number(e.target.value))}
+              options={shops.map((shop) => ({ value: String(shop.id), label: shop.name }))}
+              className="min-w-[150px]"
+            />
+            {isOverview ? (
             <>
               <Button
                 variant="ghost"
@@ -504,7 +578,8 @@ function InventoryContent() {
                 상품 추가
               </Button>
             </>
-          ) : undefined
+            ) : null}
+          </>
         }
       />
       {isOverview ? (
@@ -531,7 +606,7 @@ function InventoryContent() {
             />
             <StatCard
               label="내부 소모"
-              value={loading ? '...' : '142 units'}
+              value={loading ? '...' : `${internalUsageUnits.toLocaleString()} units`}
               icon="water_drop"
             />
           </div>
@@ -586,21 +661,22 @@ function InventoryContent() {
           />
         </>
       ) : viewKey === 'usage' ? (
-        <InternalUsageView />
+        <InternalUsageView shopId={selectedShopId} />
       ) : viewKey === 'adjustments' ? (
-        <AdjustmentHistoryView />
+        <AdjustmentHistoryView shopId={selectedShopId} />
       ) : viewKey === 'history' ? (
-        <InventoryMovementHistoryView />
+        <InventoryMovementHistoryView shopId={selectedShopId} />
       ) : viewKey === 'purchases' ? (
-        <PurchasesView />
+        <PurchasesView shopId={selectedShopId} />
       ) : viewKey === 'vendors' ? (
-        <SuppliersView />
+        <SuppliersView shopId={selectedShopId} />
       ) : (
         <InventorySubView view={activeView} />
       )}
 
       {isOverview && showAddProductModal && (
         <AddProductModal
+          shopId={selectedShopId}
           onClose={() => setShowAddProductModal(false)}
           onCreated={(item) => {
             setProducts((prev) => [...prev, item]);
@@ -612,6 +688,7 @@ function InventoryContent() {
 
       {isOverview && editingProduct && (
         <EditProductModal
+          shopId={selectedShopId}
           product={editingProduct}
           onClose={() => setEditingProduct(null)}
           onUpdated={(item) => {
@@ -668,13 +745,14 @@ function InventorySubView({ view }: InventorySubViewProps) {
 }
 
 // Comment: Internal usage list view (내부 소모 내역)
-function InternalUsageView() {
+function InternalUsageView({ shopId }: { shopId: number }) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
   const [type, setType] = useState('전체');
   const [productSearch, setProductSearch] = useState('');
   const [staff, setStaff] = useState('전체');
+  const [staffOptions, setStaffOptions] = useState<string[]>([]);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [editingRow, setEditingRow] = useState<
     | {
@@ -701,6 +779,25 @@ function InternalUsageView() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Comment: Keep staff filters scoped to the selected venue.
+  useEffect(() => {
+    setStaff('전체');
+    const fetchStaffOptions = async () => {
+      try {
+        const res = await fetch(`/api/staff?shop_id=${shopId}`);
+        const data = await res.json();
+        const names = Array.isArray(data.staff)
+          ? data.staff.map((s: { name?: string | null }) => String(s.name || '')).filter(Boolean)
+          : [];
+        setStaffOptions(names);
+      } catch {
+        setStaffOptions([]);
+      }
+    };
+
+    fetchStaffOptions();
+  }, [shopId]);
+
   // Comment: Load internal usage rows from API
   useEffect(() => {
     const fetchUsage = async () => {
@@ -714,7 +811,7 @@ function InternalUsageView() {
         if (productSearch.trim()) params.append('search', productSearch.trim());
         if (staff && staff !== '전체') params.append('staff', staff);
 
-        const res = await fetch(`/api/inventory-usage?${params.toString()}`);
+        const res = await fetch(buildInventoryUrl('/api/inventory-usage', shopId, params));
         const data = await res.json();
         setRows(Array.isArray(data.rows) ? data.rows : []);
       } catch (e: any) {
@@ -725,7 +822,7 @@ function InternalUsageView() {
     };
 
     fetchUsage();
-  }, [startDate, endDate, type, productSearch, staff, reloadKey]);
+  }, [startDate, endDate, type, productSearch, staff, reloadKey, shopId]);
 
   const usageColumns = [
     { key: 'used_at', header: '날짜', render: (row: typeof rows[number]) => formatDateTime(row.used_at) },
@@ -801,7 +898,10 @@ function InternalUsageView() {
           <Select
             value={staff}
             onChange={(e) => setStaff(e.target.value)}
-            options={[{ value: '전체', label: '전체' }]}
+            options={[
+              { value: '전체', label: '전체' },
+              ...staffOptions.map((name) => ({ value: name, label: name })),
+            ]}
             className="min-w-[100px]"
           />
         </div>
@@ -824,6 +924,7 @@ function InternalUsageView() {
       />
       {showRegisterModal && (
         <InternalUsageRegisterModal
+          shopId={shopId}
           onClose={() => setShowRegisterModal(false)}
           onSaved={(savedDates) => {
             if (savedDates && savedDates.length > 0) {
@@ -840,6 +941,7 @@ function InternalUsageView() {
       {editingRow && (
         <InternalUsageEntryModal
           mode="edit"
+          shopId={shopId}
           inventoryItemId={undefined}
           productName={editingRow.product_name ?? ''}
           defaultQuantity={editingRow.quantity}
@@ -852,7 +954,7 @@ function InternalUsageView() {
 }
 
 // Comment: Purchases main view (매입 / 반품 목록)
-function PurchasesView() {
+function PurchasesView({ shopId }: { shopId: number }) {
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-01-20');
   const [supplier, setSupplier] = useState('');
@@ -883,7 +985,7 @@ function PurchasesView() {
         if (type !== 'all') params.append('type', type);
         if (supplier.trim()) params.append('supplier', supplier.trim());
 
-        const res = await fetch(`/api/inventory-purchases?${params.toString()}`);
+        const res = await fetch(buildInventoryUrl('/api/inventory-purchases', shopId, params));
         const data = await res.json();
         setRows(Array.isArray(data.rows) ? data.rows : []);
       } catch (e: any) {
@@ -894,7 +996,7 @@ function PurchasesView() {
     };
 
     fetchPurchases();
-  }, [startDate, endDate, type, supplier]);
+  }, [startDate, endDate, type, supplier, shopId]);
 
   const totalCount = rows.length;
   const totalAmount = rows.reduce((sum, r) => sum + Number(r.total_amount ?? 0), 0);
@@ -984,17 +1086,17 @@ function PurchasesView() {
         emptyMessage="내역이 없습니다."
       />
       {detailId && (
-        <PurchaseDetailModal id={detailId} onClose={() => setDetailId(null)} />
+        <PurchaseDetailModal id={detailId} shopId={shopId} onClose={() => setDetailId(null)} />
       )}
       {editMode && (
-        <PurchaseEditModal mode={editMode} onClose={() => setEditMode(null)} />
+        <PurchaseEditModal mode={editMode} shopId={shopId} onClose={() => setEditMode(null)} />
       )}
     </div>
   );
 }
 
 // Comment: Supplier management view (매입처 관리)
-function SuppliersView() {
+function SuppliersView({ shopId }: { shopId: number }) {
   const [showInactive, setShowInactive] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [rows, setRows] = useState<
@@ -1034,7 +1136,7 @@ function SuppliersView() {
         setError(null);
         const params = new URLSearchParams();
         params.append('onlyActive', showInactive ? 'false' : 'true');
-        const res = await fetch(`/api/inventory-suppliers?${params.toString()}`);
+        const res = await fetch(buildInventoryUrl('/api/inventory-suppliers', shopId, params));
         const data = await res.json();
         const list: any[] = Array.isArray(data.suppliers) ? data.suppliers : [];
         setRows(
@@ -1058,7 +1160,7 @@ function SuppliersView() {
     };
 
     fetchSuppliers();
-  }, [showInactive, reloadKey]);
+  }, [showInactive, reloadKey, shopId]);
 
   const openCreate = () => {
     setEditSupplier({
@@ -1150,6 +1252,7 @@ function SuppliersView() {
       />
       {editSupplier && (
         <SupplierEditModal
+          shopId={shopId}
           supplier={editSupplier}
           onClose={() => setEditSupplier(null)}
           onSaved={handleSaved}
@@ -1160,6 +1263,7 @@ function SuppliersView() {
 }
 
 type SupplierEditModalProps = {
+  shopId: number;
   supplier: {
     id?: number;
     name: string;
@@ -1176,7 +1280,7 @@ type SupplierEditModalProps = {
 };
 
 // Comment: Supplier create/edit modal (매입처 등록/수정)
-function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProps) {
+function SupplierEditModal({ shopId, supplier, onClose, onSaved }: SupplierEditModalProps) {
   const [form, setForm] = useState(supplier);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1198,6 +1302,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
       setError(null);
       const payload: any = {
         id: form.id,
+        shopId,
         name: form.name.trim(),
         contactName: form.contact_name || null,
         mobilePhone: form.mobile_phone || null,
@@ -1209,7 +1314,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
       };
 
       const method = isEdit ? 'PATCH' : 'POST';
-      const res = await fetch('/api/inventory-suppliers', {
+      const res = await fetch(buildInventoryUrl('/api/inventory-suppliers', shopId), {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1234,10 +1339,10 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/inventory-suppliers', {
+      const res = await fetch(buildInventoryUrl('/api/inventory-suppliers', shopId), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: form.id }),
+        body: JSON.stringify({ id: form.id, shopId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1357,7 +1462,7 @@ function SupplierEditModal({ supplier, onClose, onSaved }: SupplierEditModalProp
 }
 
 // Comment: Stock adjustment history view (재고 조정 내역)
-function AdjustmentHistoryView() {
+function AdjustmentHistoryView({ shopId }: { shopId: number }) {
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-01-20');
   const [productSearch, setProductSearch] = useState('');
@@ -1388,7 +1493,7 @@ function AdjustmentHistoryView() {
         if (endDate) params.append('to', endDate);
         if (productSearch.trim()) params.append('search', productSearch.trim());
 
-        const res = await fetch(`/api/inventory-adjustments?${params.toString()}`);
+        const res = await fetch(buildInventoryUrl('/api/inventory-adjustments', shopId, params));
         const data = await res.json();
         setRows(Array.isArray(data.rows) ? data.rows : []);
       } catch (e: any) {
@@ -1399,7 +1504,7 @@ function AdjustmentHistoryView() {
     };
 
     fetchAdjustments();
-  }, [startDate, endDate, productSearch]);
+  }, [startDate, endDate, productSearch, shopId]);
 
   const adjustmentColumns = [
     { key: 'adjusted_at', header: '날짜', render: (row: typeof rows[number]) => formatDateTime(row.adjusted_at) },
@@ -1459,7 +1564,7 @@ function AdjustmentHistoryView() {
         emptyMessage="내역이 없습니다."
       />
       {showAdjustModal && (
-        <StockAdjustmentModal onClose={() => setShowAdjustModal(false)} />
+        <StockAdjustmentModal shopId={shopId} onClose={() => setShowAdjustModal(false)} />
       )}
     </div>
   );
@@ -1476,7 +1581,7 @@ type MovementRow = {
 };
 
 // Comment: Inventory movement history view (재고 변동 이력)
-function InventoryMovementHistoryView() {
+function InventoryMovementHistoryView({ shopId }: { shopId: number }) {
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState('2026-01-20');
   const [productCode, setProductCode] = useState('');
@@ -1498,7 +1603,7 @@ function InventoryMovementHistoryView() {
         if (productCode.trim()) params.append('productCode', productCode.trim());
         if (category && category !== '전체') params.append('category', category);
 
-        const res = await fetch(`/api/inventory-movements?${params.toString()}`);
+        const res = await fetch(buildInventoryUrl('/api/inventory-movements', shopId, params));
         const data = await res.json();
         const mapped: MovementRow[] = Array.isArray(data.rows)
           ? data.rows.map((row: any) => ({
@@ -1520,7 +1625,7 @@ function InventoryMovementHistoryView() {
     };
 
     fetchMovements();
-  }, [startDate, endDate, productCode, category]);
+  }, [startDate, endDate, productCode, category, shopId]);
 
   const movementColumns = [
     { key: 'createdAt', header: '생성일', render: (row: MovementRow) => row.createdAt },
@@ -1702,12 +1807,13 @@ function InventoryMovementDetailModal({ row, onClose }: InventoryMovementDetailM
 }
 
 type InternalUsageRegisterModalProps = {
+  shopId: number;
   onClose: () => void;
   onSaved?: (savedDates: string[]) => void;
 };
 
 // Comment: Modal for registering internal usage based on inventory items
-function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterModalProps) {
+function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageRegisterModalProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [staffOptions, setStaffOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1731,7 +1837,7 @@ function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterM
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch('/api/inventory');
+        const res = await fetch(buildInventoryUrl('/api/inventory', shopId));
         const data = await res.json();
         setItems(Array.isArray(data.items) ? data.items : []);
       } catch (e: any) {
@@ -1745,7 +1851,7 @@ function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterM
 
     const fetchStaff = async () => {
       try {
-        const res = await fetch('/api/staff');
+        const res = await fetch(`/api/staff?shop_id=${shopId}`);
         const data = await res.json();
         const names = Array.isArray(data.staff)
           ? data.staff.map((s: any) => String(s.name || '')).filter(Boolean)
@@ -1757,7 +1863,7 @@ function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterM
     };
 
     fetchStaff();
-  }, []);
+  }, [shopId]);
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -1797,11 +1903,12 @@ function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterM
       setSaving(true);
       setError(null);
       for (const row of selectedRows) {
-        const res = await fetch('/api/inventory-usage', {
+        const res = await fetch(buildInventoryUrl('/api/inventory-usage', shopId), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             inventoryItemId: row.inventoryItemId,
+            shopId,
             quantity: row.quantity,
             staffName: row.staffName || null,
             memo: row.memo || null,
@@ -1998,6 +2105,7 @@ function InternalUsageRegisterModal({ onClose, onSaved }: InternalUsageRegisterM
 
 type InternalUsageEntryModalProps = {
   mode: 'create' | 'edit';
+  shopId: number;
   inventoryItemId?: number;
   productName: string;
   defaultQuantity: number;
@@ -2008,6 +2116,7 @@ type InternalUsageEntryModalProps = {
 // Comment: Small modal for internal usage create/edit
 function InternalUsageEntryModal({
   mode,
+  shopId,
   inventoryItemId,
   productName,
   defaultQuantity,
@@ -2037,11 +2146,12 @@ function InternalUsageEntryModal({
     try {
       setSaving(true);
       setError(null);
-      await fetch('/api/inventory-usage', {
+      await fetch(buildInventoryUrl('/api/inventory-usage', shopId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inventoryItemId,
+          shopId,
           quantity: qty,
           staffName: staff || null,
           memo: memo || null,
@@ -2136,11 +2246,12 @@ function InternalUsageEntryModal({
 }
 
 type StockAdjustmentModalProps = {
+  shopId: number;
   onClose: () => void;
 };
 
 // Comment: Modal for arbitrary stock adjustment
-function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
+function StockAdjustmentModal({ shopId, onClose }: StockAdjustmentModalProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [draftAfter, setDraftAfter] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(false);
@@ -2152,7 +2263,7 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch('/api/inventory');
+        const res = await fetch(buildInventoryUrl('/api/inventory', shopId));
         const data = await res.json();
         const list: InventoryItem[] = Array.isArray(data.items) ? data.items : [];
         setItems(list);
@@ -2173,7 +2284,7 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
     };
 
     fetchInventory();
-  }, []);
+  }, [shopId]);
 
   const handleChangeAfter = (id: number, value: string) => {
     const num = Number(value);
@@ -2199,10 +2310,10 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
     try {
       setSaving(true);
       setError(null);
-      await fetch('/api/inventory-adjustments', {
+      await fetch(buildInventoryUrl('/api/inventory-adjustments', shopId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adjustments }),
+        body: JSON.stringify({ shop_id: shopId, adjustments }),
       });
       onClose();
     } catch (e: any) {
@@ -2290,11 +2401,12 @@ function StockAdjustmentModal({ onClose }: StockAdjustmentModalProps) {
 
 type PurchaseDetailModalProps = {
   id: number;
+  shopId: number;
   onClose: () => void;
 };
 
 // Comment: Purchase detail modal (매입 상세)
-function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
+function PurchaseDetailModal({ id, shopId, onClose }: PurchaseDetailModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [header, setHeader] = useState<{
@@ -2320,7 +2432,7 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`/api/inventory-purchases/${id}`);
+        const res = await fetch(buildInventoryUrl(`/api/inventory-purchases/${id}`, shopId));
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.error || '매입 상세를 불러오지 못했습니다.');
@@ -2335,7 +2447,7 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
     };
 
     fetchDetail();
-  }, [id]);
+  }, [id, shopId]);
 
   const titlePrefix = header?.type === 'return' ? '반품' : '매입';
 
@@ -2395,11 +2507,12 @@ function PurchaseDetailModal({ id, onClose }: PurchaseDetailModalProps) {
 
 type PurchaseEditModalProps = {
   mode: 'purchase' | 'return';
+  shopId: number;
   onClose: () => void;
 };
 
 // Comment: Purchase / Return edit modal (매입 등록 / 반품 등록)
-function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
+function PurchaseEditModal({ mode, shopId, onClose }: PurchaseEditModalProps) {
   const [supplier, setSupplier] = useState('');
   const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
   const [date, setDate] = useState('2026-01-20');
@@ -2422,7 +2535,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-        const res = await fetch('/api/inventory-suppliers');
+        const res = await fetch(buildInventoryUrl('/api/inventory-suppliers', shopId));
         const data = await res.json();
         const names: string[] = Array.isArray(data.suppliers)
           ? data.suppliers.map((s: any) => String(s.name))
@@ -2437,7 +2550,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
     };
 
     fetchSuppliers();
-  }, []);
+  }, [shopId]);
 
   const handleSave = async () => {
     const payloadItems = items
@@ -2456,11 +2569,12 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/inventory-purchases', {
+      const res = await fetch(buildInventoryUrl('/api/inventory-purchases', shopId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: mode,
+          shopId,
           supplierName: supplier.trim(),
           purchaseDate: date,
           memo: memo || null,
@@ -2621,6 +2735,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
       </div>
       {showItemPicker && (
         <PurchaseItemPickerModal
+          shopId={shopId}
           onClose={() => setShowItemPicker(false)}
           onConfirm={(selected) => {
             setItems(selected);
@@ -2633,6 +2748,7 @@ function PurchaseEditModal({ mode, onClose }: PurchaseEditModalProps) {
 }
 
 type PurchaseItemPickerModalProps = {
+  shopId: number;
   onClose: () => void;
   onConfirm: (
     items: {
@@ -2646,7 +2762,7 @@ type PurchaseItemPickerModalProps = {
 };
 
 // Comment: Product picker modal for purchases (제품 추가)
-function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModalProps) {
+function PurchaseItemPickerModal({ shopId, onClose, onConfirm }: PurchaseItemPickerModalProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [draft, setDraft] = useState<
     Record<number, { unitPrice: number; quantity: number }>
@@ -2662,7 +2778,7 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
         setError(null);
         const params = new URLSearchParams();
         if (search.trim()) params.append('search', search.trim());
-        const res = await fetch(`/api/inventory?${params.toString()}`);
+        const res = await fetch(buildInventoryUrl('/api/inventory', shopId, params));
         const data = await res.json();
         const list: InventoryItem[] = Array.isArray(data.items) ? data.items : [];
         setItems(list);
@@ -2686,7 +2802,7 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
     };
 
     fetchInventory();
-  }, [search]);
+  }, [search, shopId]);
 
   const handleConfirm = () => {
     const selected = items
@@ -2830,11 +2946,12 @@ function PurchaseItemPickerModal({ onClose, onConfirm }: PurchaseItemPickerModal
 }
 
 type AddProductModalProps = {
+  shopId: number;
   onClose: () => void;
   onCreated: (item: InventoryItem) => void;
 };
 
-function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
+function AddProductModal({ shopId, onClose, onCreated }: AddProductModalProps) {
   const [name, setName] = useState('');
   const [size, setSize] = useState('');
   const [sku, setSku] = useState('');
@@ -2852,11 +2969,12 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
       setLoading(true);
       setError(null);
 
-      const res = await fetch('/api/inventory', {
+      const res = await fetch(buildInventoryUrl('/api/inventory', shopId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
+          shopId,
           size: size || null,
           sku: sku || null,
           category,
@@ -2983,12 +3101,13 @@ function AddProductModal({ onClose, onCreated }: AddProductModalProps) {
 }
 
 type EditProductModalProps = {
+  shopId: number;
   product: InventoryItem;
   onClose: () => void;
   onUpdated: (item: InventoryItem) => void;
 };
 
-function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps) {
+function EditProductModal({ shopId, product, onClose, onUpdated }: EditProductModalProps) {
   const [name, setName] = useState(product.name);
   const [size, setSize] = useState(product.size ?? '');
   const [sku, setSku] = useState(product.sku ?? '');
@@ -3008,11 +3127,12 @@ function EditProductModal({ product, onClose, onUpdated }: EditProductModalProps
       setLoading(true);
       setError(null);
 
-      const res = await fetch('/api/inventory', {
+      const res = await fetch(buildInventoryUrl('/api/inventory', shopId), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: product.id,
+          shopId,
           name,
           size: size || null,
           sku: sku || null,

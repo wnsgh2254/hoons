@@ -2,10 +2,23 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const normalizeName = (value: string | null | undefined) => String(value || '').trim().toLowerCase();
 
+type InventoryStockRow = {
+  id: number;
+  stock: number | string | null;
+};
+
+type PrepaidPassRow = {
+  id: number;
+  name: string | null;
+  points: number | string | null;
+  customer_id: number;
+};
+
 export async function adjustInventoryStockForSaleItem(
   supabase: SupabaseClient,
   params: {
     sourceItemId?: number | null;
+    shopId?: number | null;
     itemName?: string | null;
     quantityDelta: number;
   },
@@ -13,15 +26,16 @@ export async function adjustInventoryStockForSaleItem(
   const quantityDelta = Math.trunc(Number(params.quantityDelta) || 0);
   if (quantityDelta === 0) return;
 
-  let item: any = null;
+  let item: InventoryStockRow | null = null;
 
   if (params.sourceItemId != null && Number.isFinite(Number(params.sourceItemId))) {
     const { data } = await supabase
       .from('inventory_items')
       .select('id, stock')
       .eq('id', Number(params.sourceItemId))
+      .eq('shop_id', Number(params.shopId ?? 3))
       .maybeSingle();
-    item = data;
+    item = data as InventoryStockRow | null;
   }
 
   if (!item && params.itemName) {
@@ -29,9 +43,10 @@ export async function adjustInventoryStockForSaleItem(
       .from('inventory_items')
       .select('id, stock')
       .eq('name', params.itemName)
+      .eq('shop_id', Number(params.shopId ?? 3))
       .limit(1)
       .maybeSingle();
-    item = data;
+    item = data as InventoryStockRow | null;
   }
 
   if (!item?.id) return;
@@ -40,7 +55,8 @@ export async function adjustInventoryStockForSaleItem(
   const { error } = await supabase
     .from('inventory_items')
     .update({ stock: nextStock })
-    .eq('id', Number(item.id));
+    .eq('id', Number(item.id))
+    .eq('shop_id', Number(params.shopId ?? 3));
 
   if (error) {
     throw new Error(error.message);
@@ -68,11 +84,11 @@ export async function adjustPrepaidBalance(
     throw new Error(error.message);
   }
 
-  const rows = data || [];
+  const rows = (data || []) as PrepaidPassRow[];
   if (rows.length === 0) return;
 
   const preferredRows = rows.filter(
-    (row: any) => normalizeName(row.name) === normalizeName(params.passLabel),
+    (row) => normalizeName(row.name) === normalizeName(params.passLabel),
   );
   const targetRows = preferredRows.length > 0 ? preferredRows : rows;
 

@@ -19,8 +19,8 @@ export interface PrepaidPassTemplate {
 const STORAGE_KEY = 'heyoom_prepaid_templates';
 
 const DEFAULT_TEMPLATES: PrepaidPassTemplate[] = [
-  { id: 1, type: '금액 적립', name: '500볼', salePrice: 50000, accumulationAmount: 60000, validityPeriod: '무제한', hasDiscount: false, serviceDiscount: 0, productDiscount: 0, isActive: true, sortOrder: 1 },
-  { id: 2, type: '금액 적립', name: '1000볼', salePrice: 100000, accumulationAmount: 130000, validityPeriod: '무제한', hasDiscount: false, serviceDiscount: 0, productDiscount: 0, isActive: true, sortOrder: 2 },
+  { id: 1, type: '금액 적립', name: '500볼', salePrice: 500, accumulationAmount: 600, validityPeriod: '무제한', hasDiscount: false, serviceDiscount: 0, productDiscount: 0, isActive: true, sortOrder: 1 },
+  { id: 2, type: '금액 적립', name: '1000볼', salePrice: 1000, accumulationAmount: 1300, validityPeriod: '무제한', hasDiscount: false, serviceDiscount: 0, productDiscount: 0, isActive: true, sortOrder: 2 },
 ];
 
 // Module-level shared state + listeners for cross-component sync

@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
+
+type PurchaseDetailItemRow = {
+  id: number;
+  inventory_items?: {
+    sku?: string | null;
+    name?: string | null;
+  } | null;
+  unit_price: number | string | null;
+  quantity: number | string | null;
+  line_amount: number | string | null;
+};
 
 // Comment: Load single purchase header + items
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -12,6 +24,8 @@ export async function GET(
     if (!purchaseId) {
       return NextResponse.json({ error: '잘못된 id 입니다.' }, { status: 400 });
     }
+    const { searchParams } = new URL(request.url);
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     const { data: header, error: headerError } = await supabase
       .from('inventory_purchases')
@@ -19,6 +33,7 @@ export async function GET(
         'id, type, purchase_date, memo, total_amount, created_at, suppliers:inventory_suppliers(name)'
       )
       .eq('id', purchaseId)
+      .eq('shop_id', shopId)
       .single();
 
     if (headerError || !header) {
@@ -45,7 +60,7 @@ export async function GET(
     }
 
     const mappedItems =
-      items?.map((row: any) => ({
+      (items as PurchaseDetailItemRow[] | null)?.map((row) => ({
         id: row.id,
         product_code: row.inventory_items?.sku ?? null,
         product_name: row.inventory_items?.name ?? null,

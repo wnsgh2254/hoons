@@ -75,6 +75,7 @@ interface SalesItemPickerModalProps {
   onSelect: (item: PickerSelectedItem | PickerSelectedItem[]) => void;
   title?: string;
   defaultManager?: string | null;
+  shopId?: number | null;
 }
 
 /** Comment: Build ISO expiry from validity UI (null = unlimited / not set) */
@@ -95,6 +96,11 @@ function buildPrepaidExpiresAtIso(
   return d.toISOString();
 }
 
+function normalizePrepaidAmount(value: number): number {
+  const amount = Number(value) || 0;
+  return amount >= 10000 && amount % 100 === 0 ? amount / 100 : amount;
+}
+
 type SelectedItem = {
   id: number;
   name: string;
@@ -110,6 +116,7 @@ export default function SalesItemPickerModal({
   onSelect,
   title = '판매 항목 선택',
   defaultManager = null,
+  shopId = null,
 }: SalesItemPickerModalProps) {
   const [activeTab, setActiveTab] = useState<SalesItemType>(initialTab);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -117,7 +124,10 @@ export default function SalesItemPickerModal({
   const { staff: managers } = useStaff({ onlyActive: true, enabled: isOpen });
   const [selectedManager, setSelectedManager] = useState<string>('');
   const { services, loading } = useServices({ enabled: isOpen && activeTab === 'service' });
-  const { items: inventoryItems, brands: inventoryBrands, loading: inventoryLoading } = useInventory({ enabled: isOpen && activeTab === 'product' });
+  const { items: inventoryItems, brands: inventoryBrands, loading: inventoryLoading } = useInventory({
+    enabled: isOpen && activeTab === 'product',
+    shopId,
+  });
   const { templates: prepaidTemplates } = usePrepaidTemplates();
   // 선택한 항목 목록 (서비스/제품 탭에서 사용)
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
@@ -595,7 +605,12 @@ export default function SalesItemPickerModal({
     // 서비스 및 제품 설정 페이지에서 관리하는 정액권 템플릿 사용
     const activeTemplates = prepaidTemplates.filter((t) => t.isActive);
     const prepaidOptions = [
-      ...activeTemplates.map((t) => ({ key: t.name, label: t.name, salePrice: t.salePrice, accumulatedAmount: t.accumulationAmount })),
+      ...activeTemplates.map((t) => ({
+        key: t.name,
+        label: t.name,
+        salePrice: normalizePrepaidAmount(t.salePrice),
+        accumulatedAmount: normalizePrepaidAmount(t.accumulationAmount),
+      })),
       { key: '맞춤 정액권', label: '맞춤 정액권', salePrice: 0, accumulatedAmount: 0 },
     ];
 

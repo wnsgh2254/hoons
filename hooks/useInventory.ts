@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 
 export interface InventoryItem {
   id: number;
+  shop_id?: number | null;
   name: string;
   size: string | null;
   sku: string | null;
@@ -20,6 +21,7 @@ export interface InventoryItem {
 
 export interface InventoryBrand {
   id: number;
+  shop_id?: number | null;
   name: string;
 }
 
@@ -39,8 +41,8 @@ export function invalidateInventoryCache() {
   cacheTimestamp = 0;
 }
 
-export function useInventory(options: { enabled?: boolean } = {}) {
-  const { enabled = true } = options;
+export function useInventory(options: { enabled?: boolean; shopId?: number | null } = {}) {
+  const { enabled = true, shopId = null } = options;
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [brands, setBrands] = useState<InventoryBrand[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,27 +57,37 @@ export function useInventory(options: { enabled?: boolean } = {}) {
   useEffect(() => {
     if (!enabled) return;
 
-    if (isCacheValid() && cachedItems && cachedBrands) {
-      setItems(cachedItems);
-      setBrands(cachedBrands);
-      return;
+    let cancelled = false;
+    if (shopId == null && isCacheValid() && cachedItems && cachedBrands) {
+      Promise.resolve().then(() => {
+        if (!cancelled && mountedRef.current && cachedItems && cachedBrands) {
+          setItems(cachedItems);
+          setBrands(cachedBrands);
+        }
+      });
+      return () => { cancelled = true; };
     }
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    Promise.all([
-      fetch('/api/inventory').then((r) => r.json()),
-      fetch('/api/inventory-brands').then((r) => r.json()),
-    ])
+    const query = shopId != null ? `?shop_id=${shopId}` : '';
+    Promise.resolve()
+      .then(() => {
+        if (cancelled) return Promise.reject(new Error('cancelled'));
+        setLoading(true);
+        setError(null);
+        return Promise.all([
+          fetch(`/api/inventory${query}`).then((r) => r.json()),
+          fetch(`/api/inventory-brands${query}`).then((r) => r.json()),
+        ]);
+      })
       .then(([itemsData, brandsData]) => {
         if (cancelled) return;
         const itemList: InventoryItem[] = itemsData.items || [];
         const brandList: InventoryBrand[] = brandsData.brands || [];
-        cachedItems = itemList;
-        cachedBrands = brandList;
-        cacheTimestamp = Date.now();
+        if (shopId == null) {
+          cachedItems = itemList;
+          cachedBrands = brandList;
+          cacheTimestamp = Date.now();
+        }
         if (mountedRef.current) {
           setItems(itemList);
           setBrands(brandList);
@@ -93,14 +105,15 @@ export function useInventory(options: { enabled?: boolean } = {}) {
       });
 
     return () => { cancelled = true; };
-  }, [enabled]);
+  }, [enabled, shopId]);
 
   const refetch = (): Promise<void> => {
     invalidateInventoryCache();
     setLoading(true);
+    const query = shopId != null ? `?shop_id=${shopId}` : '';
     return Promise.all([
-      fetch('/api/inventory').then((r) => r.json()),
-      fetch('/api/inventory-brands').then((r) => r.json()),
+      fetch(`/api/inventory${query}`).then((r) => r.json()),
+      fetch(`/api/inventory-brands${query}`).then((r) => r.json()),
     ])
       .then(([itemsData, brandsData]) => {
         const itemList: InventoryItem[] = itemsData.items || [];

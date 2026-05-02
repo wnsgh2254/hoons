@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
 
 export async function PATCH(
   request: NextRequest,
@@ -14,6 +15,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
     const updates: Record<string, unknown> = {};
     if (body.name !== undefined) updates.name = String(body.name).trim();
 
@@ -25,6 +27,7 @@ export async function PATCH(
       .from('inventory_brands')
       .update(updates)
       .eq('id', brandId)
+      .eq('shop_id', shopId)
       .select('id, name')
       .single();
 
@@ -51,11 +54,14 @@ export async function DELETE(
     if (Number.isNaN(brandId)) {
       return NextResponse.json({ error: 'Invalid brand ID' }, { status: 400 });
     }
+    const { searchParams } = new URL(request.url);
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     const { error } = await supabase
       .from('inventory_brands')
       .delete()
-      .eq('id', brandId);
+      .eq('id', brandId)
+      .eq('shop_id', shopId);
 
     if (error) {
       console.error('Error deleting inventory brand:', error);

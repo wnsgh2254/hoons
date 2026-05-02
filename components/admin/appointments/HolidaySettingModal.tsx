@@ -4,7 +4,6 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } fro
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
-import AlertModal from '@/components/ui/AlertModal';
 import { Z } from '@/lib/constants';
 import { pickWinningTimeOffRow, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
 
@@ -88,21 +87,18 @@ function datesWhereWinningReason(
 export default function HolidaySettingModal({
   isOpen,
   initialDesignerId,
-  initialDesignerName,
   allDesigners,
   shops,
   defaultTargetShopId,
-  selectedDate,
   onClose,
   onAvailableDesignerIdsChange,
 }: HolidaySettingModalProps) {
   const [designerId, setDesignerId] = useState<number | null>(initialDesignerId);
-  const [designerName, setDesignerName] = useState<string>(initialDesignerName);
   const [holidayType, setHolidayType] = useState<'holiday' | 'special'>('holiday');
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [removeConfirm, setRemoveConfirm] = useState<{ timeOffId: number; reason: string; dateStr: string } | null>(null);
+  const [pendingRemoveTimeOffIds, setPendingRemoveTimeOffIds] = useState<number[]>([]);
   const [regularSchedule, setRegularSchedule] = useState<any[]>([]);
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
   const [allDesignerTimeOffs, setAllDesignerTimeOffs] = useState<any[]>([]);
@@ -117,9 +113,9 @@ export default function HolidaySettingModal({
   useLayoutEffect(() => {
     if (!isOpen) return;
     setDesignerId(initialDesignerId);
-    setDesignerName(initialDesignerName);
     setHolidayType('holiday');
     setCurrentMonth(new Date());
+    setPendingRemoveTimeOffIds([]);
     setTargetShopId(
       defaultTargetShopId != null &&
         Number.isFinite(Number(defaultTargetShopId)) &&
@@ -127,7 +123,7 @@ export default function HolidaySettingModal({
         ? Number(defaultTargetShopId)
         : shops[0]?.id ?? null,
     );
-  }, [isOpen, initialDesignerId, initialDesignerName, defaultTargetShopId, shops]);
+  }, [isOpen, initialDesignerId, defaultTargetShopId, shops]);
 
   // Comment: Load weekday schedule + venue time-offs together; ignore stale responses when designer or open state changes.
   // When designerId is null ("전체"), fetch ALL time-off records so we can show dates where all designers have 임의 휴일.
@@ -197,6 +193,11 @@ export default function HolidaySettingModal({
     );
   }, [allDesignerTimeOffs, targetShopId]);
 
+  const visibleTimeOffsForVenue = useMemo(
+    () => existingTimeOffsForVenue.filter((to: any) => !pendingRemoveTimeOffIds.includes(Number(to.id))),
+    [existingTimeOffsForVenue, pendingRemoveTimeOffIds],
+  );
+
   // Comment: Designers belonging to the selected shop (Directors always included, non-directors by home shop)
   const designersForShop = useMemo(() => {
     if (targetShopId === null) return allDesigners;
@@ -252,27 +253,45 @@ export default function HolidaySettingModal({
       setScheduleLoading(false);
       setAllDesignerTimeOffs([]);
       setSelectedDates([]);
+      setPendingRemoveTimeOffIds([]);
     }
   }, [isOpen]);
 
-  const handleRemoveTimeOff = useCallback(async () => {
-    if (!removeConfirm) return;
-    try {
-      const res = await fetch(`/api/designer-time-off/${removeConfirm.timeOffId}`, { method: 'DELETE' });
-      if (res.ok) {
-        // Comment: Remove from local state so calendar updates immediately
-        setAllDesignerTimeOffs((prev) => prev.filter((to: any) => to.id !== removeConfirm.timeOffId));
-        onAvailableDesignerIdsChange();
-      } else {
-        alert('삭제에 실패했습니다.');
-      }
-    } catch (error) {
-      console.error('Error removing time off:', error);
-      alert('삭제에 실패했습니다.');
-    } finally {
-      setRemoveConfirm(null);
+  const baselineDates = useMemo(() => {
+    if (designerId === null) {
+      return holidayType === 'holiday' ? allDesignerHolidayDates : [];
     }
-  }, [removeConfirm, onAvailableDesignerIdsChange]);
+    const targetReason = holidayType === 'holiday' ? '임의 휴일' : '특별 근무일';
+    return datesWhereWinningReason(existingTimeOffsForVenue, targetReason);
+  }, [designerId, holidayType, allDesignerHolidayDates, existingTimeOffsForVenue]);
+
+  const hasPendingChanges = useMemo(() => {
+    const selected = new Set(selectedDates);
+    const baseline = new Set(baselineDates);
+    const hasAddedDates = selectedDates.some((date) => !baseline.has(date));
+    const hasRemovedDates = baselineDates.some((date) => !selected.has(date));
+    return hasAddedDates || hasRemovedDates || pendingRemoveTimeOffIds.length > 0;
+  }, [selectedDates, baselineDates, pendingRemoveTimeOffIds]);
+
+  const getWinningRemovalIdsForDate = useCallback(
+    (dateStr: string, reason: '임의 휴일' | '특별 근무일') => {
+      if (designerId === null) {
+        return designersForShop
+          .map((designer) => {
+            const designerRows = existingTimeOffsForVenue.filter(
+              (to: any) => Number(to.designer_id) === Number(designer.id),
+            );
+            const winning = winningVenueTimeOffOnDate(designerRows, dateStr);
+            return winning?.reason === reason ? Number(winning.id) : null;
+          })
+          .filter((id): id is number => id != null);
+      }
+
+      const winning = winningVenueTimeOffOnDate(existingTimeOffsForVenue, dateStr);
+      return winning?.reason === reason ? [Number(winning.id)] : [];
+    },
+    [designerId, designersForShop, existingTimeOffsForVenue],
+  );
 
   /** Handle calendar cell click with type-aware logic */
   const handleDateClick = useCallback(
@@ -281,33 +300,25 @@ export default function HolidaySettingModal({
         // Comment: 임의 휴일 모드 — 정기 휴일과 특별 근무일은 클릭 불가
         if (isRegularHoliday || isExistingSpecial) return;
         if (isExistingHoliday && existingTimeOff) {
-          // Confirm removal of existing 임의 휴일
-          setRemoveConfirm({
-            timeOffId: existingTimeOff.id,
-            reason: '임의 휴일',
-            dateStr,
-          });
+          // Comment: Existing arbitrary holidays are removed only when Save is clicked.
+          const removeIds = getWinningRemovalIdsForDate(dateStr, '임의 휴일');
+          setPendingRemoveTimeOffIds((prev) => Array.from(new Set([...prev, ...removeIds])));
+          setSelectedDates((prev) => prev.filter((x) => x !== dateStr));
           return;
         }
       } else {
         // Comment: 특별 근무일 모드 — 모든 날짜 선택 가능
         if (isExistingSpecial && existingTimeOff) {
-          // Confirm removal of existing 특별 근무일
-          setRemoveConfirm({
-            timeOffId: existingTimeOff.id,
-            reason: '특별 근무일',
-            dateStr,
-          });
+          // Comment: Existing special workdays are removed only when Save is clicked.
+          const removeIds = getWinningRemovalIdsForDate(dateStr, '특별 근무일');
+          setPendingRemoveTimeOffIds((prev) => Array.from(new Set([...prev, ...removeIds])));
+          setSelectedDates((prev) => prev.filter((x) => x !== dateStr));
           return;
         }
         if (isExistingHoliday && existingTimeOff) {
-          // Confirm removal of existing 임의 휴일 (to allow special workday)
-          setRemoveConfirm({
-            timeOffId: existingTimeOff.id,
-            reason: '임의 휴일 해제',
-            dateStr,
-          });
-          return;
+          // Comment: Switching holiday -> special workday is also applied on Save.
+          const removeIds = getWinningRemovalIdsForDate(dateStr, '임의 휴일');
+          setPendingRemoveTimeOffIds((prev) => Array.from(new Set([...prev, ...removeIds])));
         }
       }
       // Toggle selection
@@ -315,7 +326,7 @@ export default function HolidaySettingModal({
         prev.includes(dateStr) ? prev.filter((x) => x !== dateStr) : [...prev, dateStr],
       );
     },
-    [holidayType],
+    [holidayType, getWinningRemovalIdsForDate],
   );
 
   const handleSave = async () => {
@@ -323,8 +334,8 @@ export default function HolidaySettingModal({
       alert('특별 근무일은 전체 디자이너에 대해 설정할 수 없습니다. 디자이너를 선택해주세요.');
       return;
     }
-    if (selectedDates.length === 0) {
-      alert('날짜를 선택해주세요.');
+    if (!hasPendingChanges) {
+      alert('변경된 날짜가 없습니다.');
       return;
     }
     if (targetShopId === null || !Number.isFinite(Number(targetShopId))) {
@@ -333,48 +344,61 @@ export default function HolidaySettingModal({
     }
     setSubmitting(true);
     try {
+      if (pendingRemoveTimeOffIds.length > 0) {
+        const deleteResults = await Promise.all(
+          pendingRemoveTimeOffIds.map((id) =>
+            fetch(`/api/designer-time-off/${id}`, { method: 'DELETE' }),
+          ),
+        );
+        const failedDelete = deleteResults.find((res) => !res.ok);
+        if (failedDelete) {
+          const errData = await failedDelete.json().catch(() => ({}));
+          throw new Error(errData?.error || '기존 휴일 해제에 실패했습니다.');
+        }
+      }
+
       if (!designerId && holidayType === 'holiday') {
         // Only create records for newly added dates (skip dates already fully covered)
         const newDates = selectedDates.filter((d) => !allDesignerHolidayDates.includes(d));
-        if (newDates.length === 0) {
-          alert('새로 추가된 날짜가 없습니다.');
-          setSubmitting(false);
-          return;
-        }
-        const rows = newDates.flatMap((date) =>
-          designersForShop.map((designer) => ({
-            designer_id: designer.id,
-            shop_id: targetShopId,
-            start_date: date,
-            end_date: date,
-            reason: '임의 휴일',
-          })),
-        );
-        const bulkRes = await fetch('/api/designer-time-off', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows }),
-        });
-        if (!bulkRes.ok) {
-          const errData = await bulkRes.json().catch(() => ({}));
-          throw new Error(errData?.error || '휴무 등록에 실패했습니다.');
+        if (newDates.length > 0) {
+          const rows = newDates.flatMap((date) =>
+            designersForShop.map((designer) => ({
+              designer_id: designer.id,
+              shop_id: targetShopId,
+              start_date: date,
+              end_date: date,
+              reason: '임의 휴일',
+            })),
+          );
+          const bulkRes = await fetch('/api/designer-time-off', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows }),
+          });
+          if (!bulkRes.ok) {
+            const errData = await bulkRes.json().catch(() => ({}));
+            throw new Error(errData?.error || '휴무 등록에 실패했습니다.');
+          }
         }
       } else if (designerId) {
-        const rows = selectedDates.map((date) => ({
+        const newDates = selectedDates.filter((d) => !baselineDates.includes(d));
+        const rows = newDates.map((date) => ({
           designer_id: designerId,
           shop_id: targetShopId,
           start_date: date,
           end_date: date,
           reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
         }));
-        const bulkRes = await fetch('/api/designer-time-off', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rows }),
-        });
-        if (!bulkRes.ok) {
-          const errData = await bulkRes.json().catch(() => ({}));
-          throw new Error(errData?.error || '휴무 등록에 실패했습니다.');
+        if (rows.length > 0) {
+          const bulkRes = await fetch('/api/designer-time-off', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows }),
+          });
+          if (!bulkRes.ok) {
+            const errData = await bulkRes.json().catch(() => ({}));
+            throw new Error(errData?.error || '휴무 등록에 실패했습니다.');
+          }
         }
       }
       alert('설정이 완료되었습니다.');
@@ -414,14 +438,12 @@ export default function HolidaySettingModal({
             const value = e.target.value;
             if (value === 'all') {
               setDesignerId(null);
-              setDesignerName('전체');
               if (holidayType === 'special') setHolidayType('holiday');
             } else {
               const id = Number(value);
               const d = allDesigners.find((x) => x.id === id);
               if (d) {
                 setDesignerId(id);
-                setDesignerName(d.name);
                 // Comment: Auto-set shop for single-venue designers (non-directors)
                 const isDir = String(d.role || '').toLowerCase().includes('director');
                 const shopIds: number[] = d.shop_ids_at ?? (d.shop_id != null ? [d.shop_id] : []);
@@ -584,6 +606,8 @@ export default function HolidaySettingModal({
                     // Comment: "전체" mode — simplified: just toggle date selection, show red border for selected
                     if (designerId === null) {
                       const showTodayDot = isToday && isCurrentMonth;
+                      const existingHolidayIds = getWinningRemovalIdsForDate(dateStr, '임의 휴일');
+                      const hasPendingRemoval = existingHolidayIds.some((id) => pendingRemoveTimeOffIds.includes(id));
                       const displayClass = isSelected
                         ? 'border-2 border-red-500 bg-white text-gray-900'
                         : 'hover:bg-gray-100';
@@ -593,6 +617,20 @@ export default function HolidaySettingModal({
                           type="button"
                           onClick={() => {
                             if (!isCurrentMonth) return;
+                            if (isSelected && allDesignerHolidayDates.includes(dateStr)) {
+                              setPendingRemoveTimeOffIds((prev) =>
+                                Array.from(new Set([...prev, ...existingHolidayIds])),
+                              );
+                              setSelectedDates((prev) => prev.filter((x) => x !== dateStr));
+                              return;
+                            }
+                            if (!isSelected && allDesignerHolidayDates.includes(dateStr) && hasPendingRemoval) {
+                              setPendingRemoveTimeOffIds((prev) =>
+                                prev.filter((id) => !existingHolidayIds.includes(id)),
+                              );
+                              setSelectedDates((prev) => [...prev, dateStr]);
+                              return;
+                            }
                             setSelectedDates((prev) =>
                               prev.includes(dateStr) ? prev.filter((x) => x !== dateStr) : [...prev, dateStr],
                             );
@@ -613,7 +651,13 @@ export default function HolidaySettingModal({
                       regularSchedule.some((s: any) => s.weekday === weekday && !s.effective_to);
                     const isRegularHoliday = isCurrentMonth && !hasRegularSchedule;
 
-                    const existingTimeOff = winningVenueTimeOffOnDate(existingTimeOffsForVenue, dateStr);
+                    const rawExistingTimeOff = winningVenueTimeOffOnDate(existingTimeOffsForVenue, dateStr);
+                    const isPendingRemoval =
+                      rawExistingTimeOff?.id != null &&
+                      pendingRemoveTimeOffIds.includes(Number(rawExistingTimeOff.id));
+                    const existingTimeOff = isPendingRemoval
+                      ? null
+                      : winningVenueTimeOffOnDate(visibleTimeOffsForVenue, dateStr);
                     const isExistingHoliday = existingTimeOff?.reason === '임의 휴일';
                     const isExistingSpecial = existingTimeOff?.reason === '특별 근무일';
                     const isNewlySelectedHoliday = isSelected && holidayType === 'holiday';
@@ -644,6 +688,15 @@ export default function HolidaySettingModal({
                         type="button"
                         onClick={() => {
                           if (!isCurrentMonth) return;
+                          if (isPendingRemoval && rawExistingTimeOff?.id != null) {
+                            setPendingRemoveTimeOffIds((prev) =>
+                              prev.filter((id) => id !== Number(rawExistingTimeOff.id)),
+                            );
+                            setSelectedDates((prev) =>
+                              prev.includes(dateStr) ? prev : [...prev, dateStr],
+                            );
+                            return;
+                          }
                           handleDateClick(dateStr, existingTimeOff, isRegularHoliday, isExistingSpecial, isExistingHoliday);
                         }}
                         disabled={!isCurrentMonth}
@@ -676,7 +729,7 @@ export default function HolidaySettingModal({
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-4">
-                *날짜를 선택하면 등록/수정이 가능합니다. 셀 우측 상단의 작은 파란 점은 오늘 날짜입니다.
+                *날짜 변경은 저장하기를 눌렀을 때 한 번에 적용됩니다. 셀 우측 상단의 작은 파란 점은 오늘 날짜입니다.
               </p>
             </>
           )}
@@ -684,7 +737,7 @@ export default function HolidaySettingModal({
         <Button
           loading={submitting}
           disabled={
-            selectedDates.length === 0 ||
+            !hasPendingChanges ||
             (!designerId && holidayType === 'special') ||
             targetShopId === null
           }
@@ -694,25 +747,6 @@ export default function HolidaySettingModal({
           저장하기
         </Button>
       </div>
-
-      {/* Confirm removal of existing time-off */}
-      <AlertModal
-        isOpen={removeConfirm !== null}
-        title="알림"
-        message={
-          removeConfirm
-            ? removeConfirm.reason === '임의 휴일'
-              ? `${designerName}의 임의 휴일을 근무일로 변경 하시겠습니까?`
-              : removeConfirm.reason === '임의 휴일 해제'
-                ? `자원 임의 휴일은 특별 근무일로 지정할 수 없습니다. 선택된 날짜를 임의 휴일에서 제외 하시겠습니까?`
-                : `${designerName}의 특별 근무일을 휴일로 변경 하시겠습니까?`
-            : ''
-        }
-        variant="confirm"
-        onConfirm={handleRemoveTimeOff}
-        onClose={() => setRemoveConfirm(null)}
-        zIndex={Z.MODAL_ALERT}
-      />
     </Modal>
   );
 }

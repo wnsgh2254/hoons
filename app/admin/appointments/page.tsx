@@ -298,13 +298,6 @@ export default function AppointmentsManagementPage() {
     handleDeleteRecentSearch,
   } = useScheduleSearch();
 
-  // Comment: Designer IDs filtered by shop (Directors appear in every shop)
-  const shopFilteredDesignerIds = useMemo(() => {
-    if (selectedShopFilter === '전체') return [];
-    const shopId = Number(selectedShopFilter);
-    return allDesigners.filter((d) => designerBelongsToShop(d, shopId)).map((d) => d.id);
-  }, [allDesigners, selectedShopFilter]);
-
   // Bookings data (extracted to hook)
   const {
     bookings, filteredBookings, loading, error,
@@ -312,7 +305,6 @@ export default function AppointmentsManagementPage() {
   } = useBookings(selectedDate, {
     designerFilter: selectedDesignerFilter,
     shopFilter: selectedShopFilter,
-    shopFilteredDesignerIds,
     searchInput,
     availableDesignerIds,
     skipInitialFetchOnce: true,
@@ -4257,6 +4249,7 @@ export default function AppointmentsManagementPage() {
         isOpen={isSalesItemPickerModalOpen}
         activeTab={salesItemPickerTab}
         defaultManager={salesDefaultManager}
+        shopId={salesRegistrationShopId}
         onClose={() => {
           setIsSalesItemPickerModalOpen(false);
           if (closeSalesFlowOnPickerClose) {
@@ -4317,6 +4310,7 @@ export default function AppointmentsManagementPage() {
         isOpen={isRefundItemPickerModalOpen}
         activeTab={refundItemPickerTab}
         title="환불 항목 추가"
+        shopId={salesRegistrationShopId}
         onClose={() => {
           setIsRefundItemPickerModalOpen(false);
         }}

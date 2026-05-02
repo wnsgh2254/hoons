@@ -261,6 +261,7 @@ export async function PUT(
       const delta = newQty - oldQty;
       if (delta !== 0) {
         await adjustInventoryStockForSaleItem(supabase, {
+          shopId: shop_id,
           itemName,
           quantityDelta: -delta,
         });
@@ -270,6 +271,7 @@ export async function PUT(
 
     for (const [itemName, qty] of newProductQuantityMap.entries()) {
       await adjustInventoryStockForSaleItem(supabase, {
+        shopId: shop_id,
         itemName,
         quantityDelta: -qty,
       });

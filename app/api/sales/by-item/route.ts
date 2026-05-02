@@ -54,12 +54,15 @@ export async function GET(request: NextRequest) {
       salesQuery = salesQuery.eq('shop_id', Number(shopId));
     }
 
+    const inventoryQuery = supabase.from('inventory_items').select('name, brand, category');
+    const scopedInventoryQuery = shopId ? inventoryQuery.eq('shop_id', Number(shopId)) : inventoryQuery;
+
     const [{ data: sales, error: salesError }, { data: designers }, { data: services }, { data: inventoryItems }] =
       await Promise.all([
         salesQuery,
         supabase.from('designers').select('id, name, english_name'),
         supabase.from('services').select('name, category'),
-        supabase.from('inventory_items').select('name, brand, category'),
+        scopedInventoryQuery,
       ]);
 
     if (salesError) {

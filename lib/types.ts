@@ -83,6 +83,7 @@ export interface Payment {
 
 export interface InventoryItem {
   id: number;
+  shop_id?: number | null;
   name: string;
   brand?: string | null;
   size: string | null;

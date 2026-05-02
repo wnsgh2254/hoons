@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getInventoryStatus } from '@/lib/utils/inventory-utils';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
+
+type PurchaseListRow = {
+  id: number;
+  type: 'purchase' | 'return';
+  purchase_date: string;
+  total_amount: number | string | null;
+  memo: string | null;
+  suppliers?: { name?: string | null } | null;
+};
+
+type PurchaseInventoryRow = {
+  id: number;
+  sku?: string | null;
+  name?: string | null;
+  stock?: number | string | null;
+};
 
 // Comment: List purchases with optional filters
 export async function GET(request: NextRequest) {
@@ -10,10 +27,12 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get('to');
     const type = searchParams.get('type'); // 'purchase' | 'return'
     const supplierName = searchParams.get('supplier');
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     let query = supabase
       .from('inventory_purchases')
       .select('id, type, purchase_date, total_amount, memo, suppliers:inventory_suppliers(name)')
+      .eq('shop_id', shopId)
       .order('purchase_date', { ascending: false })
       .order('id', { ascending: false });
 
@@ -39,7 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     const rows =
-      data?.map((row: any) => ({
+      (data as PurchaseListRow[] | null)?.map((row) => ({
         id: row.id,
         type: row.type,
         purchase_date: row.purchase_date,
@@ -67,6 +86,8 @@ type CreatePurchaseBody = {
   purchaseDate: string;
   memo?: string;
   items: PurchaseItemInput[];
+  shopId?: number;
+  shop_id?: number;
 };
 
 // Comment: Create purchase/return with items and update inventory + movements
@@ -75,6 +96,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as CreatePurchaseBody;
     const type = body.type === 'return' ? 'return' : 'purchase';
     const items = Array.isArray(body.items) ? body.items : [];
+    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     if (!body.supplierName || !body.purchaseDate || !items.length) {
       return NextResponse.json(
@@ -90,6 +112,7 @@ export async function POST(request: NextRequest) {
     const { data: existingSupplier } = await supabase
       .from('inventory_suppliers')
       .select('id')
+      .eq('shop_id', shopId)
       .eq('name', supplierName)
       .maybeSingle();
 
@@ -98,7 +121,7 @@ export async function POST(request: NextRequest) {
     } else {
       const { data: newSupplier, error: insertSupplierError } = await supabase
         .from('inventory_suppliers')
-        .insert({ name: supplierName })
+        .insert({ name: supplierName, shop_id: shopId })
         .select()
         .single();
       if (insertSupplierError) {
@@ -116,6 +139,7 @@ export async function POST(request: NextRequest) {
     const { data: inventoryList, error: inventoryError } = await supabase
       .from('inventory_items')
       .select('*')
+      .eq('shop_id', shopId)
       .in('id', itemIds);
 
     if (inventoryError) {
@@ -126,8 +150,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const inventoryMap = new Map<number, any>();
-    (inventoryList ?? []).forEach((row: any) => {
+    const inventoryMap = new Map<number, PurchaseInventoryRow>();
+    ((inventoryList ?? []) as PurchaseInventoryRow[]).forEach((row) => {
       inventoryMap.set(row.id, row);
     });
 
@@ -150,6 +174,7 @@ export async function POST(request: NextRequest) {
     const { data: purchase, error: purchaseError } = await supabase
       .from('inventory_purchases')
       .insert({
+        shop_id: shopId,
         type,
         supplier_id: supplierId,
         purchase_date: purchaseDate,
@@ -173,6 +198,7 @@ export async function POST(request: NextRequest) {
       .insert(
         itemRows.map((row) => ({
           ...row,
+          shop_id: shopId,
           purchase_id: purchase.id,
         }))
       )
@@ -203,7 +229,8 @@ export async function POST(request: NextRequest) {
       const { error: updateError } = await supabase
         .from('inventory_items')
         .update({ stock: newStock, status: getInventoryStatus(newStock) })
-        .eq('id', inventoryId);
+        .eq('id', inventoryId)
+        .eq('shop_id', shopId);
 
       if (updateError) {
         console.error('Error updating inventory stock after purchase:', updateError);
@@ -214,6 +241,7 @@ export async function POST(request: NextRequest) {
       const { error: movementError } = await supabase
         .from('inventory_movements')
         .insert({
+          shop_id: shopId,
           inventory_item_id: inventoryId,
           created_at: purchaseDate,
           user_id: null,

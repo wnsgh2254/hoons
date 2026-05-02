@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
 
 export async function DELETE(
   request: NextRequest,
@@ -12,11 +13,14 @@ export async function DELETE(
     if (Number.isNaN(itemId)) {
       return NextResponse.json({ error: 'Invalid item ID' }, { status: 400 });
     }
+    const { searchParams } = new URL(request.url);
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     const { error } = await supabase
       .from('inventory_items')
       .delete()
-      .eq('id', itemId);
+      .eq('id', itemId)
+      .eq('shop_id', shopId);
 
     if (error) {
       console.error('Error deleting inventory item:', error);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { parseInventoryShopId } from '@/lib/inventory-shop';
 
 // Comment: Load inventory movement history
 export async function GET(request: NextRequest) {
@@ -9,12 +10,14 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get('to');
     const productCode = searchParams.get('productCode');
     const category = searchParams.get('category');
+    const shopId = parseInventoryShopId(searchParams.get('shop_id'));
 
     let query = supabase
       .from('inventory_movements')
       .select(
         'id, created_at, user_id, product_code, product_name, type, quantity_change, current_stock'
       )
+      .eq('shop_id', shopId)
       .order('created_at', { ascending: false });
 
     if (from) {
