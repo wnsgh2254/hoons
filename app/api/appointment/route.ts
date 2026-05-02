@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking, buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
+import { invokeBookingConfirmationEdge } from '@/lib/booking-confirmation-edge';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
       customServiceDuration, // Comment: Optional custom duration in minutes from admin booking
       memo, // Comment: Optional booking memo
       colorLabel, // Comment: Optional color label icon
-      status, // Comment: Optional status override (e.g. 'BOOKED' for admin bookings)
+      status, // Comment: Optional status override (e.g. 'CONFIRMED' for admin bookings)
     } = body;
 
     if (!shopId || !day || !timeLabel) {
@@ -40,8 +41,6 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const { local } = buildPhoneVariants(customerPhone);
-
       // Comment: If existingCustomerId is provided, trust and verify it first
       if (existingCustomerId) {
         const { data: existingById } = await supabase
@@ -97,6 +96,22 @@ export async function POST(request: NextRequest) {
       colorLabel: typeof colorLabel === 'string' && colorLabel.trim() ? colorLabel.trim() : null,
       status: typeof status === 'string' && status.trim() ? status.trim() : null,
     });
+
+    const createdStatus = String(booking.status || status || '').trim().toLowerCase();
+    const shouldSendConfirmation =
+      booking.id != null &&
+      customerId != null &&
+      (createdStatus === 'booked' || createdStatus === 'confirmed');
+
+    if (shouldSendConfirmation) {
+      try {
+        const result = await invokeBookingConfirmationEdge(Number(booking.id));
+        console.log(`Appointment POST: booking-confirmation-sms ok for booking ${booking.id}: ${result}`);
+      } catch (smsError) {
+        console.error('Appointment POST: SMS confirmation error:', smsError);
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -146,7 +161,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: '예약 조회에 실패했습니다.' }, { status: 500 });
       }
       return NextResponse.json({
-        bookings: (minData || []).map((booking: any) => ({
+        bookings: ((minData || []) as Array<{ booking_date: string; status: string | null }>).map((booking) => ({
           ...booking,
           status: isCancelledBookingStatus(booking.status) ? 'cancelled' : booking.status,
         })),

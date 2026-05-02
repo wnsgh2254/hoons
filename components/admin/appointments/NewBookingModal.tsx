@@ -786,7 +786,7 @@ export default function NewBookingModal({
             customerName: isUnregisteredBooking ? unregisteredName.trim() : (selectedCustomer?.name ?? null),
             customerPhone: isUnregisteredBooking ? unregisteredPhone.trim() : (selectedCustomer?.phone ?? (customerSearch || null)),
             existingCustomerId: isUnregisteredBooking ? finalCustomerId : (selectedCustomer?.id ?? finalCustomerId ?? null),
-            status: 'BOOKED',
+            status: 'CONFIRMED',
           }),
         });
 

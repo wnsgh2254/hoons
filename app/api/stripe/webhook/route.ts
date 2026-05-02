@@ -6,6 +6,7 @@ import {
   createPublicBooking,
 } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
+import { invokeBookingConfirmationEdge } from "@/lib/booking-confirmation-edge";
 
 export const runtime = "nodejs";
 
@@ -160,27 +161,3 @@ export async function POST(request: NextRequest) {
 }
 
 // Comment: Trigger Supabase Edge Function that handles booking confirmation SMS
-async function invokeBookingConfirmationEdge(bookingId: number) {
-  const projectUrl = process.env.SUPABASE_URL?.trim() || "https://akzipcsakzuqpknkrjnb.supabase.co";
-  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
-
-  if (!anonKey) {
-    throw new Error("Missing SUPABASE_ANON_KEY for Edge Function invoke.");
-  }
-
-  const res = await fetch(`${projectUrl}/functions/v1/booking-confirmation-sms`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${anonKey}`,
-    },
-    body: JSON.stringify({ booking_id: bookingId }),
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`booking-confirmation-sms failed (${res.status}): ${text}`);
-  }
-
-  console.log(`Stripe webhook: booking-confirmation-sms ok for booking ${bookingId}: ${text}`);
-}

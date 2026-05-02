@@ -170,7 +170,7 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
       service_id: serviceId,
       booking_date: bookingDate,
       booking_time: bookingTime,
-      status: status || 'pending', // Comment: Admin bookings use 'BOOKED'; public bookings default to 'pending'
+      status: status || 'pending', // Comment: Admin bookings use 'CONFIRMED'; public bookings default to 'pending'
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
       custom_service_name: customServiceName ?? null,
