@@ -481,36 +481,67 @@ export async function getDesignerSalesForPeriod(designerIds: number[], periodMon
 
 // Comment: Get all prepaid pass members, optionally filtered by search query with pagination
 export async function getPrepaidPasses(search?: string, page: number = 1, limit: number = 20) {
-  let query = supabase
+  const { data, error } = await supabase
     .from('prepaid_passes')
-    .select('*', { count: 'exact' })
+    .select('*, customer:customer_id(id, name, phone, email)')
+    .eq('is_active', true)
     .order('created_at', { ascending: false });
-
-  // Comment: Filter by search query if provided
-  if (search && search.trim()) {
-    const searchTerm = search.trim();
-    query = query.or(
-      `name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`
-    );
-  }
-
-  // Comment: Apply pagination
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  query = query.range(from, to);
-
-  const { data, error, count } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
 
+  const grouped = new Map<string, any>();
+  for (const row of data || []) {
+    if (!isPrepaidPassUsable(row)) continue;
+
+    const customer = Array.isArray(row.customer) ? row.customer[0] : row.customer;
+    const normalizedPhone = String(customer?.phone || row.phone || '').replace(/\D/g, '');
+    const normalizedName = String(customer?.name || row.name || '').trim();
+    const key = row.customer_id != null
+      ? `customer:${row.customer_id}`
+      : `name-phone:${normalizedName.toLowerCase()}::${normalizedPhone}`;
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        ...row,
+        name: normalizedName,
+        phone: normalizedPhone || row.phone || null,
+        email: customer?.email || row.email || null,
+        points: Number(row.points || 0),
+        expires_at: row.expires_at || null,
+        customer_id: row.customer_id ?? customer?.id ?? null,
+        created_at: row.created_at,
+      });
+      continue;
+    }
+
+    existing.points = Number(existing.points || 0) + Number(row.points || 0);
+    existing.expires_at = mergePrepaidExpiryDates(existing.expires_at, row.expires_at);
+    if (new Date(row.created_at || 0).getTime() > new Date(existing.created_at || 0).getTime()) {
+      existing.created_at = row.created_at;
+    }
+  }
+
+  const searchTerm = search?.trim().toLowerCase() || '';
+  const allMembers = Array.from(grouped.values())
+    .filter((member) => {
+      if (!searchTerm) return true;
+      return [member.name, member.phone, member.email]
+        .some((value) => String(value || '').toLowerCase().includes(searchTerm));
+    })
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+  const from = (page - 1) * limit;
+  const members = allMembers.slice(from, from + limit);
+
   return {
-    members: data || [],
-    total: count || 0,
+    members,
+    total: allMembers.length,
     page,
     limit,
-    totalPages: Math.ceil((count || 0) / limit),
+    totalPages: Math.max(1, Math.ceil(allMembers.length / limit)),
   };
 }
 
@@ -714,7 +745,6 @@ export async function issuePrepaidPassFromSale(params: {
 
   const { member } = await createPrepaidPass({
     customerId: params.customerId,
-    name: String(params.passLabel || '정액권').trim(),
     points: credit,
     expiresAt: params.expiresAt || null,
   });

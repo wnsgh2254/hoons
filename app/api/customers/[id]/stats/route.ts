@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+function normalizeComparablePhone(value: string | null | undefined): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeComparableName(value: string | null | undefined): string {
+  return String(value || '').trim().toLowerCase();
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -18,6 +26,18 @@ export async function GET(
     const todayStr = now.toISOString().split('T')[0];
     const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
 
+    const customerResult = await supabase
+      .from('customers')
+      .select('id, name, phone')
+      .eq('id', customerId)
+      .maybeSingle();
+
+    if (customerResult.error || !customerResult.data) {
+      return NextResponse.json({ error: '고객을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const customer = customerResult.data;
+
     const [bookingsResult, prepaidResult, salesResult, refundsResult] = await Promise.all([
       supabase
         .from('bookings')
@@ -25,15 +45,14 @@ export async function GET(
         .eq('customer_id', customerId),
       supabase
         .from('prepaid_passes')
-        .select('id, name, points, is_active, expires_at, created_at')
-        .eq('customer_id', customerId)
+        .select('id, customer_id, name, phone, points, is_active, expires_at, created_at')
         .eq('is_active', true),
       supabase.from('sales').select('total_amount').eq('customer_id', customerId),
       supabase.from('refunds').select('total_amount').eq('customer_id', customerId),
     ]);
 
     type BookingRow = { booking_date: string; booking_time: string | null; status: string | null; total_amount: number | null };
-    type PrepaidRow = { id: number; name: string | null; points: number | null; is_active: boolean | null; expires_at: string | null; created_at: string | null };
+    type PrepaidRow = { id: number; customer_id: number | null; name: string | null; phone: string | null; points: number | null; is_active: boolean | null; expires_at: string | null; created_at: string | null };
 
     const allBookings: BookingRow[] = (bookingsResult.data as BookingRow[]) || [];
 
@@ -80,7 +99,13 @@ export async function GET(
         })
         .map((b: BookingRow) => ({ date: b.booking_date, time: b.booking_time || '' }))[0] ?? null;
 
-    const prepaidTickets: PrepaidRow[] = (prepaidResult.data as PrepaidRow[]) || [];
+    const prepaidTickets: PrepaidRow[] = ((prepaidResult.data as PrepaidRow[]) || []).filter((p) => {
+      if (p.customer_id != null && Number(p.customer_id) === customerId) return true;
+      return (
+        normalizeComparableName(p.name) === normalizeComparableName(customer.name) &&
+        normalizeComparablePhone(p.phone) === normalizeComparablePhone(customer.phone)
+      );
+    });
     const prepaidBalance = prepaidTickets.reduce((sum: number, p: PrepaidRow) => sum + Number(p.points || 0), 0);
 
     return NextResponse.json({

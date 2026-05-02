@@ -8,6 +8,14 @@ import {
 } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
 
+function normalizeComparablePhone(value: string | null | undefined): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeComparableName(value: string | null | undefined): string {
+  return String(value || '').trim().toLowerCase();
+}
+
 // Comment: GET - Fetch all prepaid pass members or a single member by id or customer_id query parameter
 export async function GET(request: NextRequest) {
   try {
@@ -33,18 +41,33 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: '유효하지 않은 고객 ID입니다.' }, { status: 400 });
       }
 
+      const { data: customer, error: customerError } = await supabase
+        .from('customers')
+        .select('id, name, phone')
+        .eq('id', customerIdNum)
+        .maybeSingle();
+
+      if (customerError || !customer) {
+        return NextResponse.json({ error: '고객을 찾을 수 없습니다.' }, { status: 404 });
+      }
+
       const { data, error } = await supabase
         .from('prepaid_passes')
         .select('*')
         .eq('is_active', true)
-        .eq('customer_id', customerIdNum)
         .order('created_at', { ascending: false });
 
       if (error) {
         throw new Error(error.message);
       }
 
-      const members = data || [];
+      const members = (data || []).filter((m: any) => {
+        if (m.customer_id != null && Number(m.customer_id) === customerIdNum) return true;
+        return (
+          normalizeComparableName(m.name) === normalizeComparableName(customer.name) &&
+          normalizeComparablePhone(m.phone) === normalizeComparablePhone(customer.phone)
+        );
+      });
       const now = new Date();
       const usableMembers = members.filter((m: any) => {
         if (!m.expires_at) return true;
@@ -56,13 +79,22 @@ export async function GET(request: NextRequest) {
         (sum: number, m: any) => sum + Number(m.points || 0),
         0,
       );
+      const primaryMember = usableMembers[0]
+        ? {
+            ...usableMembers[0],
+            name: customer.name,
+            phone: customer.phone,
+            customer_id: customerIdNum,
+            points: totalPoints,
+          }
+        : null;
 
       // Backward-compatible shapes:
       // - member: first usable member (or null)
       // - prepaid: list used by existing customer info reducers
       return NextResponse.json(
         {
-          member: usableMembers[0] ?? null,
+          member: primaryMember,
           members,
           usableMembers,
           prepaid: usableMembers.map((m: any) => ({

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+function normalizeComparablePhone(value: string | null | undefined): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeComparableName(value: string | null | undefined): string {
+  return String(value || '').trim().toLowerCase();
+}
+
 // Comment: GET - Fetch customers list with pagination and search
 export async function GET(request: NextRequest) {
   try {
@@ -40,19 +48,26 @@ export async function GET(request: NextRequest) {
     const totalSales: Record<number, number> = {};
 
     if (customerIds.length > 0) {
-      // Comment: Get prepaid pass balances (sum of points for each customer)
+      // Comment: Balance is grouped by customer link or customer name + phone fallback.
       const { data: linkedPrepaidData } = await supabase
         .from('prepaid_passes')
-        .select('customer_id, points, is_active, expires_at')
-        .in('customer_id', customerIds)
+        .select('customer_id, name, phone, points, is_active, expires_at')
         .eq('is_active', true);
 
       (linkedPrepaidData || []).forEach((p: any) => {
-        if (!prepaidBalances[p.customer_id]) {
-          prepaidBalances[p.customer_id] = 0;
+        const matchedCustomer = (data || []).find((customer: any) => {
+          if (p.customer_id != null && Number(p.customer_id) === Number(customer.id)) return true;
+          return (
+            normalizeComparableName(p.name) === normalizeComparableName(customer.name) &&
+            normalizeComparablePhone(p.phone) === normalizeComparablePhone(customer.phone)
+          );
+        });
+        if (!matchedCustomer) return;
+
+        if (!prepaidBalances[matchedCustomer.id]) {
+          prepaidBalances[matchedCustomer.id] = 0;
         }
-        // Comment: Sum up points for each customer
-        prepaidBalances[p.customer_id] += Number(p.points || 0);
+        prepaidBalances[matchedCustomer.id] += Number(p.points || 0);
       });
       const [{ data: salesData }, { data: refundData }] = await Promise.all([
         supabase
