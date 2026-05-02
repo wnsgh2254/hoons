@@ -178,6 +178,36 @@ export function getSydneyToday(): string {
   return `${year}-${month}-${day}`;
 }
 
+// Comment: Max calendar days after Sydney "today" for public /booking date picker (inclusive end date)
+export const PUBLIC_BOOKING_MAX_DAYS_AHEAD = 60;
+
+// Comment: Sydney calendar date YYYY-MM-DD = getSydneyToday() + offsetDays
+export function getSydneyTodayPlusDays(offsetDays: number): string {
+  const sydney = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
+  );
+  sydney.setDate(sydney.getDate() + offsetDays);
+  const year = sydney.getFullYear();
+  const month = String(sydney.getMonth() + 1).padStart(2, '0');
+  const day = String(sydney.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Comment: True if YYYY-MM-DD is after the last day guests may book (Sydney today + PUBLIC_BOOKING_MAX_DAYS_AHEAD)
+export function isPublicBookingDateBeyondHorizon(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return true;
+  const max = getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD);
+  return dateStr > max;
+}
+
+// Comment: fullDate for checkout/payment — Sydney today through end of horizon only
+export function isPublicBookingDateAllowed(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const min = getSydneyToday();
+  const max = getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD);
+  return dateStr >= min && dateStr <= max;
+}
+
 // Comment: Get current time string in Sydney timezone (HH:mm)
 export function getSydneyNowTime(): string {
   const sydney = new Date(

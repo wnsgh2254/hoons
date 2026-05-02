@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getAvailableDesignerIdsForShop } from '@/lib/designer-availability';
+import { isPublicBookingDateBeyondHorizon } from '@/lib/utils/appointment-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
 
     if (!date || !shopIdParam) {
       return NextResponse.json({ error: 'date and shopId are required.' }, { status: 400 });
+    }
+
+    if (isPublicBookingDateBeyondHorizon(date)) {
+      return NextResponse.json({ error: 'date is beyond the allowed booking window.' }, { status: 400 });
     }
 
     const sid = Number(shopIdParam);

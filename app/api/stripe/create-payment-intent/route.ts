@@ -7,6 +7,7 @@ import {
   assertPublicBookingSlotAvailable,
   resolveBookingDurationMinutes,
 } from "@/lib/server-booking-availability";
+import { isPublicBookingDateAllowed } from "@/lib/utils/appointment-utils";
 
 // Comment: Create PaymentIntent for in-page Payment Element (Salon de Jessie style)
 export async function POST(request: NextRequest) {
@@ -57,6 +58,13 @@ export async function POST(request: NextRequest) {
     if (!dateStr) {
       return NextResponse.json(
         { error: "Missing appointment date." },
+        { status: 400 },
+      );
+    }
+
+    if (!isPublicBookingDateAllowed(dateStr)) {
+      return NextResponse.json(
+        { error: "Appointment date must be within the allowed booking window." },
         { status: 400 },
       );
     }

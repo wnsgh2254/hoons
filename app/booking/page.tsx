@@ -7,7 +7,11 @@ import {
   timeLabelToMinutes,
 } from '@/lib/booking-time-math';
 import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
-import { getSydneyToday } from '@/lib/utils/appointment-utils';
+import {
+  getSydneyToday,
+  getSydneyTodayPlusDays,
+  PUBLIC_BOOKING_MAX_DAYS_AHEAD,
+} from '@/lib/utils/appointment-utils';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -768,7 +772,12 @@ export default function BookingPage() {
   }, [selectedTime, unavailableSlotLabels]);
 
   const handleDateChange = (date: string) => {
-    setSelectedDate(date);
+    const min = getSydneyToday();
+    const max = getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD);
+    let next = date;
+    if (next < min) next = min;
+    if (next > max) next = max;
+    setSelectedDate(next);
     // Comment: When date changes, clear downstream selections
     setSelectedShop(null);
     setSelectedDesigner(null);
@@ -812,6 +821,19 @@ export default function BookingPage() {
     setSelectedCategory(category);
     setIsServiceModalOpen(true);
   };
+
+  // Comment: Clamp date if the allowed Sydney window moves (e.g. after midnight) or state is stale
+  useEffect(() => {
+    const min = getSydneyToday();
+    const max = getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD);
+    if (selectedDate >= min && selectedDate <= max) return;
+    const clamped = selectedDate < min ? min : max;
+    setSelectedDate(clamped);
+    setSelectedShop(null);
+    setSelectedDesigner(null);
+    setSelectedServices([]);
+    setSelectedTime(null);
+  }, [selectedDate]);
 
   // Comment: When each step is selected, scroll to the corresponding section after render
   useEffect(() => {
@@ -1395,6 +1417,7 @@ export default function BookingPage() {
               value={selectedDate}
               onChange={(e) => handleDateChange(e.target.value)}
               min={getSydneyToday()}
+              max={getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD)}
               className="w-full px-4 py-3 border border-black  text-lg font-medium text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
             />
           </div>
