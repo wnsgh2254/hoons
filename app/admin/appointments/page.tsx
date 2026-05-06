@@ -122,6 +122,30 @@ function columnKeyForBookingsLookup(
   return `${col.designerId}::${sid === null ? 'null' : String(sid)}`;
 }
 
+function appendSelectedShopParam(params: URLSearchParams, selectedShopFilter: string) {
+  if (selectedShopFilter === '전체') return;
+  const shopId = Number(selectedShopFilter);
+  if (Number.isFinite(shopId) && shopId > 0) {
+    params.set('shop_id', String(shopId));
+  }
+}
+
+function buildWeekViewBookingsUrl(params: {
+  designerId: number;
+  startDate: string;
+  endDate: string;
+  selectedShopFilter: string;
+}) {
+  const searchParams = new URLSearchParams({
+    designer_id: String(params.designerId),
+    start_date: params.startDate,
+    end_date: params.endDate,
+    limit: '1000',
+  });
+  appendSelectedShopParam(searchParams, params.selectedShopFilter);
+  return `/api/appointment?${searchParams.toString()}`;
+}
+
 
 export default function AppointmentsManagementPage() {
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
@@ -1020,7 +1044,12 @@ export default function AppointmentsManagementPage() {
         const endDateStr = endDate.toISOString().split('T')[0];
 
         const res = await fetch(
-          `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}&limit=1000`
+          buildWeekViewBookingsUrl({
+            designerId: weekViewDesignerId,
+            startDate: startDateStr,
+            endDate: endDateStr,
+            selectedShopFilter,
+          }),
         );
         const data = await res.json();
         if (isMounted && res.ok) {
@@ -1035,7 +1064,7 @@ export default function AppointmentsManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate]);
+  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate, selectedShopFilter]);
 
   // Comment: Load monthly booking counts to power calendar dots — uses minimal=true to avoid joins+COUNT overhead
   useEffect(() => {
@@ -1181,7 +1210,11 @@ export default function AppointmentsManagementPage() {
 
         const results = await Promise.all(
           dates.map(async (dateStr) => {
-            const res = await fetch(`/api/designer-schedules?date=${encodeURIComponent(dateStr)}`);
+            const scheduleParams = new URLSearchParams({ date: dateStr });
+            if (selectedShopFilter !== '전체') {
+              scheduleParams.set('shopId', selectedShopFilter);
+            }
+            const res = await fetch(`/api/designer-schedules?${scheduleParams.toString()}`);
             if (!res.ok) return { date: dateStr, available: false };
             const data = await res.json();
             const designerIds: number[] = data.designerIds || [];
@@ -1206,7 +1239,7 @@ export default function AppointmentsManagementPage() {
 
     fetchWeekAvailability();
     return () => { isMounted = false; };
-  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate]);
+  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate, selectedShopFilter]);
 
   // Comment: When a booking is focused from the schedule, scroll/highlight it in Upcoming
   useEffect(() => {
@@ -2002,7 +2035,12 @@ export default function AppointmentsManagementPage() {
             const startDateStr = startDate.toISOString().split('T')[0];
             const endDateStr = endDate.toISOString().split('T')[0];
             const weekRes = await fetch(
-              `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}&limit=1000`
+              buildWeekViewBookingsUrl({
+                designerId: weekViewDesignerId,
+                startDate: startDateStr,
+                endDate: endDateStr,
+                selectedShopFilter,
+              }),
             );
             const weekData = await weekRes.json();
             if (weekRes.ok && weekData.bookings) {
@@ -2163,6 +2201,7 @@ export default function AppointmentsManagementPage() {
       isWeekViewMode,
       weekViewDesignerId,
       weekViewStartDate,
+      selectedShopFilter,
       loadCustomerInfo,
     ]
   );
@@ -2708,7 +2747,12 @@ export default function AppointmentsManagementPage() {
                                 const startDateStr = startDate.toISOString().split('T')[0];
                                 const endDateStr = endDate.toISOString().split('T')[0];
                                 const weekRes = await fetch(
-                                  `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`
+                                  buildWeekViewBookingsUrl({
+                                    designerId: weekViewDesignerId,
+                                    startDate: startDateStr,
+                                    endDate: endDateStr,
+                                    selectedShopFilter,
+                                  }),
                                 );
                                 const weekData = await weekRes.json();
                                 if (weekRes.ok && weekData.bookings) {
@@ -3856,9 +3900,12 @@ export default function AppointmentsManagementPage() {
                       const startDateStr = startDate.toISOString().split('T')[0];
                       const endDateStr = endDate.toISOString().split('T')[0];
                       const weekRes = await fetch(
-                        `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${encodeURIComponent(
-                          startDateStr
-                        )}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`
+                        buildWeekViewBookingsUrl({
+                          designerId: weekViewDesignerId,
+                          startDate: startDateStr,
+                          endDate: endDateStr,
+                          selectedShopFilter,
+                        }),
                       );
                       const weekData = await weekRes.json();
                       if (weekRes.ok && weekData.bookings) {
@@ -4187,7 +4234,12 @@ export default function AppointmentsManagementPage() {
             const startDateStr = startDate.toISOString().split('T')[0];
             const endDateStr = endDate.toISOString().split('T')[0];
             const weekRes = await fetch(
-              `/api/appointment?designer_id=${weekViewDesignerId}&start_date=${encodeURIComponent(startDateStr)}&end_date=${encodeURIComponent(endDateStr)}&limit=1000`
+              buildWeekViewBookingsUrl({
+                designerId: weekViewDesignerId,
+                startDate: startDateStr,
+                endDate: endDateStr,
+                selectedShopFilter,
+              }),
             );
             const weekData = await weekRes.json();
             if (weekRes.ok && weekData.bookings) {
