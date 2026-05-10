@@ -297,6 +297,7 @@ export default function StaffManagementPage() {
         <ManageServiceModal
           isOpen={showManageServiceModal}
           designer={selectedDesigner}
+          canViewRate={canViewRate}
           onClose={() => {
             setShowManageServiceModal(false);
             setSelectedDesigner(null);
@@ -523,7 +524,17 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
 }
 
 // Manage Designer Modal Component
-function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; designer: Designer; onClose: () => void }) {
+function ManageServiceModal({
+  isOpen,
+  designer,
+  canViewRate,
+  onClose,
+}: {
+  isOpen: boolean;
+  designer: Designer;
+  canViewRate: boolean;
+  onClose: () => void;
+}) {
   const initialRoleIsPreset = PRESET_ROLE_VALUES.includes(designer.role);
   const [formData, setFormData] = useState({
     name: designer.name,
@@ -721,34 +732,38 @@ function ManageServiceModal({ isOpen, designer, onClose }: { isOpen: boolean; de
           value={formData.instagramLink}
           onChange={(e) => setFormData({ ...formData, instagramLink: e.target.value })}
         />
-        <Select
-          label="Wage Type"
-          required
-          value={formData.wage_type}
-          onChange={(e) => setFormData({ ...formData, wage_type: e.target.value as 'percent' | 'hourly' })}
-          options={wageTypeOptions}
-        />
-        {formData.wage_type === 'percent' ? (
-          <Input
-            label="Commission Rate (%)"
-            type="number"
-            required
-            min={0}
-            max={100}
-            step={0.1}
-            value={formData.percent_rate}
-            onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
-          />
-        ) : (
-          <Input
-            label="Hourly Rate ($)"
-            type="number"
-            required
-            min={0}
-            step={0.01}
-            value={formData.hourly_rate}
-            onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-          />
+        {canViewRate && (
+          <>
+            <Select
+              label="Wage Type"
+              required
+              value={formData.wage_type}
+              onChange={(e) => setFormData({ ...formData, wage_type: e.target.value as 'percent' | 'hourly' })}
+              options={wageTypeOptions}
+            />
+            {formData.wage_type === 'percent' ? (
+              <Input
+                label="Commission Rate (%)"
+                type="number"
+                required
+                min={0}
+                max={100}
+                step={0.1}
+                value={formData.percent_rate}
+                onChange={(e) => setFormData({ ...formData, percent_rate: e.target.value })}
+              />
+            ) : (
+              <Input
+                label="Hourly Rate ($)"
+                type="number"
+                required
+                min={0}
+                step={0.01}
+                value={formData.hourly_rate}
+                onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+              />
+            )}
+          </>
         )}
       </form>
     </Modal>
