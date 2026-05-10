@@ -91,7 +91,7 @@ function ScheduleDayViewBookingCard({
   const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
   const statusColor = resolveBookingCardStatusColor(booking as any);
   const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
-  const customerId = (booking as any).customer?.id || (booking as any).customer_id || booking.id;
+  const customerId = (booking as any).customer?.id ?? (booking as any).customer_id ?? null;
   const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone || '';
   const bookingMemo = (booking as any).memo || (booking as any).note || '';
 
@@ -182,7 +182,7 @@ function ScheduleDayViewBookingCard({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500 w-16 shrink-0">고객명</span>
-                  <span className="text-gray-900">{customerName} ({booking.id || customerId})</span>
+                  <span className="text-gray-900">{customerName} ({customerId ?? '-'})</span>
                 </div>
                 {customerPhone && (
                   <div className="flex items-center gap-2">

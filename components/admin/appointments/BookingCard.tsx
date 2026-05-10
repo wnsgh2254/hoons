@@ -104,7 +104,7 @@ function BookingCard({
   const customerName =
     (b as any).customer?.name || (b as any).customer_name || '고객';
   const customerId =
-    (b as any).customer?.id || (b as any).customer_id || b.id;
+    (b as any).customer?.id ?? (b as any).customer_id ?? null;
   const customerPhone =
     (b as any).customer?.phone || (b as any).customer_phone || '';
   const bookingMemo = (b as any).memo || (b as any).note || '';
@@ -259,7 +259,7 @@ function BookingCard({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500 w-16 shrink-0">고객명</span>
-                  <span className="text-gray-900">{customerName} ({b.id || customerId})</span>
+                  <span className="text-gray-900">{customerName} ({customerId ?? '-'})</span>
                 </div>
                 {customerPhone && (
                   <div className="flex items-center gap-2">
