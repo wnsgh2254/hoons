@@ -1336,6 +1336,8 @@ function SalesHistoryModal({
       const salesHistory = (registeredSalesData.sales || []).map((sale: any) => ({
         id: sale.id,
         customer_id: sale.customer_id,
+        customer_name: sale.customer_name || sale.customer?.name || null,
+        customer_phone: sale.customer?.phone || null,
         shop_id: sale.shop_id || null,
         booking_date: sale.sales_date,
         booking_time: sale.sales_time,
@@ -1376,6 +1378,8 @@ function SalesHistoryModal({
         id: refund.id,
         _isRefund: true,
         customer_id: refund.customer_id,
+        customer_name: refund.customer?.name || null,
+        customer_phone: refund.customer?.phone || null,
         shop_id: refund.shop_id || null,
         booking_date: refund.refund_date,
         booking_time: refund.refund_time,
@@ -1625,7 +1629,8 @@ function SalesHistoryModal({
     return service?.name || '-';
   };
 
-  const getCustomerName = (customerId: number | null) => {
+  const getCustomerName = (customerId: number | null, fallbackName?: string | null) => {
+    if (fallbackName) return fallbackName;
     if (!customerId) return '-';
     const customer = customers.find((c) => c.id === customerId);
     return customer?.name || '-';
@@ -1660,7 +1665,7 @@ function SalesHistoryModal({
       id: item.id,
       customer_id: item.customer_id,
       shop_id: item.shop_id ?? null,
-      customer_name: getCustomerName(item.customer_id),
+      customer_name: getCustomerName(item.customer_id, item.customer_name),
       sales_date: item.sales_date || item.booking_date,
       sales_time: item.sales_time || item.booking_time,
       sales_amount:
@@ -1750,7 +1755,7 @@ function SalesHistoryModal({
           className="hover:underline cursor-pointer whitespace-nowrap"
           onClick={() => item.customer_id && handleCustomerClick(item.customer_id)}
         >
-          {getCustomerName(item.customer_id)}
+          {getCustomerName(item.customer_id, item.customer_name)}
         </button>
       ),
     },

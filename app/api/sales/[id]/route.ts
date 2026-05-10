@@ -45,14 +45,14 @@ export async function GET(
       );
     }
 
-    let customer_name = '';
+    let customer_name = sale.customer_name || '';
     if (sale.customer_id) {
       const { data: c } = await supabase
         .from('customers')
         .select('name')
         .eq('id', sale.customer_id)
         .maybeSingle();
-      customer_name = c?.name || '';
+      customer_name = sale.customer_name || c?.name || '';
     }
 
     return NextResponse.json(
@@ -146,6 +146,20 @@ export async function PUT(
       );
     }
 
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('name')
+      .eq('id', Number(customer_id))
+      .maybeSingle();
+
+    if (customerError || !customer) {
+      console.error('Error resolving sale customer:', customerError);
+      return NextResponse.json(
+        { error: '고객을 찾을 수 없습니다.' },
+        { status: 400 }
+      );
+    }
+
     // Pre-calculate prepaid deduction delta for edit mode
     const { data: oldItems } = await supabase
       .from('sales_items')
@@ -187,6 +201,8 @@ export async function PUT(
       .from('sales')
       .update({
         customer_id,
+        // Comment: Snapshot the customer name so historical sales keep their display name.
+        customer_name: customer.name || null,
         shop_id: shop_id || null,
         sales_date: sales_date || new Date().toISOString().split('T')[0],
         sales_time: sales_time || new Date().toTimeString().slice(0, 5),

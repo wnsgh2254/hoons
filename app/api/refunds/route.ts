@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       .from('refunds')
       .select(`
         *,
+        customer:customer_id ( id, name, phone ),
         refund_items (*)
       `)
       .order('refund_date', { ascending: false })

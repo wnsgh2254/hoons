@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       .from('sales')
       .select(`
         *,
+        customer:customer_id ( id, name, phone ),
         sales_items (*)
       `)
       .order('sales_date', { ascending: false })
@@ -146,10 +147,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('name')
+      .eq('id', Number(customer_id))
+      .maybeSingle();
+
+    if (customerError || !customer) {
+      console.error('Error resolving sale customer:', customerError);
+      return NextResponse.json(
+        { error: 'Customer was not found.' },
+        { status: 400 },
+      );
+    }
+
     const { data: saleHeader, error: headerError } = await supabase
       .from('sales')
       .insert({
         customer_id: customer_id,
+        // Comment: Snapshot the customer name so historical sales keep their display name.
+        customer_name: customer.name || null,
         shop_id: shop_id || null,
         sales_date: sales_date || new Date().toISOString().split('T')[0],
         sales_time: sales_time || new Date().toTimeString().slice(0, 5),
