@@ -41,6 +41,12 @@ function buildBookingDateFromDay(day: number): string {
   return `2023-10-${dayStr}`;
 }
 
+function normalizeBookingServiceName(name: string | null | undefined): string | null {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\bdigital\s+perm\b/gi, '열펌');
+}
+
 // Comment: Normalize AU phone numbers for lookup/insert (local + e164 + digitsOnly)
 export function buildPhoneVariants(phoneRaw: string | undefined | null) {
   if (!phoneRaw) return { local: null as string | null, e164: null as string | null, digitsOnly: null as string | null };
@@ -173,7 +179,7 @@ export async function createPublicBooking(payload: PublicBookingPayload) {
       status: status || 'pending', // Comment: Admin bookings use 'CONFIRMED'; public bookings default to 'pending'
       deposit_amount: depositAmount ?? 0,
       total_amount: totalAmount,
-      custom_service_name: customServiceName ?? null,
+      custom_service_name: normalizeBookingServiceName(customServiceName),
       custom_service_duration: customServiceDuration ?? null,
       memo: memo ?? null,
       color_label: colorLabel ?? null,
