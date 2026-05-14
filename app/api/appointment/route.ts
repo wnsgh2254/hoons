@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking, buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
-import { invokeBookingConfirmationEdge } from '@/lib/booking-confirmation-edge';
 
 export async function POST(request: NextRequest) {
   try {
@@ -97,20 +96,7 @@ export async function POST(request: NextRequest) {
       status: typeof status === 'string' && status.trim() ? status.trim() : null,
     });
 
-    const createdStatus = String(booking.status || status || '').trim().toLowerCase();
-    const shouldSendConfirmation =
-      booking.id != null &&
-      customerId != null &&
-      (createdStatus === 'booked' || createdStatus === 'confirmed');
-
-    if (shouldSendConfirmation) {
-      try {
-        const result = await invokeBookingConfirmationEdge(Number(booking.id));
-        console.log(`Appointment POST: booking-confirmation-sms ok for booking ${booking.id}: ${result}`);
-      } catch (smsError) {
-        console.error('Appointment POST: SMS confirmation error:', smsError);
-      }
-    }
+    // Comment: Immediate confirmation SMS is disabled — guests use My Booking (/booking/lookup).
 
     return NextResponse.json(
       {
@@ -139,6 +125,13 @@ export async function GET(request: NextRequest) {
 
     const page = Number(searchParams.get('page')) || 1;
     const limit = Number(searchParams.get('limit')) || 20;
+    const numericShopFilter =
+      shopId != null && shopId !== ''
+        ? (() => {
+            const n = Number(shopId);
+            return Number.isFinite(n) && n > 0 ? n : null;
+          })()
+        : null;
 
     if (minimal) {
       // Comment: Lightweight path for calendar dot counts — skips joins and COUNT overhead
@@ -147,7 +140,7 @@ export async function GET(request: NextRequest) {
         .select('booking_date, status')
         .order('booking_date', { ascending: true });
 
-      if (shopId) minimalQuery = minimalQuery.eq('shop_id', shopId);
+      if (numericShopFilter != null) minimalQuery = minimalQuery.eq('shop_id', numericShopFilter);
       if (designerId) minimalQuery = minimalQuery.eq('designer_id', designerId);
       if (startDate && endDate) {
         minimalQuery = minimalQuery.gte('booking_date', startDate).lte('booking_date', endDate);
@@ -182,8 +175,8 @@ export async function GET(request: NextRequest) {
       .order('booking_date', { ascending: false })
       .order('booking_time', { ascending: false });
 
-    if (shopId) {
-      query = query.eq('shop_id', shopId);
+    if (numericShopFilter != null) {
+      query = query.eq('shop_id', numericShopFilter);
     }
 
     if (designerId) {
@@ -200,10 +193,14 @@ export async function GET(request: NextRequest) {
       query = query.eq('booking_date', date);
     }
 
-    // Apply pagination
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
+    // Comment: Single-day + designer overlap checks must see every row — default pagination could omit noon slots.
+    const fetchAllForDesignerDay =
+      Boolean(date && designerId && !startDate && !endDate);
+    if (!fetchAllForDesignerDay) {
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+    }
 
     const { data, error } = await query;
 

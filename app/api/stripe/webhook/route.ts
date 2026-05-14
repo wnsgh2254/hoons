@@ -6,7 +6,6 @@ import {
   createPublicBooking,
 } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
-import { invokeBookingConfirmationEdge } from "@/lib/booking-confirmation-edge";
 
 export const runtime = "nodejs";
 
@@ -150,14 +149,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to update booking." }, { status: 500 });
   }
 
-  // Comment: Send booking confirmation SMS through Supabase Edge Function
-  try {
-    await invokeBookingConfirmationEdge(bookingId);
-  } catch (err) {
-    console.error("Stripe webhook: SMS confirmation error:", err);
-  }
+  // Comment: Booking confirmation SMS is disabled — guests use My Booking (/booking/lookup).
 
   return ok();
 }
-
-// Comment: Trigger Supabase Edge Function that handles booking confirmation SMS

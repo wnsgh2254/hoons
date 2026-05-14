@@ -6,12 +6,13 @@ import { sendBookingReminder } from '@/lib/twilio';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
-      phoneNumber, 
-      bookingDate, 
-      bookingTime, 
-      serviceName, 
-      designerName 
+    const {
+      phoneNumber,
+      bookingDate,
+      bookingTime,
+      serviceName,
+      shopLocation,
+      shopPhone,
     } = body;
 
     if (!phoneNumber || !bookingDate || !bookingTime) {
@@ -33,12 +34,11 @@ export async function POST(request: NextRequest) {
       bookingTime24h = `${hour.toString().padStart(2, '0')}:${mm}:00`;
     }
 
-    const result = await sendBookingReminder(
-      phoneNumber,
-      bookingDate,
-      bookingTime24h,
-      serviceName
-    );
+    const result = await sendBookingReminder(phoneNumber, bookingDate, bookingTime24h, {
+      catalogServiceName: serviceName,
+      shopLocation: typeof shopLocation === 'string' ? shopLocation : '',
+      shopPhone: typeof shopPhone === 'string' ? shopPhone : null,
+    });
 
     return NextResponse.json(result, { status: result.success ? 200 : 500 });
   } catch (error: any) {

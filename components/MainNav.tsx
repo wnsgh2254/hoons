@@ -47,11 +47,21 @@ export function MainNav() {
             <Link href={sectionHref('#services')} className="hover:underline">Services</Link>
             <Link href={sectionHref('#locations')} className="hover:underline">Locations</Link>
             <Link href={sectionHref('#designers')} className="hover:underline">Designers</Link>
+            <Link href="/booking/lookup" className="hover:underline">
+              My Booking
+            </Link>
           </nav>
 
-          {/* Right: Book Now / Mobile Menu - never shrink so Menu is always visible on mobile */}
+          {/* Right: My Booking + Book — desktop stacks Book Now; mobile shows compact links */}
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="md:hidden" style={{ isolation: 'isolate' }}>
+            <div className="flex items-center justify-end gap-2 md:hidden" style={{ isolation: 'isolate' }}>
+              <Link
+                href="/booking/lookup"
+                className="border border-black bg-white px-3 py-2 text-[10px] uppercase tracking-widest text-black transition-colors hover:bg-black hover:text-white whitespace-nowrap"
+                aria-label="My Booking"
+              >
+                My Booking
+              </Link>
               <Link
                 href="/booking"
                 className="border border-black bg-white px-4 py-2 text-[11px] uppercase tracking-widest text-black transition-colors hover:bg-black hover:text-white"

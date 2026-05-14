@@ -17,6 +17,7 @@ import FormAlert from '@/components/ui/FormAlert';
 import { Z } from '@/lib/constants';
 import type { BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
+import { isCancelledBookingStatus } from '@/lib/booking-status';
 
 function resolveEditModalServiceIds(
   booking: BookingWithRelations,
@@ -674,17 +675,19 @@ export default function NewBookingModal({
         const newStartMinutes = startHour * 60 + startMinute;
         const newEndMinutes = newStartMinutes + (slot.duration || 60);
 
-        const resExisting = await fetch(
-          `/api/appointment?date=${encodeURIComponent(bookingDate)}&designer_id=${encodeURIComponent(
-            String(slot.designerId),
-          )}`,
-        );
+        const qs = new URLSearchParams({
+          date: bookingDate,
+          designer_id: String(slot.designerId),
+        });
+        qs.set('shop_id', String(shopId));
+        const resExisting = await fetch(`/api/appointment?${qs.toString()}`);
         const dataExisting = await resExisting.json();
 
         if (resExisting.ok && Array.isArray(dataExisting.bookings)) {
           let maxOverlap = 0;
           for (const b of dataExisting.bookings) {
             if (!b.booking_time) continue;
+            if (isCancelledBookingStatus((b as { status?: string | null }).status)) continue;
             if (isEditMode && editingBooking && (b as { id?: number }).id === editingBooking.id) continue;
             const [bh, bm] = String(b.booking_time).split(':');
             const existStart = Number(bh) * 60 + Number(bm);

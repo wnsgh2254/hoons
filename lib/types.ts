@@ -24,6 +24,8 @@ export interface Service {
   id: number;
   shop_id: number | null;
   name: string;
+  /** Optional English label for customer-facing pages (e.g. My Booking). */
+  english_name?: string | null;
   price: number;
   duration_minutes: number;
   /** Short description for customer booking UI */

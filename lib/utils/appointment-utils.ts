@@ -17,6 +17,22 @@ export function getBookingDurationMinutes(booking: {
   return 60;
 }
 
+/** Keeps fixed booking context menus fully inside the viewport horizontally (right-column clipping). */
+export function clampBookingMenuHorizontalPosition(
+  menuLeft: number,
+  menuWidth: number,
+  options?: { viewportPadding?: number; menuMinWidth?: number },
+): { left: number; width: number } {
+  const pad = options?.viewportPadding ?? 12;
+  const minW = options?.menuMinWidth ?? 220;
+  const width = Math.max(menuWidth, minW);
+  const maxLeft = window.innerWidth - pad - width;
+  let left = menuLeft;
+  if (left > maxLeft) left = Math.max(pad, maxLeft);
+  if (left < pad) left = pad;
+  return { left, width };
+}
+
 // Comment: Grid configuration for full schedule view
 export const GRID_START_HOUR = 8; // 08:00
 export const GRID_END_HOUR = 21; // 21:00 (exclusive upper bound, last label 20:00)

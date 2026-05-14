@@ -1,4 +1,5 @@
 export async function invokeBookingConfirmationEdge(bookingId: number) {
+  // Comment: SMS is paused at the Edge Function (no-op deploy). Call sites removed from appointment + Stripe webhook.
   const projectUrl = process.env.SUPABASE_URL?.trim() || 'https://akzipcsakzuqpknkrjnb.supabase.co';
   const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
 

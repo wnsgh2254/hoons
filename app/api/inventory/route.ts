@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getInventoryStatus } from '@/lib/utils/inventory-utils';
 import { handleApiError } from '@/lib/api-utils';
-import { parseInventoryShopId } from '@/lib/inventory-shop';
+import { parseInventoryShopId, resolveCatalogInventoryShopIds } from '@/lib/inventory-shop';
 
 type InventoryRow = {
   id: number;
@@ -21,15 +21,6 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const brandParam = searchParams.get('brand');
     const shopId = parseInventoryShopId(searchParams.get('shop_id'));
-
-    // Comment: Load brand list for fallback and filtering
-    const { data: brandsData } = await supabase
-      .from('inventory_brands')
-      .select('id, name')
-      .eq('shop_id', shopId)
-      .order('sort_order', { ascending: true })
-      .order('name', { ascending: true });
-    const brandNames: string[] = (brandsData ?? []).map((b: { name: string }) => String(b.name));
 
     let query = supabase.from('inventory_items').select('*').eq('shop_id', shopId).order('name');
 
@@ -53,17 +44,14 @@ export async function GET(request: NextRequest) {
     }
 
     let items = ((data || []) as InventoryRow[]).map((item) => {
+      // Comment: Do not invent a brand from id modulo — it made saved categories look "renamed" after refresh.
       const brand =
-        item.brand != null && String(item.brand).trim() !== ''
-          ? String(item.brand).trim()
-          : brandNames.length > 0
-            ? brandNames[Math.abs(item.id) % brandNames.length]
-            : null;
+        item.brand != null && String(item.brand).trim() !== '' ? String(item.brand).trim() : null;
       return {
         ...item,
         price: Number(item.price ?? 0),
         stock: Number(item.stock ?? 0),
-        brand: brand ?? item.brand ?? null,
+        brand,
       };
     });
 
@@ -82,7 +70,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name, size, sku, category, price, cost_price, stock, icon, for_internal, for_retail } = body;
-    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
+    const shopIds = resolveCatalogInventoryShopIds(body);
 
     if (!name || !category || price == null || stock == null) {
       return NextResponse.json(
@@ -95,38 +83,39 @@ export async function POST(request: NextRequest) {
     const numericCostPrice = Number(cost_price ?? 0);
     const numericStock = Number(stock);
 
-    const { data, error } = await supabase
-      .from('inventory_items')
-      .insert({
-        name: String(name).trim(),
-        shop_id: shopId,
-        size: size ? String(size).trim() : null,
-        sku: sku ? String(sku).trim() : null,
-        category: String(category).trim(),
-        price: numericPrice,
-        cost_price: numericCostPrice,
-        stock: numericStock,
-        status: getInventoryStatus(numericStock),
-        icon: icon ? String(icon).trim() : null,
-        // Keep backward compatibility: products are internal by default unless explicitly changed.
-        for_internal: for_internal !== undefined ? Boolean(for_internal) : true,
-        for_retail: for_retail !== undefined ? Boolean(for_retail) : false,
-      })
-      .select()
-      .single();
+    const rows = shopIds.map((shop_id) => ({
+      name: String(name).trim(),
+      shop_id,
+      size: size ? String(size).trim() : null,
+      sku: sku ? String(sku).trim() : null,
+      category: String(category).trim(),
+      price: numericPrice,
+      cost_price: numericCostPrice,
+      stock: numericStock,
+      status: getInventoryStatus(numericStock),
+      icon: icon ? String(icon).trim() : null,
+      for_internal: for_internal !== undefined ? Boolean(for_internal) : true,
+      for_retail: for_retail !== undefined ? Boolean(for_retail) : false,
+    }));
+
+    const { data, error } = await supabase.from('inventory_items').insert(rows).select();
 
     if (error) {
       return handleApiError(error, 'inventory POST', '인벤토리 상품을 추가하지 못했습니다.');
     }
 
-    const item = {
-      ...data,
-      price: Number(data.price ?? 0),
-      cost_price: Number(data.cost_price ?? 0),
-      stock: Number(data.stock ?? 0),
-    };
+    const inserted = (data ?? []) as InventoryRow[];
+    const normalized = inserted.map((row: InventoryRow) => ({
+      ...row,
+      price: Number(row.price ?? 0),
+      cost_price: Number(row.cost_price ?? 0),
+      stock: Number(row.stock ?? 0),
+    }));
 
-    return NextResponse.json({ item }, { status: 201 });
+    return NextResponse.json(
+      { items: normalized, item: normalized[0] ?? null },
+      { status: 201 },
+    );
   } catch (error) {
     return handleApiError(error, 'inventory POST', '인벤토리 상품을 추가하지 못했습니다.');
   }

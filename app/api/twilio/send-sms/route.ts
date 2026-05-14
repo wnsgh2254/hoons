@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
           *,
           service:service_id ( name ),
           designer:designer_id ( name ),
-          customer:customer_id ( phone )
+          customer:customer_id ( phone ),
+          shop:shop_id ( name, location, phone )
         `)
         .eq('id', bookingId)
         .single();
@@ -34,12 +35,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '고객 전화번호가 없습니다.' }, { status: 400 });
       }
 
-      const result = await sendBookingReminder(
-        customerPhone,
-        booking.booking_date,
-        booking.booking_time,
-        (booking.service as any)?.name
-      );
+      const shop = booking.shop as { location?: string | null; phone?: string | null } | null;
+      const result = await sendBookingReminder(customerPhone, booking.booking_date, booking.booking_time, {
+        customServiceName: (booking as { custom_service_name?: string | null }).custom_service_name,
+        catalogServiceName: (booking.service as { name?: string } | null)?.name,
+        shopLocation: shop?.location ?? '',
+        shopPhone: shop?.phone ?? null,
+      });
 
       return NextResponse.json(result, { status: result.success ? 200 : 500 });
     }

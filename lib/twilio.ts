@@ -1,4 +1,9 @@
 import twilio from 'twilio';
+import {
+  buildBookingReminderSmsBody,
+  formatReminderAppointmentLine,
+  resolveReminderServiceLabel,
+} from '@/lib/booking-reminder-sms';
 
 // Comment: Get Twilio credentials from environment variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -108,34 +113,28 @@ export async function sendBookingConfirmation(params: {
   return sendSMS(phone, message);
 }
 
-// Comment: Send booking reminder SMS matching Edge Function template
+export type SendBookingReminderVenue = {
+  customServiceName?: string | null;
+  catalogServiceName?: string | null;
+  shopLocation?: string | null;
+  shopPhone?: string | null;
+};
+
+// Comment: 3-day reminder template — matches Edge Function `booking-reminder` (venue-aware location & phone).
 export async function sendBookingReminder(
   phoneNumber: string,
   bookingDate: string,
   bookingTime: string,
-  serviceName?: string,
+  venue?: SendBookingReminderVenue,
 ): Promise<{ success: boolean; messageSid?: string; error?: string }> {
-  const displayText = formatDisplayDateTime(bookingDate, bookingTime);
-  const serviceLabel = serviceName || 'cut';
-
-  const message = `📌 Reminder:
-Your appointment is at **HAEYOOM HAYMARKET STORE (혜윰 헤이마켓)**
-
-Hello, this is Haeyoom Salon.
-This is a confirmation message for your upcoming appointment:
-
-📅 On ${displayText}
-💇‍♀️ Service: ${serviceLabel}
-📍 **HAEYOOM HAYMARKET STORE (혜윰 헤이마켓)**  
-770 George st, Sydney NSW 2000
-
-Please confirm your reservation by replying with ❗️YES❗️ or let us know if you have any questions.
-
-⚠️ Please note: If you are more than 10 minutes late, your appointment may be automatically CANCELED.
-
-Thank you and we look forward to seeing you soon ❤️  
-Best Regards,  
-Team Haeyoom`;
+  const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
+  const serviceLabel = resolveReminderServiceLabel(venue?.customServiceName, venue?.catalogServiceName);
+  const message = buildBookingReminderSmsBody({
+    appointmentLine,
+    serviceLabel,
+    shopLocation: venue?.shopLocation ?? '',
+    shopPhone: venue?.shopPhone,
+  });
 
   return sendSMS(phoneNumber, message);
 }

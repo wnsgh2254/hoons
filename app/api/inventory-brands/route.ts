@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { parseInventoryShopId } from '@/lib/inventory-shop';
+import { parseInventoryShopId, resolveCatalogInventoryShopIds } from '@/lib/inventory-shop';
 
 // Comment: Load inventory brands list
 export async function GET(request: NextRequest) {
@@ -30,33 +30,38 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { name } = body;
-    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
+    const shopIds = resolveCatalogInventoryShopIds(body);
 
     if (!name || !String(name).trim()) {
       return NextResponse.json({ error: '브랜드명을 입력해주세요.' }, { status: 400 });
     }
 
-    // Get max sort_order to append at end
-    const { data: maxData } = await supabase
-      .from('inventory_brands')
-      .select('sort_order')
-      .eq('shop_id', shopId)
-      .order('sort_order', { ascending: false })
-      .limit(1);
-    const nextSortOrder = (maxData?.[0]?.sort_order ?? 0) + 1;
+    const trimmedName = String(name).trim();
+    const created: { id: number; name: string }[] = [];
 
-    const { data, error } = await supabase
-      .from('inventory_brands')
-      .insert({ name: String(name).trim(), shop_id: shopId, sort_order: nextSortOrder })
-      .select('id, name')
-      .single();
+    for (const sid of shopIds) {
+      const { data: maxData } = await supabase
+        .from('inventory_brands')
+        .select('sort_order')
+        .eq('shop_id', sid)
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const nextSortOrder = (maxData?.[0]?.sort_order ?? 0) + 1;
 
-    if (error) {
-      console.error('Error creating inventory brand:', error);
-      return NextResponse.json({ error: '브랜드를 추가하지 못했습니다.' }, { status: 500 });
+      const { data, error } = await supabase
+        .from('inventory_brands')
+        .insert({ name: trimmedName, shop_id: sid, sort_order: nextSortOrder })
+        .select('id, name')
+        .single();
+
+      if (error) {
+        console.error('Error creating inventory brand:', error);
+        return NextResponse.json({ error: '브랜드를 추가하지 못했습니다.' }, { status: 500 });
+      }
+      if (data) created.push(data);
     }
 
-    return NextResponse.json({ brand: data }, { status: 201 });
+    return NextResponse.json({ brands: created, brand: created[0] }, { status: 201 });
   } catch (error) {
     console.error('Unexpected error in inventory-brands POST route:', error);
     return NextResponse.json({ error: '브랜드를 추가하지 못했습니다.' }, { status: 500 });

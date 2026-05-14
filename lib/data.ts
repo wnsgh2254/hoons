@@ -445,7 +445,7 @@ export async function updateDesigner(
   return data;
 }
 
-// Comment: Delete a designer/staff member
+// Comment: Delete designer/staff — DB FK ON DELETE SET NULL clears bookings.designer_id (see migration).
 export async function deleteDesigner(id: number) {
   if (!id || Number.isNaN(id)) {
     throw new Error('유효하지 않은 ID입니다.');

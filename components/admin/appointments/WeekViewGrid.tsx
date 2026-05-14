@@ -12,6 +12,7 @@ import {
   DESIGNER_COLORS,
   resolveBookingCardStatusColor,
   getBookingDurationMinutes,
+  clampBookingMenuHorizontalPosition,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 import BookingCard from './BookingCard';
@@ -1090,10 +1091,14 @@ export default function WeekViewGrid({
                           const placement =
                             spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
                           const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
-                          const menuLeft = cardRect.left;
-                          const menuWidth = cellContainer
+                          let menuLeft = cardRect.left;
+                          let menuWidth = cellContainer
                             ? Math.max(cellContainer.getBoundingClientRect().width - 8, 180)
                             : cardRect.width;
+                          ({ left: menuLeft, width: menuWidth } = clampBookingMenuHorizontalPosition(
+                            menuLeft,
+                            menuWidth,
+                          ));
                           
                           setBookingMenuPosition({
                             top: Math.max(menuTop, viewportPadding),
