@@ -345,11 +345,11 @@ export default function DiscountModal({
   };
 
   const handleAmountNumberClick = (num: string) => {
-    setAmountValue((prev) => addDigits(prev, num));
+    setAmountValue((prev) => addDigits(prev, num, 1));
   };
 
   const handleAmountBackspace = () => {
-    setAmountValue((prev) => removeLastDigit(prev));
+    setAmountValue((prev) => removeLastDigit(prev, 1));
   };
 
   return (
@@ -521,6 +521,7 @@ export default function DiscountModal({
               <NumericKeypad
                 onNumberClick={handleAmountNumberClick}
                 onBackspace={handleAmountBackspace}
+                allowDecimal
                 className="space-y-2"
               />
             </div>

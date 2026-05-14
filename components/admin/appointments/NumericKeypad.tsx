@@ -6,12 +6,14 @@ const btnBase =
 interface NumericKeypadProps {
   onNumberClick: (num: string) => void;
   onBackspace: () => void;
+  allowDecimal?: boolean;
   className?: string;
 }
 
 export default function NumericKeypad({
   onNumberClick,
   onBackspace,
+  allowDecimal = false,
   className,
 }: NumericKeypadProps) {
   return (
@@ -70,7 +72,17 @@ export default function NumericKeypad({
             <span className="material-symbols-outlined text-xl">backspace</span>
           </button>
         </div>
-        <div className="col-span-1" />
+        <div className="col-span-1">
+          {allowDecimal && (
+            <button
+              type="button"
+              onClick={() => onNumberClick('.')}
+              className={btnBase}
+            >
+              .
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
