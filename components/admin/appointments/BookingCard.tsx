@@ -5,11 +5,13 @@ import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
 import {
   resolveBookingCardStatusColor,
-  GRID_START_HOUR,
-  GRID_30MIN_HEIGHT,
   COLOR_LABEL_MAP,
   getBookingDurationMinutes,
   clampBookingMenuHorizontalPosition,
+  BOOKING_CONTEXT_MENU_EST_HEIGHT,
+  BOOKING_HOVER_CARD_EST_HEIGHT,
+  resolveBookingPopoverVerticalPlacement,
+  type BookingHoverCardPosition,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 
@@ -31,12 +33,12 @@ interface BookingCardProps {
   // Hover/menu state
   hoveredBooking: number | null;
   bookingMenuOpen: number | null;
-  hoverCardPosition: { top: number; left: number } | null;
+  hoverCardPosition: BookingHoverCardPosition | null;
   bookingMenuPosition: MenuPosition | null;
   isNewBookingOpen: boolean;
   // State setters
   setHoveredBooking: (id: number | null) => void;
-  setHoverCardPosition: (pos: { top: number; left: number } | null) => void;
+  setHoverCardPosition: (pos: BookingHoverCardPosition | null) => void;
   hoverCardOriginalPositionRef: React.RefObject<{ top: number; left: number } | null>;
   setBookingMenuOpen: (id: number | null) => void;
   setBookingMenuPosition: (pos: MenuPosition | null) => void;
@@ -127,9 +129,12 @@ function BookingCard({
           const cardElement = document.querySelector(`[data-booking-card="${b.id}"]`) as HTMLElement;
           if (cardElement) {
             const cardRect = cardElement.getBoundingClientRect();
+            const placement = resolveBookingPopoverVerticalPlacement(cardRect, BOOKING_HOVER_CARD_EST_HEIGHT);
+            const hoverTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
             setHoverCardPosition({
-              top: cardRect.top,
+              top: hoverTop,
               left: cardRect.right + 4,
+              placement,
             });
           }
           setHoveredBooking(b.id);
@@ -176,12 +181,7 @@ function BookingCard({
               const scrollTop = scrollContainer?.scrollTop || 0;
               const scrollLeft = scrollContainer?.scrollLeft || 0;
 
-              const menuEstimatedHeight = 280;
-              const viewportPadding = 12;
-              const spaceBelow = window.innerHeight - cardRect.bottom;
-              const spaceAbove = cardRect.top;
-              const placement =
-                spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+              const placement = resolveBookingPopoverVerticalPlacement(cardRect, BOOKING_CONTEXT_MENU_EST_HEIGHT);
               const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
               let menuLeft = cardRect.left;
               let menuWidth = cellContainer
@@ -190,7 +190,7 @@ function BookingCard({
               ({ left: menuLeft, width: menuWidth } = clampBookingMenuHorizontalPosition(menuLeft, menuWidth));
 
               setBookingMenuPosition({
-                top: Math.max(menuTop, viewportPadding),
+                top: menuTop,
                 triggerTop: cardRect.top,
                 left: menuLeft,
                 width: menuWidth,
@@ -245,6 +245,7 @@ function BookingCard({
               style={{
                 top: `${hoverCardPosition.top}px`,
                 left: `${hoverCardPosition.left}px`,
+                transform: hoverCardPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
               }}
             >
               <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
@@ -329,17 +330,13 @@ function BookingCard({
             };
           }
 
-          // Comment: Flip menu upward if not enough space below the viewport.
-          const menuEstimatedHeight = 280;
-          const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
+          // Comment: Vertical side comes from bookingMenuPosition.placement; no extra flip layer.
           return createPortal(
             <div
               data-booking-menu
               className="fixed bg-transparent z-[99999]"
               style={{
-                ...(flipUp
-                  ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
-                  : { top: `${bookingMenuPosition.top}px` }),
+                top: `${bookingMenuPosition.top}px`,
                 left: `${bookingMenuPosition.left}px`,
                 width: `${bookingMenuPosition.width}px`,
               }}

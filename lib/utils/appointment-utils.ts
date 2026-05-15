@@ -25,12 +25,108 @@ export function clampBookingMenuHorizontalPosition(
 ): { left: number; width: number } {
   const pad = options?.viewportPadding ?? 12;
   const minW = options?.menuMinWidth ?? 220;
-  const width = Math.max(menuWidth, minW);
+  const maxW = Math.max(0, window.innerWidth - 2 * pad);
+  const width = Math.min(Math.max(menuWidth, minW), maxW);
   const maxLeft = window.innerWidth - pad - width;
   let left = menuLeft;
   if (left > maxLeft) left = Math.max(pad, maxLeft);
   if (left < pad) left = pad;
   return { left, width };
+}
+
+/**
+ * Nudge a fixed popover root so its visible surface (hover card root or menu's first child)
+ * stays within the viewport. Idempotent; safe after scroll-sync DOM writes.
+ */
+export function nudgeFixedPopoverIntoViewport(
+  rootEl: HTMLElement | null,
+  options?: { padding?: number },
+): void {
+  if (typeof window === 'undefined' || !rootEl) return;
+  const pad = options?.padding ?? 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const maxW = Math.max(0, vw - 2 * pad);
+
+  const isHoverRoot = rootEl.hasAttribute('data-hover-card');
+  const surface = (isHoverRoot ? rootEl : rootEl.firstElementChild) as HTMLElement | null;
+  if (!surface) return;
+
+  surface.style.boxSizing = 'border-box';
+  if (maxW > 0) {
+    surface.style.maxWidth = `${maxW}px`;
+  }
+
+  for (let iter = 0; iter < 4; iter++) {
+    const r = surface.getBoundingClientRect();
+    let dx = 0;
+    if (r.right > vw - pad) dx = vw - pad - r.right;
+    if (r.left + dx < pad) dx = pad - r.left;
+
+    let dy = 0;
+    if (r.bottom > vh - pad) dy = vh - pad - r.bottom;
+    if (r.top + dy < pad) dy = pad - r.top;
+
+    if (dx === 0 && dy === 0) break;
+
+    const cs = getComputedStyle(rootEl);
+    const topStr = cs.top;
+    const bottomStr = cs.bottom;
+    const leftStr = cs.left;
+
+    if (topStr && topStr !== 'auto') {
+      const t = parseFloat(topStr);
+      if (!Number.isNaN(t)) {
+        rootEl.style.top = `${Math.round((t + dy) * 100) / 100}px`;
+        rootEl.style.bottom = '';
+      }
+    } else if (bottomStr && bottomStr !== 'auto') {
+      const b = parseFloat(bottomStr);
+      if (!Number.isNaN(b)) {
+        rootEl.style.bottom = `${Math.round((b - dy) * 100) / 100}px`;
+        rootEl.style.top = '';
+      }
+    }
+
+    if (leftStr && leftStr !== 'auto') {
+      const l = parseFloat(leftStr);
+      if (!Number.isNaN(l)) {
+        rootEl.style.left = `${Math.round((l + dx) * 100) / 100}px`;
+      }
+    }
+  }
+}
+
+/** Estimated heights for viewport-side checks (px). */
+export const BOOKING_CONTEXT_MENU_EST_HEIGHT = 280;
+export const BOOKING_HOVER_CARD_EST_HEIGHT = 260;
+
+/** Hover popover position (fixed); placement matches booking menu semantics. */
+export type BookingHoverCardPosition = {
+  top: number;
+  left: number;
+  placement: 'top' | 'bottom';
+};
+
+/**
+ * Choose vertical popover side: prefer opening below the card (top rows / corners);
+ * open above when near the bottom or when below does not fit.
+ * placement 'bottom' = anchor top at card bottom; 'top' = anchor at card top + translateY(-100%).
+ */
+export function resolveBookingPopoverVerticalPlacement(
+  cardRect: Pick<DOMRect, 'top' | 'bottom'>,
+  estimatedHeight: number,
+  viewportHeight: number = typeof window !== 'undefined' ? window.innerHeight : 800,
+): 'top' | 'bottom' {
+  const pad = 12;
+  const spaceBelow = viewportHeight - cardRect.bottom - pad;
+  const spaceAbove = cardRect.top - pad;
+  const fitsBelow = spaceBelow >= estimatedHeight;
+  const fitsAbove = spaceAbove >= estimatedHeight;
+  if (fitsBelow && fitsAbove) return 'bottom';
+  if (fitsBelow) return 'bottom';
+  if (fitsAbove) return 'top';
+  return spaceBelow >= spaceAbove ? 'bottom' : 'top';
 }
 
 // Comment: Grid configuration for full schedule view

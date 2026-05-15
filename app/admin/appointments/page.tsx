@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type React from 'react';
 import type { Booking, BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
@@ -59,6 +59,11 @@ import {
   parseLocalDateString,
   getBookingDurationMinutes,
   clampBookingMenuHorizontalPosition,
+  nudgeFixedPopoverIntoViewport,
+  BOOKING_CONTEXT_MENU_EST_HEIGHT,
+  BOOKING_HOVER_CARD_EST_HEIGHT,
+  resolveBookingPopoverVerticalPlacement,
+  type BookingHoverCardPosition,
 } from '@/lib/utils/appointment-utils';
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
@@ -483,10 +488,7 @@ export default function AppointmentsManagementPage() {
   
   // Comment: Booking hover card state
   const [hoveredBooking, setHoveredBooking] = useState<number | null>(null);
-  const [hoverCardPosition, setHoverCardPosition] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
+  const [hoverCardPosition, setHoverCardPosition] = useState<BookingHoverCardPosition | null>(null);
   const hoverCardOriginalPositionRef = useRef<{ top: number; left: number } | null>(null);
   
   // Comment: 스크롤 이벤트 감지하여 호버 카드 위치 업데이트 (빈셀 메뉴와 동일한 방식)
@@ -526,6 +528,7 @@ export default function AppointmentsManagementPage() {
           const viewportLeft = containerRect.left + hoverCardOriginalPositionRef.current.left - scrollLeft;
           hoverCardElement.style.top = `${viewportTop}px`;
           hoverCardElement.style.left = `${viewportLeft}px`;
+          nudgeFixedPopoverIntoViewport(hoverCardElement);
         }
       });
     };
@@ -587,6 +590,7 @@ export default function AppointmentsManagementPage() {
           const viewportLeft = containerRect.left + bookingMenuOriginalPositionRef.current.left - scrollLeft;
           menuElement.style.top = `${viewportTop}px`;
           menuElement.style.left = `${viewportLeft}px`;
+          nudgeFixedPopoverIntoViewport(menuElement);
         }
       });
     };
@@ -596,6 +600,48 @@ export default function AppointmentsManagementPage() {
       scrollContainer.removeEventListener('scroll', handleScroll);
     };
   }, [bookingMenuOpen, bookingMenuPosition]);
+
+  // Comment: Fit hover card / booking menu to viewport after layout (and on state open).
+  useLayoutEffect(() => {
+    if (!hoverCardPosition || !hoveredBooking) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        nudgeFixedPopoverIntoViewport(document.querySelector('[data-hover-card]') as HTMLElement | null);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [hoveredBooking, hoverCardPosition]);
+
+  useLayoutEffect(() => {
+    if (!bookingMenuPosition || !bookingMenuOpen) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        nudgeFixedPopoverIntoViewport(document.querySelector('[data-booking-menu]') as HTMLElement | null);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [bookingMenuOpen, bookingMenuPosition]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hoveredBooking && !bookingMenuOpen) return;
+    const onResize = () => {
+      const hover = document.querySelector('[data-hover-card]') as HTMLElement | null;
+      const menu = document.querySelector('[data-booking-menu]') as HTMLElement | null;
+      if (hover) nudgeFixedPopoverIntoViewport(hover);
+      if (menu) nudgeFixedPopoverIntoViewport(menu);
+    };
+    window.addEventListener('resize', onResize, { passive: true });
+    return () => window.removeEventListener('resize', onResize);
+  }, [hoveredBooking, bookingMenuOpen, hoverCardPosition, bookingMenuPosition]);
 
   // Comment: Refs and handlers for click-drag scrolling on schedule grid
   const scheduleRef = useRef<HTMLDivElement | null>(null);
@@ -1840,12 +1886,7 @@ export default function AppointmentsManagementPage() {
           const scrollContainer = document.getElementById('schedule-scroll-container');
           const scrollTop = scrollContainer?.scrollTop || 0;
           const scrollLeft = scrollContainer?.scrollLeft || 0;
-          const menuEstimatedHeight = 280;
-          const viewportPadding = 12;
-          const spaceBelow = window.innerHeight - cardRect.bottom;
-          const spaceAbove = cardRect.top;
-          const placement =
-            spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+          const placement = resolveBookingPopoverVerticalPlacement(cardRect, BOOKING_CONTEXT_MENU_EST_HEIGHT);
           const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
           let menuLeft = cardRect.left;
           let menuWidth = cellContainer
@@ -1853,7 +1894,7 @@ export default function AppointmentsManagementPage() {
             : cardRect.width;
           ({ left: menuLeft, width: menuWidth } = clampBookingMenuHorizontalPosition(menuLeft, menuWidth));
           setBookingMenuPosition({
-            top: Math.max(menuTop, viewportPadding),
+            top: menuTop,
             triggerTop: cardRect.top,
             left: menuLeft,
             width: menuWidth,
@@ -1872,7 +1913,9 @@ export default function AppointmentsManagementPage() {
     const cardElement = document.querySelector(`[data-booking-card="${bookingId}"]`) as HTMLElement;
     if (cardElement) {
       const cardRect = cardElement.getBoundingClientRect();
-      setHoverCardPosition({ top: cardRect.top, left: cardRect.right + 4 });
+      const placement = resolveBookingPopoverVerticalPlacement(cardRect, BOOKING_HOVER_CARD_EST_HEIGHT);
+      const hoverTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
+      setHoverCardPosition({ top: hoverTop, left: cardRect.right + 4, placement });
     }
     setHoveredBooking(bookingId);
   }, []);

@@ -13,6 +13,10 @@ import {
   resolveBookingCardStatusColor,
   getBookingDurationMinutes,
   clampBookingMenuHorizontalPosition,
+  nudgeFixedPopoverIntoViewport,
+  BOOKING_CONTEXT_MENU_EST_HEIGHT,
+  resolveBookingPopoverVerticalPlacement,
+  type BookingHoverCardPosition,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 import BookingCard from './BookingCard';
@@ -44,9 +48,9 @@ interface WeekViewGridProps {
   emptySlotMenuPosition: EmptySlotMenuPosition | null;
   isNewBookingOpen: boolean;
   hoveredBooking: number | null;
-  hoverCardPosition: { top: number; left: number } | null;
+  hoverCardPosition: BookingHoverCardPosition | null;
   hoverCardOriginalPositionRef: React.RefObject<{ top: number; left: number } | null>;
-  setHoverCardPosition: (pos: { top: number; left: number } | null) => void;
+  setHoverCardPosition: (pos: BookingHoverCardPosition | null) => void;
   bookingMenuOpen: number | null;
   bookingMenuPosition: {
     top: number;
@@ -191,6 +195,7 @@ export default function WeekViewGrid({
         // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
         hoverCardElement.style.top = `${viewportTop}px`;
         hoverCardElement.style.left = `${viewportLeft}px`;
+        nudgeFixedPopoverIntoViewport(hoverCardElement);
       }
     };
     
@@ -240,6 +245,7 @@ export default function WeekViewGrid({
         // fixed 포지셔닝에 맞게 뷰포트 기준 위치로 설정
         menuElement.style.top = `${viewportTop}px`;
         menuElement.style.left = `${viewportLeft}px`;
+        nudgeFixedPopoverIntoViewport(menuElement);
       }
     };
     
@@ -1084,12 +1090,7 @@ export default function WeekViewGrid({
                           const scrollTop = scrollContainer?.scrollTop || 0;
                           const scrollLeft = scrollContainer?.scrollLeft || 0;
                           
-                          const menuEstimatedHeight = 280;
-                          const viewportPadding = 12;
-                          const spaceBelow = window.innerHeight - cardRect.bottom;
-                          const spaceAbove = cardRect.top;
-                          const placement =
-                            spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow ? 'top' : 'bottom';
+                          const placement = resolveBookingPopoverVerticalPlacement(cardRect, BOOKING_CONTEXT_MENU_EST_HEIGHT);
                           const menuTop = placement === 'top' ? cardRect.top - 4 : cardRect.bottom + 4;
                           let menuLeft = cardRect.left;
                           let menuWidth = cellContainer
@@ -1101,7 +1102,7 @@ export default function WeekViewGrid({
                           ));
                           
                           setBookingMenuPosition({
-                            top: Math.max(menuTop, viewportPadding),
+                            top: menuTop,
                             triggerTop: cardRect.top,
                             left: menuLeft,
                             width: menuWidth,
@@ -1137,6 +1138,7 @@ export default function WeekViewGrid({
                           style={{
                             top: `${hoverCardPosition.top}px`,
                             left: `${hoverCardPosition.left}px`,
+                            transform: hoverCardPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
                           }}
                         >
                         <div
@@ -1198,17 +1200,12 @@ export default function WeekViewGrid({
 
                     {/* Context Menu - 상태별 메뉴 - Portal로 렌더링 */}
                     {bookingMenuOpen === b.id && !isNewBookingOpen && bookingMenuPosition && typeof window !== 'undefined' && (() => {
-                      // Comment: Flip menu upward if not enough space below the viewport.
-                      const menuEstimatedHeight = 280;
-                      const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
                       return createPortal(
                       <div
                         data-booking-menu
                           className="fixed bg-transparent z-[99999]"
                           style={{
-                            ...(flipUp
-                              ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
-                              : { top: `${bookingMenuPosition.top}px` }),
+                            top: `${bookingMenuPosition.top}px`,
                             left: `${bookingMenuPosition.left}px`,
                             width: `${bookingMenuPosition.width}px`,
                           }}

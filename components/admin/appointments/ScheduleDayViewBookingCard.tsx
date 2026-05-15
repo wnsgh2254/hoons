@@ -7,6 +7,7 @@ import {
   resolveBookingCardStatusColor,
   COLOR_LABEL_MAP,
   getBookingDurationMinutes,
+  type BookingHoverCardPosition,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
 
@@ -37,7 +38,7 @@ interface ScheduleDayViewBookingCardProps {
   isMenuOpen: boolean;
   isHovered: boolean;
   isNewBookingOpen: boolean;
-  hoverCardPosition: { top: number; left: number } | null;
+  hoverCardPosition: BookingHoverCardPosition | null;
   bookingMenuPosition: {
     top: number;
     triggerTop: number;
@@ -170,7 +171,11 @@ function ScheduleDayViewBookingCard({
             <div
               data-hover-card
               className="fixed bg-white border border-gray-200 rounded-lg shadow-lg z-[200] min-w-[280px] p-3"
-              style={{ top: `${hoverCardPosition.top}px`, left: `${hoverCardPosition.left}px` }}
+              style={{
+                top: `${hoverCardPosition.top}px`,
+                left: `${hoverCardPosition.left}px`,
+                transform: hoverCardPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
+              }}
             >
               <div className={`${statusColor.headerBg} ${statusColor.headerText} px-3 py-2 rounded-t-lg -mx-3 -mt-3 mb-2`}>
                 <p className="text-xs font-bold">{statusColor.label}</p>
@@ -244,19 +249,12 @@ function ScheduleDayViewBookingCard({
               width: bookingMenuPosition.width,
             };
           }
-          // Comment: Flip menu upward if not enough space below the viewport.
-          // When flipping, anchor by `bottom` so the menu's bottom hugs the
-          // trigger card's top — independent of menu's actual rendered height.
-          const menuEstimatedHeight = 280;
-          const flipUp = window.innerHeight - bookingMenuPosition.top < menuEstimatedHeight;
           return createPortal(
             <div
               data-booking-menu
               className="fixed bg-transparent z-[99999]"
               style={{
-                ...(flipUp
-                  ? { bottom: `${window.innerHeight - bookingMenuPosition.triggerTop + 4}px` }
-                  : { top: `${bookingMenuPosition.top}px` }),
+                top: `${bookingMenuPosition.top}px`,
                 left: `${bookingMenuPosition.left}px`,
                 width: `${bookingMenuPosition.width}px`,
               }}
