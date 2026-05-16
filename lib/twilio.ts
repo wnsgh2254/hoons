@@ -87,7 +87,10 @@ export async function sendBookingConfirmation(params: {
   const { phone, bookingDate, bookingTime, shopName, serviceName, venuePhone } = params;
 
   const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
-  const contactPhone = formatAuPhoneForSmsDisplay(venuePhone) ?? String(venuePhone ?? '').trim() || null;
+  const formattedContact = formatAuPhoneForSmsDisplay(venuePhone);
+  const rawVenuePhone = String(venuePhone ?? '').trim();
+  const contactPhone: string | null =
+    formattedContact ?? (rawVenuePhone.length > 0 ? rawVenuePhone : null);
   const contactInstruction = contactPhone
     ? `Call or Text to ${contactPhone}`
     : 'Call or Text your Haeyoom location';
