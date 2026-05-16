@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         .from('bookings')
         .select(`
           *,
-          service:service_id ( name ),
+          service:service_id ( name, english_name ),
           designer:designer_id ( name ),
           customer:customer_id ( phone ),
           shop:shop_id ( name, location, phone )
@@ -36,9 +36,11 @@ export async function POST(request: NextRequest) {
       }
 
       const shop = booking.shop as { location?: string | null; phone?: string | null } | null;
+      const svc = booking.service as { name?: string | null; english_name?: string | null } | null;
       const result = await sendBookingReminder(customerPhone, booking.booking_date, booking.booking_time, {
         customServiceName: (booking as { custom_service_name?: string | null }).custom_service_name,
-        catalogServiceName: (booking.service as { name?: string } | null)?.name,
+        catalogServiceName: svc?.name,
+        catalogEnglishName: svc?.english_name,
         shopLocation: shop?.location ?? '',
         shopPhone: shop?.phone ?? null,
       });

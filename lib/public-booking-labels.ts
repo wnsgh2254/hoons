@@ -23,8 +23,13 @@ const SERVICE_NAME_KO_TO_EN: Record<string, string> = {
   '디지털 펌': 'Digital perm',
   열펌: 'Hot perm',
   매직펌: 'Magic straight perm',
+  매직: 'Magic straight',
+  핫펌: 'Hot perm',
   클리닉: 'Treatment clinic',
+  크리닉: 'Treatment clinic',
   두피클리닉: 'Scalp treatment',
+  패키지: 'Package',
+  기타: 'Other',
 };
 
 function stripPaymentSuffix(name: string): string {
@@ -66,6 +71,7 @@ export function translateServiceNameToEnglish(raw: string | null | undefined): s
     [/여성\s*/g, "Women's "],
     [/남성\s*/g, "Men's "],
     [/키즈\s*/g, "Kids' "],
+    [/매직\s*/g, 'magic '],
     [/커트/g, 'haircut'],
     [/드라이/g, 'blow dry'],
     [/스타일링/g, 'styling'],
@@ -133,4 +139,29 @@ export function publicStylistLabelEn(
   const n = name?.trim();
   if (n && !containsHangul(n)) return n;
   return 'Your stylist';
+}
+
+/** SMS: always English service line (DB english_name wins, else translate Ko). */
+export function smsServiceLabelEn(
+  englishName: string | null | undefined,
+  catalogName: string | null | undefined,
+  customName: string | null | undefined,
+): string {
+  return publicServiceLabelEn(englishName, catalogName, customName) ?? 'Hair service';
+}
+
+/** SMS header; Korean branch names become neutral English. */
+export function haeyoomSmsHeader(shopName: string | null | undefined): string {
+  const t = String(shopName ?? '').trim();
+  if (!t) return 'Haeyoom Salon';
+  if (containsHangul(t)) return 'Haeyoom Salon';
+  return `Haeyoom ${t}`;
+}
+
+/** Reminder Location line: hide Korean addresses, keep Latin. */
+export function smsVenueLocationForReminder(location: string | null | undefined): string {
+  const t = String(location ?? '').trim();
+  if (!t) return 'Haeyoom salon';
+  if (containsHangul(t)) return 'Your Haeyoom salon';
+  return t;
 }

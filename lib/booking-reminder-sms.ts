@@ -52,7 +52,7 @@ export function buildBookingReminderSmsBody(params: {
     `To Change or Cancel: \n` +
     `Must contact via Call or Text to ${contactPhone}\n\n` +
     `Deposit Policy:\n` +
-    `* Today: Last day for 100% refund\n` +
+    `* 3+ days: Last day for 100% refund\n` +
     `* 1-2 days before: 50% refund\n` +
     `* Same-day: Non-refundable\n` +
     `* Late over 10 mins: Auto-canceled\n\n` +

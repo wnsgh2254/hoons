@@ -2,8 +2,8 @@ import twilio from 'twilio';
 import {
   buildBookingReminderSmsBody,
   formatReminderAppointmentLine,
-  resolveReminderServiceLabel,
 } from '@/lib/booking-reminder-sms';
+import { haeyoomSmsHeader, smsServiceLabelEn, smsVenueLocationForReminder } from '@/lib/public-booking-labels';
 
 // Comment: Get Twilio credentials from environment variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -96,14 +96,14 @@ export async function sendBookingConfirmation(params: {
     : 'Call or Text your Haeyoom location';
 
   const message =
-    `Haeyoom ${shopName}\n\n` +
+    `${haeyoomSmsHeader(shopName)}\n\n` +
     `Appointment: \n` +
     `${appointmentLine} \n` +
     `Service: ${serviceName}\n\n` +
     `To Change or Cancel: \n` +
     `${contactInstruction}\n` +
     `Deposit Policy:\n` +
-    `* Today: Last day for 100% refund\n` +
+    `* 3+ days: Last day for 100% refund\n` +
     `* 1-2 days before: 50% refund\n` +
     `* Same-day: Non-refundable\n` +
     `* Late over 10 mins: Auto-canceled`;
@@ -114,6 +114,7 @@ export async function sendBookingConfirmation(params: {
 export type SendBookingReminderVenue = {
   customServiceName?: string | null;
   catalogServiceName?: string | null;
+  catalogEnglishName?: string | null;
   shopLocation?: string | null;
   shopPhone?: string | null;
 };
@@ -126,11 +127,15 @@ export async function sendBookingReminder(
   venue?: SendBookingReminderVenue,
 ): Promise<{ success: boolean; messageSid?: string; error?: string }> {
   const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
-  const serviceLabel = resolveReminderServiceLabel(venue?.customServiceName, venue?.catalogServiceName);
+  const serviceLabel = smsServiceLabelEn(
+    venue?.catalogEnglishName,
+    venue?.catalogServiceName,
+    venue?.customServiceName,
+  );
   const message = buildBookingReminderSmsBody({
     appointmentLine,
     serviceLabel,
-    shopLocation: venue?.shopLocation ?? '',
+    shopLocation: smsVenueLocationForReminder(venue?.shopLocation),
     shopPhone: venue?.shopPhone,
   });
 
