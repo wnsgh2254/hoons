@@ -57,58 +57,53 @@ export async function sendSMS(
   }
 }
 
-// Comment: Send booking reminder SMS (legacy helper for manual/admin use)
-// Comment: Build human-readable date/time like "18/12 (Thursday) at 6:15pm"
-function formatDisplayDateTime(bookingDate: string, bookingTime: string | null): string {
-  try {
-    const [year, month, day] = bookingDate.split('-').map((v) => Number(v));
-    const [hStr, mStr] = (bookingTime ?? '00:00:00').split(':');
-    const hour = Number(hStr);
-    const minute = Number(mStr);
-
-    const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
-
-    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const weekday = weekdays[date.getUTCDay()];
-
-    const dd = String(day).padStart(2, '0');
-    const mm = String(month).padStart(2, '0');
-
-    let displayHour = date.getUTCHours();
-    const displayMinute = String(date.getUTCMinutes()).padStart(2, '0');
-    const ampm = displayHour >= 12 ? 'pm' : 'am';
-    displayHour = displayHour % 12;
-    if (displayHour === 0) displayHour = 12;
-
-    return `${dd}/${mm} (${weekday}) at ${displayHour}:${displayMinute}${ampm}`;
-  } catch {
-    // Comment: Fallback to raw values if parsing fails
-    return `${bookingDate} ${bookingTime ?? ''}`.trim();
+// Comment: Format AU salon number for SMS (e.g. +61432… or 0432… -> 0432 328 002).
+function formatAuPhoneForSmsDisplay(raw: string | null | undefined): string | null {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const digits = s.replace(/\D/g, '');
+  let local = digits;
+  if (local.startsWith('61') && local.length >= 9) {
+    local = `0${local.slice(2)}`;
   }
+  if (local.startsWith('0') && local.length === 10) {
+    return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`;
+  }
+  if (local.length >= 8) {
+    return s;
+  }
+  return s;
 }
 
-// Comment: Send booking confirmation SMS immediately after a booking is created and deposit is paid
+// Comment: Booking confirmation SMS right after a booking is created or deposit is paid (public + admin).
 export async function sendBookingConfirmation(params: {
   phone: string;
   bookingDate: string;
   bookingTime: string;
   shopName: string;
-  shopLocation: string;
-  shopPhone: string | null;
+  serviceName: string;
+  venuePhone: string | null;
 }): Promise<{ success: boolean; messageSid?: string; error?: string }> {
-  const { phone, bookingDate, bookingTime, shopName, shopLocation, shopPhone } = params;
+  const { phone, bookingDate, bookingTime, shopName, serviceName, venuePhone } = params;
 
-  const displayText = formatDisplayDateTime(bookingDate, bookingTime);
-  const contactLine = shopPhone ? `\n📞 ${shopPhone}` : '';
+  const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
+  const contactPhone = formatAuPhoneForSmsDisplay(venuePhone) ?? String(venuePhone ?? '').trim() || null;
+  const contactInstruction = contactPhone
+    ? `Call or Text to ${contactPhone}`
+    : 'Call or Text your Haeyoom location';
 
   const message =
-    `Hello, this is Haeyoom 😊\n` +
-    `Your appointment is booked for ${displayText}.\n\n` +
-    `If you need to change or cancel your booking, please contact the salon.\n\n` +
-    `📍 Haeyoom ${shopName}\n` +
-    `${shopLocation}` +
-    `${contactLine}\n\n` +
-    `Thank you!`;
+    `Haeyoom ${shopName}\n\n` +
+    `Appointment: \n` +
+    `${appointmentLine} \n` +
+    `Service: ${serviceName}\n\n` +
+    `To Change or Cancel: \n` +
+    `${contactInstruction}\n` +
+    `Deposit Policy:\n` +
+    `* Today: Last day for 100% refund\n` +
+    `* 1-2 days before: 50% refund\n` +
+    `* Same-day: Non-refundable\n` +
+    `* Late over 10 mins: Auto-canceled`;
 
   return sendSMS(phone, message);
 }

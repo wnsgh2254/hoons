@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking, buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
+import { sendBookingConfirmationSmsForBookingId } from '@/lib/send-booking-confirmation-sms';
 
 export async function POST(request: NextRequest) {
   try {
@@ -96,7 +97,11 @@ export async function POST(request: NextRequest) {
       status: typeof status === 'string' && status.trim() ? status.trim() : null,
     });
 
-    // Comment: Immediate confirmation SMS is disabled — guests use My Booking (/booking/lookup).
+    try {
+      await sendBookingConfirmationSmsForBookingId(Number(booking.id));
+    } catch (smsErr) {
+      console.error('[appointment POST] confirmation SMS failed', smsErr);
+    }
 
     return NextResponse.json(
       {

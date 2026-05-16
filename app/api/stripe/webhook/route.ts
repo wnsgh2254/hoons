@@ -6,6 +6,7 @@ import {
   createPublicBooking,
 } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
+import { sendBookingConfirmationSmsForBookingId } from "@/lib/send-booking-confirmation-sms";
 
 export const runtime = "nodejs";
 
@@ -149,7 +150,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to update booking." }, { status: 500 });
   }
 
-  // Comment: Booking confirmation SMS is disabled — guests use My Booking (/booking/lookup).
+  try {
+    await sendBookingConfirmationSmsForBookingId(bookingId);
+  } catch (smsErr) {
+    console.error("Stripe webhook: confirmation SMS failed", smsErr);
+  }
 
   return ok();
 }
