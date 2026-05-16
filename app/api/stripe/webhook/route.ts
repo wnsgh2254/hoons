@@ -6,7 +6,7 @@ import {
   createPublicBooking,
 } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
-import { sendBookingConfirmationSmsForBookingId } from "@/lib/send-booking-confirmation-sms";
+import { invokeBookingConfirmationEdge } from "@/lib/booking-confirmation-edge";
 
 export const runtime = "nodejs";
 
@@ -151,9 +151,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await sendBookingConfirmationSmsForBookingId(bookingId);
+    await invokeBookingConfirmationEdge(bookingId);
   } catch (smsErr) {
-    console.error("Stripe webhook: confirmation SMS failed", smsErr);
+    console.error("Stripe webhook: confirmation SMS Edge invoke failed", smsErr);
   }
 
   return ok();

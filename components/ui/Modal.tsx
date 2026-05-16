@@ -25,6 +25,8 @@ interface ModalProps {
   scrollable?: boolean;
   /** Additional className for the body wrapper div */
   bodyClassName?: string;
+  /** Whether clicking the backdrop closes the modal. Defaults to true. */
+  closeOnBackdropClick?: boolean;
 }
 
 export default function Modal({
@@ -39,6 +41,7 @@ export default function Modal({
   className,
   scrollable = false,
   bodyClassName,
+  closeOnBackdropClick = true,
 }: ModalProps) {
   if (!isOpen) return null;
 
@@ -48,7 +51,7 @@ export default function Modal({
         'fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4',
         zIndex,
       )}
-      onClick={onClose}
+      onClick={closeOnBackdropClick ? onClose : undefined}
     >
       <div
         className={cn('bg-white rounded-2xl shadow-2xl w-full', maxWidth, className)}

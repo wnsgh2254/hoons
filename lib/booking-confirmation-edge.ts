@@ -1,5 +1,5 @@
+// Comment: Invokes Supabase Edge `booking-confirmation-sms` (Twilio SMS) with the public anon key.
 export async function invokeBookingConfirmationEdge(bookingId: number) {
-  // Comment: Confirmation SMS runs in Next.js via sendBookingConfirmationSmsForBookingId (Twilio). This invoke is unused.
   const projectUrl = process.env.SUPABASE_URL?.trim() || 'https://akzipcsakzuqpknkrjnb.supabase.co';
   const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
 

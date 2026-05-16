@@ -42,7 +42,7 @@ import RefundRegistrationModal from '@/components/admin/appointments/RefundRegis
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
-import { isCancelledBookingStatus, isUpcomingBookingStatus } from '@/lib/booking-status';
+import { isCancelledBookingStatus } from '@/lib/booking-status';
 import {
   GRID_START_HOUR,
   GRID_END_HOUR,
@@ -160,10 +160,6 @@ export default function AppointmentsManagementPage() {
   const [usedInitialDataApi, setUsedInitialDataApi] = useState(false);
   const [skipMemoInitialFetch, setSkipMemoInitialFetch] = useState(true);
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
-  const [currentSydneyTime, setCurrentSydneyTime] = useState<{
-    label: string;
-    top: number;
-  } | null>(null);
 
   // Comment: Admin "New Booking" modal state (form state managed inside NewBookingModal)
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
@@ -188,7 +184,7 @@ export default function AppointmentsManagementPage() {
   const [availableDesignerIdsByShop, setAvailableDesignerIdsByShop] = useState<Record<number, number[]>>(
     {},
   );
-  const [loadingDesignerAvailability, setLoadingDesignerAvailability] = useState(false);
+  const [loadingDesignerAvailability, setLoadingDesignerAvailability] = useState(true);
   // Comment: Incrementing this key re-triggers the availability fetch (e.g. after holiday modal save)
   const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0);
 
@@ -650,7 +646,6 @@ export default function AppointmentsManagementPage() {
   const dragScrollLeftRef = useRef(0);
   const dragStartYRef = useRef(0);
   const dragScrollTopRef = useRef(0);
-  const hasCenteredCurrentTimeRef = useRef(false);
 
   const monthLabel = useMemo(() => {
     const d = new Date(selectedDate);
@@ -665,6 +660,9 @@ export default function AppointmentsManagementPage() {
   const [hydratedMonthKey, setHydratedMonthKey] = useState<string | null>(null);
   const selectedDateRef = useRef(selectedDate);
   const monthKeyRef = useRef(monthKey);
+  // Tracks the date for which availability was last fetched (ref avoids stale-closure issues).
+  // Set to requestDate by initial-data on success, and updated by the availability effect on each fetch.
+  const lastAvailabilityFetchedDateRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
@@ -701,6 +699,8 @@ export default function AppointmentsManagementPage() {
           setBookingRestrictions(data.bookingRestrictions || []);
           setDayCounts(data.dayCounts || {});
           setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
+          setLoadingDesignerAvailability(false);
+          lastAvailabilityFetchedDateRef.current = requestDate;
 
           const nextBookings = data.bookings || [];
           setBookings(nextBookings);
@@ -728,6 +728,7 @@ export default function AppointmentsManagementPage() {
         console.error('Error loading appointments initial data:', err);
         // Comment: Fallback to legacy per-endpoint loading when consolidated API fails
         setSkipMemoInitialFetch(false);
+        setLoadingDesignerAvailability(false);
         void refreshBookings();
         setInitialDataReady(true);
       }
@@ -831,117 +832,26 @@ export default function AppointmentsManagementPage() {
       // Comment: 기본 고객 정보만으로 먼저 모달을 보여준다.
       setViewingCustomer(baseCustomer);
 
-      // Step 2: 상세 통계(예약/정액권)는 백그라운드에서 별도로 계산
+      // Step 2: 상세 통계는 /stats 엔드포인트 한 번으로 서버에서 계산
       void (async () => {
         try {
-          const [bookingsRes, prepaidRes, salesRes, refundsRes] = await Promise.all([
-            fetch(`/api/appointment?customer_id=${customerId}&limit=500`),
-            fetch(`/api/prepaid?customer_id=${customerId}`).catch(() => null),
-            fetch(`/api/sales?customer_id=${customerId}`),
-            fetch(`/api/refunds?customer_id=${customerId}`),
-          ]);
-
-          const bookingsData = await bookingsRes.json();
-          const prepaidData = prepaidRes ? await prepaidRes.json() : null;
-          const salesPayload = await salesRes.json().catch(() => ({}));
-          const refundsPayload = await refundsRes.json().catch(() => ({}));
-
-          const bookings = bookingsData.bookings || [];
-
-          // Comment: Net total sales — same as GET /api/customers and SalesHistoryTable (sales minus refunds)
-          const salesList = salesPayload.sales || [];
-          const refundsList = refundsPayload.refunds || [];
-          const totalSales =
-            salesList.reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0) -
-            refundsList.reduce((sum: number, r: any) => sum + Number(r.total_amount || 0), 0);
-
-          // Comment: 최근 방문일 / 방문 후 경과일
-          const completedBookings = bookings.filter(
-            (b: any) => b.status === 'PAID' || b.status === 'COMPLETED',
-          );
-          const lastBooking = completedBookings.sort((a: any, b: any) => {
-            const dateA = new Date(
-              `${a.booking_date}T${a.booking_time || '00:00:00'}`,
-            );
-            const dateB = new Date(
-              `${b.booking_date}T${b.booking_time || '00:00:00'}`,
-            );
-            return dateB.getTime() - dateA.getTime();
-          })[0];
-
-          const lastVisitDate = lastBooking ? lastBooking.booking_date : null;
-          let daysSinceLastVisit = null as number | null;
-          if (lastVisitDate) {
-            const lastVisit = new Date(lastVisitDate);
-            const today = new Date();
-            const diffTime = today.getTime() - lastVisit.getTime();
-            daysSinceLastVisit = Math.floor(
-              diffTime / (1000 * 60 * 60 * 24),
-            );
-          }
-
-          // Comment: 최근 1년 예약/취소 건수
-          const oneYearAgo = new Date();
-          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-          const recentBookings = bookings.filter((b: any) => {
-            const bookingDate = new Date(b.booking_date);
-            return bookingDate >= oneYearAgo;
-          });
-          const appointmentsCount = recentBookings.length;
-          const cancelledCount = recentBookings.filter(
-            (b: any) => isCancelledBookingStatus(b.status),
-          ).length;
-
-          // Comment: 다음 예약
-          const upcomingBookings = bookings
-            .filter((b: any) => {
-              const bookingDate = new Date(
-                `${b.booking_date}T${b.booking_time || '00:00:00'}`,
-              );
-              return (
-                bookingDate > new Date() &&
-                isUpcomingBookingStatus(b.status)
-              );
-            })
-            .sort((a: any, b: any) => {
-              const dateA = new Date(
-                `${a.booking_date}T${a.booking_time || '00:00:00'}`,
-              );
-              const dateB = new Date(
-                `${b.booking_date}T${b.booking_time || '00:00:00'}`,
-              );
-              return dateA.getTime() - dateB.getTime();
-            });
-          const nextAppointment = upcomingBookings[0]
-            ? {
-                date: upcomingBookings[0].booking_date,
-                time: upcomingBookings[0].booking_time || '',
-              }
-            : null;
-
-          // Comment: 정액권 / 포인트
-          const prepaidTickets = prepaidData?.prepaid || [];
-          const totalPrepaidBalance =
-            Number(prepaidData?.totalPoints ?? 0) ||
-            prepaidTickets.reduce(
-              (sum: number, ticket: any) =>
-                sum + (Number(ticket.balance ?? ticket.points) || 0),
-              0,
-            );
+          const statsRes = await fetch(`/api/customers/${customerId}/stats`);
+          if (!statsRes.ok) return;
+          const statsData = await statsRes.json();
 
           // Comment: 동일 고객일 때만 최신 통계를 merge
           setViewingCustomer((prev: any) => {
             if (!prev || prev.id !== baseCustomer.id) return prev;
             return {
               ...prev,
-              last_visit_date: lastVisitDate,
-              days_since_last_visit: daysSinceLastVisit,
-              appointments_count: appointmentsCount,
-              cancelled_count: cancelledCount,
-              next_appointment: nextAppointment,
-              prepaid_tickets: prepaidTickets,
-              prepaid_balance: totalPrepaidBalance,
-              total_sales: totalSales,
+              last_visit_date: statsData.last_visit_date ?? null,
+              days_since_last_visit: statsData.days_since_last_visit ?? null,
+              appointments_count: statsData.appointments_count ?? 0,
+              cancelled_count: statsData.cancelled_count ?? 0,
+              next_appointment: statsData.next_appointment ?? null,
+              prepaid_tickets: statsData.prepaid_tickets ?? [],
+              prepaid_balance: statsData.prepaid_balance ?? 0,
+              total_sales: statsData.total_sales ?? 0,
             };
           });
         } catch (err) {
@@ -1162,8 +1072,10 @@ export default function AppointmentsManagementPage() {
   // availabilityRefreshKey is incremented after holiday/special-day saves to force a re-fetch.
   useEffect(() => {
     if (!initialDataReady) return;
-    // Skip if this date was already loaded by initial-data (only for the first render, not forced refreshes)
-    if (selectedDate === hydratedDate && availabilityRefreshKey === 0) return;
+    // Skip if availability for this exact date was already loaded (by initial-data or a previous fetch).
+    // Unlike hydratedDate, lastAvailabilityFetchedDateRef is updated on every successful fetch,
+    // so navigating away and back correctly re-fetches the original date's availability.
+    if (selectedDate === lastAvailabilityFetchedDateRef.current && availabilityRefreshKey === 0) return;
     let isMounted = true;
     const fetchShopsAndAvailability = async () => {
       setLoadingDesignerAvailability(true);
@@ -1201,6 +1113,7 @@ export default function AppointmentsManagementPage() {
           const data = await res.json();
           if (isMounted) {
             setAvailableDesignerIdsByShop(res.ok ? { 0: data.designerIds || [] } : {});
+            lastAvailabilityFetchedDateRef.current = selectedDate;
           }
         } else {
           // Comment: Fetch all shops' availability in parallel
@@ -1219,6 +1132,7 @@ export default function AppointmentsManagementPage() {
               byShop[id] = ids;
             });
             setAvailableDesignerIdsByShop(byShop);
+            lastAvailabilityFetchedDateRef.current = selectedDate;
           }
         }
       } catch (err) {
@@ -1235,7 +1149,7 @@ export default function AppointmentsManagementPage() {
     return () => { isMounted = false; };
     // Comment: allShops intentionally omitted — it is loaded inline above on first run
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, availabilityRefreshKey, initialDataReady, hydratedDate]);
+  }, [selectedDate, availabilityRefreshKey, initialDataReady]);
 
 
   // Comment: Load per-day designer availability for week view (7 days)
@@ -1316,11 +1230,11 @@ export default function AppointmentsManagementPage() {
 
     if (shopIdForSched != null) {
       // Use already loaded per-venue availability map.
-      // Note: availability map is hydrated for selectedDate and refreshed when selectedDate changes.
-      const availableIds = availableDesignerIdsByShop[shopIdForSched] || [];
-      const idSet = new Set<number>(availableIds);
+      // When the shop's availability hasn't loaded yet (undefined), show all designers for the shop
+      // rather than an empty list — the map will update and this effect will re-run.
+      const shopAvailableIds = availableDesignerIdsByShop[shopIdForSched];
       const designersForModal = allDesigners
-        .filter((d) => idSet.has(d.id))
+        .filter((d) => shopAvailableIds == null || shopAvailableIds.includes(d.id))
         .filter((d) => designerBelongsToShop(d, shopIdForSched));
       setNewBookingDesigners(designersForModal);
     } else {
@@ -1445,52 +1359,6 @@ export default function AppointmentsManagementPage() {
       }
     };
   }, []);
-
-  // Comment: Compute current time line position for Sydney time (only when viewing today)
-  useEffect(() => {
-    const todaySydney = getSydneyToday();
-
-    const updateCurrentTime = () => {
-      if (selectedDate !== todaySydney) {
-        setCurrentSydneyTime(null);
-        hasCenteredCurrentTimeRef.current = false;
-        return;
-      }
-
-      const nowSydney = new Date(
-        new Date().toLocaleString('en-US', { timeZone: 'Australia/Sydney' })
-      );
-
-      const hour = nowSydney.getHours();
-      const minute = nowSydney.getMinutes();
-
-      if (hour < GRID_START_HOUR || hour >= GRID_END_HOUR) {
-        // Outside visible grid
-        setCurrentSydneyTime(null);
-        return;
-      }
-
-      const minutesSinceStart = (hour - GRID_START_HOUR) * 60 + minute;
-      const top = (minutesSinceStart / 60) * GRID_HOUR_HEIGHT;
-
-      const label = nowSydney.toLocaleTimeString('en-AU', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-
-      setCurrentSydneyTime({
-        label,
-        top,
-      });
-      // Allow re-centering when time updates for the same day
-      hasCenteredCurrentTimeRef.current = false;
-    };
-
-    updateCurrentTime();
-    const id = setInterval(updateCurrentTime, 60_000);
-    return () => clearInterval(id);
-  }, [selectedDate]);
 
   // Comment: No auto-centering now – user controls vertical position with drag
 
@@ -1662,6 +1530,24 @@ export default function AppointmentsManagementPage() {
     const shopId = Number(selectedShopFilter);
     return allDesigners.filter((d) => designerBelongsToShop(d, shopId));
   }, [allDesigners, selectedShopFilter]);
+
+  // O(1) designer lookup for render loop (replaces O(n) find per column)
+  const designerByIdMap = useMemo(
+    () => new Map(allDesigners.map((d) => [d.id, d])),
+    [allDesigners],
+  );
+
+  // Restrictions grouped by designer_id for O(1) lookup in render loop
+  const restrictionsByDesignerIdMap = useMemo(() => {
+    const map = new Map<number, any[]>();
+    for (const r of bookingRestrictions) {
+      if (!r.designer_id) continue;
+      const id = r.designer_id as number;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id)!.push(r);
+    }
+    return map;
+  }, [bookingRestrictions]);
 
   // Comment: Stable color assignment per grid column
   const designerColorMap = useMemo(() => {
@@ -2685,7 +2571,7 @@ export default function AppointmentsManagementPage() {
                     >
 
                       {/* Current Time Line (Sydney time, only when viewing today) */}
-                      <CurrentTimeLine currentSydneyTime={currentSydneyTime} />
+                      <CurrentTimeLine selectedDate={selectedDate} />
 
                       {/* Time Column - 30 minute intervals with padding - sticky left */}
                       <TimeColumn isWeekViewMode={isWeekViewMode} />
@@ -2882,7 +2768,7 @@ export default function AppointmentsManagementPage() {
                               <div key={dateStr} className="border-r border-[#e2e8f0] flex-1 relative" style={{ minWidth: `${scheduleColumns.length * 150}px`, minHeight: `${(GRID_END_HOUR - GRID_START_HOUR) * 2 * GRID_30MIN_HEIGHT + 16}px` }}>
                                 <div className="grid relative" style={{ gridTemplateColumns: `repeat(${scheduleColumns.length}, minmax(120px, 1fr))` }}>
                                 {scheduleColumns.map((col, designerIndex) => {
-                          const designer = allDesigners.find((d) => d.id === col.designerId);
+                          const designer = designerByIdMap.get(col.designerId);
                           const designerId = designer?.id;
                           const nextCol = scheduleColumns[designerIndex + 1];
                           const isShopBoundary = !!nextCol && nextCol.columnShopId !== col.columnShopId;
@@ -2890,11 +2776,11 @@ export default function AppointmentsManagementPage() {
                                   const designerBookings = bookingsByDateAndDesigner[dateStr]?.[bookingLookupKey] || [];
                           const color = designerColorMap[col.columnKey] ??
                                     DESIGNER_COLORS[designerIndex % DESIGNER_COLORS.length];
-                          
+
                                   // Comment: Get restrictions for this designer on this date
-                          const designerRestrictions = bookingRestrictions.filter(
-                                    (r) => r.designer_id === designerId && r.restriction_date === dateStr
-                          );
+                          const designerRestrictions = designerId
+                            ? (restrictionsByDesignerIdMap.get(designerId) ?? []).filter((r) => r.restriction_date === dateStr)
+                            : [];
 
                           const isDesignerOff = designerId
                             ? (columnDesignerOffMap[col.columnKey] ?? false)

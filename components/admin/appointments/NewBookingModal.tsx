@@ -475,49 +475,28 @@ export default function NewBookingModal({
     setCustomerDetailLoading(true);
     (async () => {
       try {
-        const [customerRes, bookingsRes] = await Promise.all([
+        const [customerRes, statsRes] = await Promise.all([
           fetch(`/api/customers/${selectedCustomerId}`),
-          fetch(`/api/appointment?customer_id=${selectedCustomerId}&limit=500`),
+          fetch(`/api/customers/${selectedCustomerId}/stats`),
         ]);
         if (cancelled) return;
         const customerData = await customerRes.json();
-        const bookingsData = await bookingsRes.json();
         if (!customerRes.ok || !customerData.customer) {
           setCustomerDetail(null);
           setCustomerStats({});
           return;
         }
         setCustomerDetail(customerData.customer);
-        const bookings = bookingsData.bookings || [];
-        const completedStatuses = ['confirmed', 'PAID', 'COMPLETED'];
-        const completedBookings = bookings.filter((b: any) =>
-          completedStatuses.includes(String(b.status || '').toUpperCase())
-        );
-        const lastBooking = [...completedBookings].sort((a: any, b: any) => {
-          const dateA = new Date(`${a.booking_date}T${a.booking_time || '00:00:00'}`);
-          const dateB = new Date(`${b.booking_date}T${b.booking_time || '00:00:00'}`);
-          return dateB.getTime() - dateA.getTime();
-        })[0];
-        const lastVisitDate = lastBooking?.booking_date ?? null;
-        let daysSinceLastVisit: number | null = null;
-        if (lastVisitDate) {
-          const diff = new Date().getTime() - new Date(lastVisitDate).getTime();
-          daysSinceLastVisit = Math.floor(diff / (1000 * 60 * 60 * 24));
-        }
-        const oneYearAgo = new Date();
-        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-        const recentBookings = bookings.filter((b: any) => new Date(b.booking_date) >= oneYearAgo);
-        const cancelledStatuses = ['cancelled', 'CANCELLED', 'canceled', 'CANCELED'];
-        const cancelledCount = recentBookings.filter((b: any) =>
-          cancelledStatuses.includes(String(b.status || ''))
-        ).length;
-        if (!cancelled) {
-          setCustomerStats({
-            lastVisitDate: lastVisitDate ?? undefined,
-            daysSinceLastVisit: daysSinceLastVisit ?? undefined,
-            appointmentsCount: recentBookings.length,
-            cancelledCount,
-          });
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          if (!cancelled) {
+            setCustomerStats({
+              lastVisitDate: statsData.last_visit_date ?? undefined,
+              daysSinceLastVisit: statsData.days_since_last_visit ?? undefined,
+              appointmentsCount: statsData.appointments_count ?? undefined,
+              cancelledCount: statsData.cancelled_count ?? undefined,
+            });
+          }
         }
       } catch (err) {
         console.error('Error loading customer detail:', err);
@@ -654,63 +633,62 @@ export default function NewBookingModal({
     }
 
     const isEditMode = Boolean(editingBooking?.id);
-
-    try {
-      // Comment: Overlap check needs minutes; check each slot before creating.
-      for (const slot of slots) {
-        const dbTime = labelToDbTime(slot.time);
-        if (!dbTime) {
-          alert('시간 형식 오류가 발생했습니다.');
-          return;
-        }
-
-        const [hh, mm] = dbTime.split(':');
-        const startHour = Number(hh);
-        const startMinute = Number(mm);
-        if (Number.isNaN(startHour) || Number.isNaN(startMinute)) {
-          alert('시간 형식 오류가 발생했습니다.');
-          return;
-        }
-
-        const newStartMinutes = startHour * 60 + startMinute;
-        const newEndMinutes = newStartMinutes + (slot.duration || 60);
-
-        const qs = new URLSearchParams({
-          date: bookingDate,
-          designer_id: String(slot.designerId),
-        });
-        qs.set('shop_id', String(shopId));
-        const resExisting = await fetch(`/api/appointment?${qs.toString()}`);
-        const dataExisting = await resExisting.json();
-
-        if (resExisting.ok && Array.isArray(dataExisting.bookings)) {
-          let maxOverlap = 0;
-          for (const b of dataExisting.bookings) {
-            if (!b.booking_time) continue;
-            if (isCancelledBookingStatus((b as { status?: string | null }).status)) continue;
-            if (isEditMode && editingBooking && (b as { id?: number }).id === editingBooking.id) continue;
-            const [bh, bm] = String(b.booking_time).split(':');
-            const existStart = Number(bh) * 60 + Number(bm);
-            const existDuration = getBookingDurationMinutes(b as any);
-            const existEnd = existStart + existDuration;
-            const overlap = Math.max(newStartMinutes, existStart) < Math.min(newEndMinutes, existEnd);
-            if (overlap) maxOverlap += 1;
-          }
-
-          if (maxOverlap >= 2) {
-            alert('같은 시간대에 이미 2개의 예약이 있어 더 이상 등록할 수 없습니다.');
-            return;
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Error checking overlapping bookings', e);
-    }
-
     const selectedCustomer = selectedCustomerDetail || null;
 
     setSubmitting(true);
     try {
+      // Comment: Overlap check needs minutes; check each slot before creating.
+      try {
+        for (const slot of slots) {
+          const dbTime = labelToDbTime(slot.time);
+          if (!dbTime) {
+            alert('시간 형식 오류가 발생했습니다.');
+            return;
+          }
+
+          const [hh, mm] = dbTime.split(':');
+          const startHour = Number(hh);
+          const startMinute = Number(mm);
+          if (Number.isNaN(startHour) || Number.isNaN(startMinute)) {
+            alert('시간 형식 오류가 발생했습니다.');
+            return;
+          }
+
+          const newStartMinutes = startHour * 60 + startMinute;
+          const newEndMinutes = newStartMinutes + (slot.duration || 60);
+
+          const qs = new URLSearchParams({
+            date: bookingDate,
+            designer_id: String(slot.designerId),
+          });
+          qs.set('shop_id', String(shopId));
+          const resExisting = await fetch(`/api/appointment?${qs.toString()}`);
+          const dataExisting = await resExisting.json();
+
+          if (resExisting.ok && Array.isArray(dataExisting.bookings)) {
+            let maxOverlap = 0;
+            for (const b of dataExisting.bookings) {
+              if (!b.booking_time) continue;
+              if (isCancelledBookingStatus((b as { status?: string | null }).status)) continue;
+              if (isEditMode && editingBooking && (b as { id?: number }).id === editingBooking.id) continue;
+              const [bh, bm] = String(b.booking_time).split(':');
+              const existStart = Number(bh) * 60 + Number(bm);
+              const existDuration = getBookingDurationMinutes(b as any);
+              const existEnd = existStart + existDuration;
+              const overlap = Math.max(newStartMinutes, existStart) < Math.min(newEndMinutes, existEnd);
+              if (overlap) maxOverlap += 1;
+            }
+
+            if (maxOverlap >= 2) {
+              alert('같은 시간대에 이미 2개의 예약이 있어 더 이상 등록할 수 없습니다.');
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error checking overlapping bookings', e);
+      }
+
       if (isEditMode && editingBooking) {
         const slot = slots[0];
         const selectedServiceIds = slotServiceSelections[0] || [];
@@ -874,6 +852,7 @@ export default function NewBookingModal({
       zIndex={Z.MODAL_PRIMARY}
       maxWidth="max-w-6xl"
       scrollable
+      closeOnBackdropClick={false}
       footer={
         <>
           <Button variant="ghost" onClick={handleCancel}>취소</Button>

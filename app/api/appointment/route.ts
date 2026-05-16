@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking, buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { supabase } from '@/lib/supabase';
-import { sendBookingConfirmationSmsForBookingId } from '@/lib/send-booking-confirmation-sms';
+import { invokeBookingConfirmationEdge } from '@/lib/booking-confirmation-edge';
 
 export async function POST(request: NextRequest) {
   try {
@@ -98,9 +98,9 @@ export async function POST(request: NextRequest) {
     });
 
     try {
-      await sendBookingConfirmationSmsForBookingId(Number(booking.id));
+      await invokeBookingConfirmationEdge(Number(booking.id));
     } catch (smsErr) {
-      console.error('[appointment POST] confirmation SMS failed', smsErr);
+      console.error('[appointment POST] confirmation SMS Edge invoke failed', smsErr);
     }
 
     return NextResponse.json(
