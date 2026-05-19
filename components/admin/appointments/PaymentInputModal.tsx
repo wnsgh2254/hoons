@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
+import { formatAudNumber, roundToCents } from '@/lib/utils';
 import { addDigits, removeLastDigit, parseAmount } from '@/lib/utils/numeric-input-utils';
 import NumericKeypad from './NumericKeypad';
 
@@ -28,16 +29,16 @@ export default function PaymentInputModal({
 
   useEffect(() => {
     if (isOpen) {
-      setInputValue(initialAmount > 0 ? initialAmount.toLocaleString() : '0');
+      setInputValue(initialAmount > 0 ? formatAudNumber(initialAmount) : '0');
     }
   }, [isOpen, initialAmount]);
 
   const handleNumberClick = (num: string) => {
-    setInputValue((prev) => addDigits(prev, num));
+    setInputValue((prev) => addDigits(prev, num, 2));
   };
 
   const handleBackspace = () => {
-    setInputValue((prev) => removeLastDigit(prev));
+    setInputValue((prev) => removeLastDigit(prev, 2));
   };
 
   const handleClear = () => {
@@ -45,7 +46,7 @@ export default function PaymentInputModal({
   };
 
   const handleComplete = () => {
-    const amount = parseAmount(inputValue);
+    const amount = roundToCents(parseAmount(inputValue));
     if (amount > 0) {
       onComplete(amount);
       onClose();
@@ -53,7 +54,7 @@ export default function PaymentInputModal({
   };
 
   const handleAdditionalInput = () => {
-    const amount = parseAmount(inputValue);
+    const amount = roundToCents(parseAmount(inputValue));
     if (amount > 0) {
       onAdditionalInput(amount);
       setInputValue('0');
@@ -94,6 +95,7 @@ export default function PaymentInputModal({
           <NumericKeypad
             onNumberClick={handleNumberClick}
             onBackspace={handleBackspace}
+            allowDecimal
             className="flex-1 space-y-2"
           />
 

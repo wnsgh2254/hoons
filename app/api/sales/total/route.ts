@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
 const isTransientUpstreamError = (error: any) => {
@@ -246,10 +247,10 @@ export async function GET(request: NextRequest) {
         const productShare = payableTotal > 0 ? (typeTotals.product / payableTotal) * amount : 0;
         const membershipShare = Math.max(0, amount - serviceShare - productShare);
 
-        paymentDetails[key].service += serviceShare;
-        paymentDetails[key].product += productShare;
-        paymentDetails[key].membership += membershipShare;
-        paymentDetails[key].total += amount;
+        paymentDetails[key].service += roundToCents(serviceShare);
+        paymentDetails[key].product += roundToCents(productShare);
+        paymentDetails[key].membership += roundToCents(membershipShare);
+        paymentDetails[key].total += roundToCents(amount);
       });
     });
 
@@ -390,17 +391,17 @@ export async function GET(request: NextRequest) {
     };
 
     if (revenueSummary.customers.service.quantity > 0) {
-      revenueSummary.customers.service.amount = Math.round(
+      revenueSummary.customers.service.amount = roundToCents(
         revenueSummary.sales.service.amount / revenueSummary.customers.service.quantity,
       );
     }
     if (revenueSummary.customers.product.quantity > 0) {
-      revenueSummary.customers.product.amount = Math.round(
+      revenueSummary.customers.product.amount = roundToCents(
         revenueSummary.sales.product.amount / revenueSummary.customers.product.quantity,
       );
     }
     if (revenueSummary.customers.total.quantity > 0) {
-      revenueSummary.customers.total.amount = Math.round(
+      revenueSummary.customers.total.amount = roundToCents(
         revenueSummary.total.total / revenueSummary.customers.total.quantity,
       );
     }

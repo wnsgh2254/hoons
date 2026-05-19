@@ -9,6 +9,7 @@ import { useStaff } from '@/hooks/useStaff';
 import { Button, Input, Modal, Select, Tabs } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesItemType } from '@/lib/types';
+import { formatAudNumber } from '@/lib/utils';
 
 // DB에 한국어로 저장된 카테고리를 영어로 정규화 (역매핑)..
 const CATEGORY_NORMALIZE_MAP: Record<string, string> = {
@@ -400,7 +401,7 @@ export default function SalesItemPickerModal({
                         }`}
                       >
                         <div className="font-medium text-gray-900">{displayName}{duration}</div>
-                        <div className="text-xs text-gray-500 mt-1">{item.price.toLocaleString()}</div>
+                        <div className="text-xs text-gray-500 mt-1">{formatAudNumber(item.price)}</div>
                       </button>
                     );
                   })}
@@ -552,7 +553,7 @@ export default function SalesItemPickerModal({
                         <td className="py-3 px-4 text-sm text-gray-900">{product.category}</td>
                         <td className="py-3 px-4 text-sm text-gray-900">{product.code}</td>
                         <td className="py-3 px-4 text-sm text-gray-900">{product.name}</td>
-                        <td className="py-3 px-4 text-sm text-gray-900">{product.price.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-sm text-gray-900">{formatAudNumber(product.price)}</td>
                         <td className="py-3 px-4 text-sm text-gray-900">{product.stock}</td>
                       </tr>
                     );

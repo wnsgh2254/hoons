@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Select, Badge } from '@/components/ui';
-import { formatPaymentMethod, formatTimeString } from '@/lib/utils';
+import { formatPaymentMethod, formatTimeString, formatAudNumber } from '@/lib/utils';
 
 interface SalesItemRecord {
   id: number;
@@ -228,16 +228,16 @@ export default function SalesHistoryTable({
                           : '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        {sale.discount_amount > 0 ? Number(sale.discount_amount).toLocaleString() : '-'}
+                        {sale.discount_amount > 0 ? formatAudNumber(Number(sale.discount_amount)) : '-'}
                       </td>
                       <td className={`px-4 py-3 text-sm text-right ${isRefund ? 'text-red-500 font-medium' : 'text-gray-900'}`}>
-                        {isRefund ? `-${Number(sale.sales_amount || 0).toLocaleString()}` : Number(sale.sales_amount || 0).toLocaleString()}
+                        {isRefund ? `-${formatAudNumber(Number(sale.sales_amount || 0))}` : formatAudNumber(Number(sale.sales_amount || 0))}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {getPaymentMethodLabel(sale)}
                       </td>
                       <td className={`px-4 py-3 text-sm text-right ${isRefund ? 'text-red-500 font-medium' : 'text-gray-900'}`}>
-                        {isRefund ? `-${Number(sale.total_amount || 0).toLocaleString()}` : Number(sale.total_amount || 0).toLocaleString()}
+                        {isRefund ? `-${formatAudNumber(Number(sale.total_amount || 0))}` : formatAudNumber(Number(sale.total_amount || 0))}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">{sale.memo || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">

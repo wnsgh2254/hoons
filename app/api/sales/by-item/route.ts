@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
@@ -179,7 +180,7 @@ export async function GET(request: NextRequest) {
 
     itemSalesMap.forEach((row) => {
       row.total = row.sales.amount + row.membershipDeduction.amount;
-      row.avgPrice = row.sales.quantity > 0 ? Math.round(row.sales.amount / row.sales.quantity) : 0;
+      row.avgPrice = row.sales.quantity > 0 ? roundToCents(row.sales.amount / row.sales.quantity) : 0;
     });
 
     const itemSales = Array.from(itemSalesMap.values());
@@ -207,7 +208,7 @@ export async function GET(request: NextRequest) {
           ...summary,
           avgPrice:
             summary.salesQuantity > 0
-              ? Math.round(summary.salesAmount / summary.salesQuantity)
+              ? roundToCents(summary.salesAmount / summary.salesQuantity)
               : 0,
         },
       },

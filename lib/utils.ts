@@ -23,6 +23,33 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+/** Round to 2 decimal places (AUD cents) without truncating to whole dollars */
+export function roundToCents(value: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** AUD amount with 2 decimal places, no currency symbol */
+export function formatAudNumber(value: number): string {
+  const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return new Intl.NumberFormat('en-AU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/** AUD currency with 2 decimal places */
+export function formatAudAmount(value: number): string {
+  const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 // Format number string with commas (e.g. "1234567" → "1,234,567")
 export function formatNumberWithCommas(value: string): string {
   const digits = value.replace(/[^0-9]/g, '');

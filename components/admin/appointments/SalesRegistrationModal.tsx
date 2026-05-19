@@ -10,15 +10,7 @@ import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesDetailData } from '@/lib/types';
 import { getSydneyToday } from '@/lib/utils/appointment-utils';
-
-function formatAudAmount(value: number): string {
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
-}
+import { formatAudAmount, roundToCents } from '@/lib/utils';
 
 function formatPaymentTimestamp(iso: string): string {
   const d = new Date(iso);
@@ -171,7 +163,7 @@ export default function SalesRegistrationModal({
   // Recalculate per-item amount from unit/qty/discount/prepaid
   const normalizeItemAmount = (item: SalesItem): SalesItem => {
     const raw = (item.unitPrice * item.quantity) - item.discount - item.prepaidDeduction;
-    return { ...item, amount: Math.max(0, raw) };
+    return { ...item, amount: Math.max(0, roundToCents(raw)) };
   };
 
   // Apply prepaid deduction once against the total (not multiplied by item count).
@@ -265,11 +257,11 @@ export default function SalesRegistrationModal({
     const grossTotal = newSalesAmount - newDiscountAmount;
     const netDue = netDueAfterDeposit(grossTotal, depositCredit);
 
-    setSalesAmount(newSalesAmount);
-    setDiscountAmount(newDiscountAmount);
-    setTotal(grossTotal);
+    setSalesAmount(roundToCents(newSalesAmount));
+    setDiscountAmount(roundToCents(newDiscountAmount));
+    setTotal(roundToCents(grossTotal));
     // 받을 금액 = (합계 − 예수금) − 결제 − 정액권
-    setAmountToReceive(netDue - positivePaymentAmount - negativePaymentAmount - prepaidToUse);
+    setAmountToReceive(roundToCents(netDue - positivePaymentAmount - negativePaymentAmount - prepaidToUse));
   };
 
   // 판매 항목 추가 함수
@@ -733,7 +725,7 @@ export default function SalesRegistrationModal({
                                   const updatedItems = salesItems.map((i) => {
                                     if (i.id === item.id) {
                                       const newQuantity = Math.max(1, i.quantity - 1);
-                                      const newAmount = (i.unitPrice * newQuantity) - i.discount;
+                                      const newAmount = roundToCents((i.unitPrice * newQuantity) - i.discount);
                                       return {
                                         ...i,
                                         quantity: newQuantity,
@@ -759,7 +751,7 @@ export default function SalesRegistrationModal({
                                   const updatedItems = salesItems.map((i) => {
                                     if (i.id === item.id) {
                                       const newQuantity = i.quantity + 1;
-                                      const newAmount = (i.unitPrice * newQuantity) - i.discount;
+                                      const newAmount = roundToCents((i.unitPrice * newQuantity) - i.discount);
                                       return {
                                         ...i,
                                         quantity: newQuantity,
@@ -1115,7 +1107,7 @@ export default function SalesRegistrationModal({
           const updatedItems = salesItems.map((item) => {
             const update = updates.find((u) => u.itemId === item.id);
             if (update) {
-              const newAmount = (item.unitPrice * item.quantity) - update.discount;
+              const newAmount = roundToCents((item.unitPrice * item.quantity) - update.discount);
               // discountValue가 null이면 discountType과 discountValue를 undefined로 설정하여 셀을 비움
               const shouldClearDiscount = update.discountValue === null || update.discountValue === undefined || (update.discount === 0 && !update.discountValue);
               return {

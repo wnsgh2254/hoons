@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatNumberWithCommas } from '@/lib/utils';
+import { formatNumberWithCommas, formatAudNumber, roundToCents } from '@/lib/utils';
 import { addDigits, removeLastDigit, parseAmount } from '@/lib/utils/numeric-input-utils';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -169,11 +169,11 @@ export default function DiscountModal({
       if (discountInfo.type === 'percentage') {
         const percentage = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value);
         if (percentage > 0) {
-          finalDiscount = Math.round((item.unitPrice * item.quantity * percentage) / 100);
+          finalDiscount = roundToCents((item.unitPrice * item.quantity * percentage) / 100);
         }
       } else if (discountInfo.type === 'amount') {
         const amount = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value);
-        finalDiscount = amount;
+        finalDiscount = roundToCents(amount);
       } else if (discountInfo.type === 'category') {
         finalDiscount = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value) || item.discount;
       }
@@ -228,7 +228,7 @@ export default function DiscountModal({
         return `${value}%`;
       } else if (itemDiscount.type === 'amount') {
         const value = typeof itemDiscount.value === 'number' ? itemDiscount.value : Number(itemDiscount.value);
-        return value.toLocaleString();
+        return formatAudNumber(value);
       }
     }
 
@@ -237,9 +237,9 @@ export default function DiscountModal({
       return `${item.discountValue}%`;
     } else if (item.discountType === 'amount' && item.discountValue !== undefined) {
       const value = typeof item.discountValue === 'number' ? item.discountValue : Number(item.discountValue);
-      return value.toLocaleString();
+      return formatAudNumber(value);
     } else if (item.discountType === 'category' && item.discount > 0) {
-      return item.discount.toLocaleString();
+      return formatAudNumber(item.discount);
     }
     return '';
   };

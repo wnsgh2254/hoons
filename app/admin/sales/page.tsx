@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useStaff } from '@/hooks/useStaff';
 import { useServices } from '@/hooks/useServices';
 import { getSydneyToday } from '@/lib/utils/appointment-utils';
-import { formatPaymentMethod } from '@/lib/utils';
+import { formatPaymentMethod, formatAudNumber } from '@/lib/utils';
 import {
   AdminPageLayout,
   PageHeader,
@@ -507,32 +507,32 @@ function SalesSummaryTable({
             <tr className="border-b border-gray-100 hover:bg-gray-50/50">
               <td className="px-4 py-2 font-medium">판매</td>
               <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.service.quantity}</td>
-              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.sales.service.amount)}</td>
               <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.product.quantity}</td>
-              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.product.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.sales.product.amount)}</td>
               <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.membership.quantity}</td>
-              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
-              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.total.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.sales.membership.amount)}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.total)}</td>
             </tr>
             <tr className="border-b border-gray-100 hover:bg-gray-50/50">
               <td className="px-4 py-2 font-medium">환불</td>
               <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.service.quantity}</td>
-              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.service.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.refund.service.amount)}</td>
               <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.product.quantity}</td>
-              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.product.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.refund.product.amount)}</td>
               <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.membership.quantity}</td>
-              <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.refund.membership.amount.toLocaleString()}</td>
-              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.refund.total.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.refund.membership.amount)}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.refund.total)}</td>
             </tr>
             <tr className="bg-green-50 border-b-2 border-green-200">
               <td className="px-4 py-2 font-bold">판매 합계</td>
               <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.quantity}</td>
-              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.service.amount)}</td>
               <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.product.quantity}</td>
-              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.product.amount.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.product.amount)}</td>
               <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.membership.quantity}</td>
-              <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
-              <td className="px-4 py-2 text-center font-bold tabular-nums">{salesData_actual.sales.total.toLocaleString()}</td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.membership.amount)}</td>
+              <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(salesData_actual.sales.total)}</td>
             </tr>
           </tbody>
         </table>
@@ -555,31 +555,31 @@ function SalesSummaryTable({
             <tbody>
               <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                 <td className="px-4 py-2 font-medium">현금</td>
-                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.cash.service.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.cash.product.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.cash.membership.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.paymentDetails.cash.total.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.cash.service)}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.cash.product)}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.cash.membership)}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.cash.total)}</td>
               </tr>
               <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                 <td className="px-4 py-2 font-medium">카드</td>
-                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.service.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.product.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.membership.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.paymentDetails.card.total.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.card.service)}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.card.product)}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.card.membership)}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.paymentDetails.card.total)}</td>
               </tr>
               <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                 <td className="px-4 py-2 font-medium">계좌 이체</td>
-                <td className="px-4 py-2 text-center tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.service ?? 0).toLocaleString()}</td>
-                <td className="px-4 py-2 text-center tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.product ?? 0).toLocaleString()}</td>
-                <td className="px-4 py-2 text-center tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.membership ?? 0).toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.total ?? 0).toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.bank_transfer?.service ?? 0))}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.bank_transfer?.product ?? 0))}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.bank_transfer?.membership ?? 0))}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.bank_transfer?.total ?? 0))}</td>
               </tr>
               <tr className="bg-gray-50 border-t-2 border-gray-300">
                 <td className="px-4 py-2 font-bold">합계</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.product.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.membership.amount.toLocaleString()}</td>
-                <td className="px-4 py-2 text-center font-bold tabular-nums">{salesData_actual.sales.total.toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.service.amount)}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.product.amount)}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.membership.amount)}</td>
+                <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(salesData_actual.sales.total)}</td>
               </tr>
             </tbody>
           </table>
@@ -641,50 +641,50 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
         <tbody>
           <tr className="border-b border-gray-100 hover:bg-gray-50/50">
             <td className="px-4 py-2 font-medium">현금</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.deposit.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.depositRefund.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.paymentAtSale.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.uncollectedDeposit.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.cash.refund.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{depositData_actual.cash.total.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.cash.deposit)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.cash.depositRefund)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.cash.paymentAtSale)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.cash.uncollectedDeposit)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.cash.refund)}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositData_actual.cash.total)}</td>
           </tr>
           <tr className="border-b border-gray-100 hover:bg-gray-50/50">
             <td className="px-4 py-2 font-medium">카드</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.deposit.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.depositRefund.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.paymentAtSale.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.uncollectedDeposit.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.refund.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{depositData_actual.card.total.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.card.deposit)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.card.depositRefund)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.card.paymentAtSale)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.card.uncollectedDeposit)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositData_actual.card.refund)}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositData_actual.card.total)}</td>
           </tr>
           <tr className="border-b border-gray-100 hover:bg-gray-50/50">
             <td className="px-4 py-2 font-medium">계좌 이체</td>
-            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.deposit.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.depositRefund.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.paymentAtSale.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.uncollectedDeposit.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.refund.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{bankTransferDeposit.total.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(bankTransferDeposit.deposit)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(bankTransferDeposit.depositRefund)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(bankTransferDeposit.paymentAtSale)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(bankTransferDeposit.uncollectedDeposit)}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(bankTransferDeposit.refund)}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(bankTransferDeposit.total)}</td>
           </tr>
           <tr className="bg-blue-50 border-b-2 border-blue-200">
             <td className="px-4 py-2 font-bold">입금 합계</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.deposit + depositData_actual.card.deposit + bankTransferDeposit.deposit).toLocaleString()}
+              {formatAudNumber((depositData_actual.cash.deposit + depositData_actual.card.deposit + bankTransferDeposit.deposit))}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.depositRefund + depositData_actual.card.depositRefund + bankTransferDeposit.depositRefund).toLocaleString()}
+              {formatAudNumber((depositData_actual.cash.depositRefund + depositData_actual.card.depositRefund + bankTransferDeposit.depositRefund))}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.paymentAtSale + depositData_actual.card.paymentAtSale + bankTransferDeposit.paymentAtSale).toLocaleString()}
+              {formatAudNumber((depositData_actual.cash.paymentAtSale + depositData_actual.card.paymentAtSale + bankTransferDeposit.paymentAtSale))}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.uncollectedDeposit + depositData_actual.card.uncollectedDeposit + bankTransferDeposit.uncollectedDeposit).toLocaleString()}
+              {formatAudNumber((depositData_actual.cash.uncollectedDeposit + depositData_actual.card.uncollectedDeposit + bankTransferDeposit.uncollectedDeposit))}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.refund + depositData_actual.card.refund + bankTransferDeposit.refund).toLocaleString()}
+              {formatAudNumber((depositData_actual.cash.refund + depositData_actual.card.refund + bankTransferDeposit.refund))}
             </td>
             <td className="px-4 py-2 text-center font-bold tabular-nums">
-              {(depositData_actual.cash.total + depositData_actual.card.total + bankTransferDeposit.total).toLocaleString()}
+              {formatAudNumber((depositData_actual.cash.total + depositData_actual.card.total + bankTransferDeposit.total))}
             </td>
           </tr>
         </tbody>
@@ -751,35 +751,35 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
           <tr className="border-b border-gray-100 hover:bg-gray-50/50">
             <td className="px-4 py-2 font-medium">판매</td>
             <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.service.quantity}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(revenueData_actual.sales.service.amount)}</td>
             <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.product.quantity}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.sales.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.sales.total.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(revenueData_actual.sales.product.amount)}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(revenueData_actual.sales.total)}</td>
           </tr>
           <tr className="border-b border-gray-100 hover:bg-gray-50/50">
             <td className="px-4 py-2 font-medium">정액권 차감</td>
             <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.service.quantity}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(revenueData_actual.membershipDeduction.service.amount)}</td>
             <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.product.quantity}</td>
-            <td className="px-4 py-2 text-center tabular-nums">{revenueData_actual.membershipDeduction.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.membershipDeduction.total.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(revenueData_actual.membershipDeduction.product.amount)}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(revenueData_actual.membershipDeduction.total)}</td>
           </tr>
           <tr className="bg-yellow-50 border-b-2 border-yellow-200">
             <td className="px-4 py-2 font-bold">매출 합계</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.sales.service.quantity + revenueData_actual.membershipDeduction.service.quantity}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.total.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(revenueData_actual.total.service.amount)}</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.sales.product.quantity + revenueData_actual.membershipDeduction.product.quantity}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.total.product.amount.toLocaleString()}</td>
-            <td className="px-4 py-2 text-center font-bold tabular-nums">{revenueData_actual.total.total.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(revenueData_actual.total.product.amount)}</td>
+            <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(revenueData_actual.total.total)}</td>
           </tr>
           <tr className="bg-gray-50 border-t border-gray-200">
             <td className="px-4 py-2 font-medium">고객 수 및 객 단가</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.service.quantity}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.service.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(revenueData_actual.customers.service.amount)}</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.product.quantity}</td>
-            <td className="px-4 py-2 text-center font-semibold tabular-nums">{revenueData_actual.customers.product.amount.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(revenueData_actual.customers.product.amount)}</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {revenueData_actual.customers.total.quantity} / {revenueData_actual.customers.total.amount.toLocaleString()}
+              {revenueData_actual.customers.total.quantity} / {formatAudNumber(revenueData_actual.customers.total.amount)}
             </td>
           </tr>
         </tbody>
@@ -954,35 +954,35 @@ function ByStaffSalesTab({
                         </td>
                         <td className="px-4 py-2 font-medium">판매</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.service.amount)}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.amount.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.sales.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.product.amount)}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.sales.subtotal)}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.amount.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.sales.total.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.membership.amount)}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.sales.total)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="px-4 py-2 font-medium !border-l !border-gray-200">회원권 차감</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.service.amount)}</td>
                         <td className="px-4 py-2 text-center"></td>
                         <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
                         <td className="px-4 py-2 text-center"></td>
                         <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.membershipDeduction.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
                       </tr>
                       <tr className="bg-yellow-50 border-b-2 border-yellow-200">
                         <td className="px-4 py-2 font-bold !border-l !border-gray-200">합계</td>
                         <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.total.service.amount.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.service.amount)}</td>
                         <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.total.product.amount.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{staff.total.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.product.amount)}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.subtotal)}</td>
                         <td className="px-4 py-2 text-center"></td>
                         <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-bold tabular-nums">{staff.total.subtotal.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(staff.total.subtotal)}</td>
                       </tr>
                     </React.Fragment>
                   ))}
@@ -1209,11 +1209,11 @@ function ByItemSalesTab({
                         <td className="px-4 py-2">{item.serviceName}</td>
                       )}
                       <td className="px-4 py-2 text-center tabular-nums">{item.sales.quantity}</td>
-                      <td className="px-4 py-2 text-center tabular-nums">{item.sales.amount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(item.sales.amount)}</td>
                       <td className="px-4 py-2 text-center tabular-nums">{item.membershipDeduction.quantity}</td>
-                      <td className="px-4 py-2 text-center tabular-nums">{item.membershipDeduction.amount.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{item.total.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-center tabular-nums">{item.avgPrice.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(item.membershipDeduction.amount)}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(item.total)}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(item.avgPrice)}</td>
                     </tr>
                   ))}
                   {summary && (
@@ -1223,11 +1223,11 @@ function ByItemSalesTab({
                         <td className="px-4 py-2"></td>
                       )}
                       <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.salesQuantity}</td>
-                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.salesAmount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(summary.salesAmount)}</td>
                       <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.membershipQuantity}</td>
-                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.membershipAmount.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-center font-bold tabular-nums">{summary.totalAmount.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.avgPrice.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(summary.membershipAmount)}</td>
+                      <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(summary.totalAmount)}</td>
+                      <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(summary.avgPrice)}</td>
                     </tr>
                   )}
                 </tbody>
@@ -1838,7 +1838,7 @@ function SalesHistoryModal({
         <div className="flex flex-col gap-1 items-end">
           {item.items.map((it: any, i: number) => (
             <div key={i}>
-              {Number(it.discount) > 0 ? Number(it.discount).toLocaleString() : '-'}
+              {Number(it.discount) > 0 ? formatAudNumber(Number(it.discount)) : '-'}
             </div>
           ))}
         </div>
@@ -1854,8 +1854,8 @@ function SalesHistoryModal({
             <div key={i} className="whitespace-nowrap">
               {Number(it.amount ?? it.total_amount)
                 ? (item._isRefund
-                    ? `-${Number(it.amount ?? it.total_amount).toLocaleString()}`
-                    : Number(it.amount ?? it.total_amount).toLocaleString())
+                    ? `-${formatAudNumber(Number(it.amount ?? it.total_amount))}`
+                    : formatAudNumber(Number(it.amount ?? it.total_amount)))
                 : '-'}
             </div>
           ))}
@@ -1880,14 +1880,14 @@ function SalesHistoryModal({
           const refundTotal =
             item.refund_total ||
             item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0);
-          return <span className="text-red-500 font-medium whitespace-nowrap">-{Number(refundTotal).toLocaleString()}</span>;
+          return <span className="text-red-500 font-medium whitespace-nowrap">-{formatAudNumber(Number(refundTotal))}</span>;
         }
         const totalAmount = item.items.reduce(
           (sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0),
           0,
         );
         const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-        return <span className="whitespace-nowrap">{totalPayment > 0 ? totalPayment.toLocaleString() : totalAmount.toLocaleString()}</span>;
+        return <span className="whitespace-nowrap">{formatAudNumber(totalPayment > 0 ? totalPayment : totalAmount)}</span>;
       },
     },
     {

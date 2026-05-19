@@ -5,6 +5,7 @@ import type { SalesDetailItem, SalesDetailData } from '@/lib/types';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
+import { formatAudAmount } from '@/lib/utils';
 
 /** Same rule as SalesRegistrationModal — gross minus deposit credit (capped) */
 function netDueAfterDeposit(grossTotal: number, depositPaid: number): number {
@@ -144,16 +145,16 @@ export default function SalesDetailModal({
                       data.items.map((item, idx) => (
                         <tr key={idx} className="border-t border-gray-100">
                           <td className="py-3 px-4 text-sm text-gray-900">{item.item_name || '-'}</td>
-                          <td className="py-3 px-4 text-sm text-gray-900">{Number(item.unit_price || 0).toLocaleString()}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900">{formatAudAmount(Number(item.unit_price || 0))}</td>
                           <td className="py-3 px-4 text-sm text-gray-900">{item.quantity || 1}</td>
                           <td className="py-3 px-4 text-sm text-gray-900">
-                            {item.discount > 0 ? Number(item.discount).toLocaleString() : ''}
+                            {item.discount > 0 ? formatAudAmount(Number(item.discount)) : ''}
                           </td>
-                          <td className="py-3 px-4 text-sm text-gray-900">{Number(item.amount || 0).toLocaleString()}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900">{formatAudAmount(Number(item.amount || 0))}</td>
                           <td className="py-3 px-4 text-sm text-gray-900">{item.manager || '-'}</td>
                           <td className="py-3 px-4 text-sm text-gray-900">{item.sales_classification || '-'}</td>
                           <td className="py-3 px-4 text-sm text-gray-900">
-                            {item.prepaid_deduction > 0 ? item.prepaid_deduction.toLocaleString() : ''}
+                            {item.prepaid_deduction > 0 ? formatAudAmount(Number(item.prepaid_deduction)) : ''}
                           </td>
                         </tr>
                       ))
@@ -176,19 +177,19 @@ export default function SalesDetailModal({
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-700">판매 금액</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {Number(data.sales_amount || 0).toLocaleString()}
+                    {formatAudAmount(Number(data.sales_amount || 0))}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-700">할인 금액</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {Number(data.discount_amount || 0).toLocaleString()}
+                    {formatAudAmount(Number(data.discount_amount || 0))}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-gray-900">합계</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {Number(data.total_amount || 0).toLocaleString()}
+                    {formatAudAmount(Number(data.total_amount || 0))}
                   </span>
                 </div>
 
@@ -196,7 +197,7 @@ export default function SalesDetailModal({
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-700">예수금 (납부됨)</span>
                     <span className="text-sm font-medium text-emerald-700">
-                      {Number(impliedDepositCredit).toLocaleString()}
+                      {formatAudAmount(Number(impliedDepositCredit))}
                     </span>
                   </div>
                 )}
@@ -206,19 +207,19 @@ export default function SalesDetailModal({
                     {displayCash > 0 && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-700">현금</span>
-                        <span className="font-medium text-gray-900">{Number(displayCash).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{formatAudAmount(Number(displayCash))}</span>
                       </div>
                     )}
                     {displayCard > 0 && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-700">카드</span>
-                        <span className="font-medium text-gray-900">{Number(displayCard).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{formatAudAmount(Number(displayCard))}</span>
                       </div>
                     )}
                     {displayBank > 0 && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-700">계좌이체</span>
-                        <span className="font-medium text-gray-900">{Number(displayBank).toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{formatAudAmount(Number(displayBank))}</span>
                       </div>
                     )}
                     {totalPayment > 0 && data.created_at && (
@@ -234,7 +235,7 @@ export default function SalesDetailModal({
                   <span
                     className={`text-sm font-semibold ${amountToReceive > 0 ? 'text-red-600' : 'text-gray-900'}`}
                   >
-                    {amountToReceive.toLocaleString()}
+                    {formatAudAmount(amountToReceive)}
                   </span>
                 </div>
               </div>
