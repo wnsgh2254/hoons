@@ -399,9 +399,21 @@ export default function NewBookingModal({
   const prevIsOpenRef = useRef(false);
   useEffect(() => {
     const justOpened = isOpen && !prevIsOpenRef.current;
+    const justClosed = !isOpen && prevIsOpenRef.current;
     prevIsOpenRef.current = isOpen;
+
+    if (justClosed) {
+      resetBookingFormDraft();
+      return;
+    }
+
     if (!justOpened) return;
     if (editingBooking?.id) return;
+
+    // Comment: New booking — never reuse the previous appointment memo
+    setMemo('');
+    setNewBookingMemo('');
+    setColorLabel(null);
 
     // Comment: Use the pre-filled date from the clicked slot (newBookingDate), fall back to selectedDate
     const dateToUse = newBookingDate || selectedDate;
@@ -535,8 +547,15 @@ export default function NewBookingModal({
   // Comment: Service list for admin booking modal comes from booking_modal_services table.
   const categoryServices = Array.isArray(effectiveServices) ? effectiveServices : [];
 
-  const handleCancel = () => {
-    onClose();
+  // Comment: Clear draft fields so each booking gets its own memo (not carried over from the last one).
+  const resetBookingFormDraft = () => {
+    setMemo('');
+    setNewBookingMemo('');
+    setColorLabel(null);
+    setIsUnregisteredBooking(false);
+    setUnregisteredName('');
+    setUnregisteredPhone('');
+    setUnregisteredCustomerError(null);
     setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
     setNewBookingSelectedCustomerId(null);
     setNewBookingCustomerSearchResults([]);
@@ -547,13 +566,13 @@ export default function NewBookingModal({
     setIsCustomerDropdownOpen(false);
     setCustomerDetail(null);
     setCustomerStats({});
-    setMemo('');
-    setColorLabel(null);
-    setIsUnregisteredBooking(false);
-    setUnregisteredName('');
-    setUnregisteredPhone('');
-    setUnregisteredCustomerError(null);
     setSlotServiceSelections([[]]);
+    editPrefillDoneForIdRef.current = null;
+  };
+
+  const handleCancel = () => {
+    resetBookingFormDraft();
+    onClose();
   };
 
   const handleSubmit = async () => {
@@ -726,9 +745,8 @@ export default function NewBookingModal({
         const editSuccessMessage = '예약이 수정되었습니다.';
         setBookingSuccessMessage(editSuccessMessage);
         onSuccess?.(editSuccessMessage);
+        resetBookingFormDraft();
         onClose();
-        setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
-        setSlotServiceSelections([[]]);
         const weekStart = getWeekStart(selectedDate);
         const weekEnd = getWeekEnd(selectedDate);
         const res = await fetch(
@@ -788,9 +806,8 @@ export default function NewBookingModal({
       setBookingSuccessMessage(successMessage);
       onSuccess?.(successMessage);
 
+      resetBookingFormDraft();
       onClose();
-      setNewBookingTimeSlots([{ ...DEFAULT_NEW_BOOKING_TIME_SLOT }]);
-      setSlotServiceSelections([[]]);
 
       // Comment: Refetch full week range (same as main schedule) so UI shows correct data
       const weekStart = getWeekStart(selectedDate);
