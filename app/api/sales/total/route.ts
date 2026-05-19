@@ -209,6 +209,12 @@ export async function GET(request: NextRequest) {
         membership: 0,
         total: 0,
       },
+      bank_transfer: {
+        service: 0,
+        product: 0,
+        membership: 0,
+        total: 0,
+      },
     };
 
     salesData.forEach((sale: any) => {
@@ -229,7 +235,8 @@ export async function GET(request: NextRequest) {
 
       const paymentBuckets = [
         { key: 'cash' as const, amount: toNum(sale.cash_amount) },
-        { key: 'card' as const, amount: toNum(sale.card_amount) + toNum(sale.bank_transfer_amount) },
+        { key: 'card' as const, amount: toNum(sale.card_amount) },
+        { key: 'bank_transfer' as const, amount: toNum(sale.bank_transfer_amount) },
       ];
 
       paymentBuckets.forEach(({ key, amount }) => {
@@ -263,10 +270,24 @@ export async function GET(request: NextRequest) {
         refund: 0,
         total: 0,
       },
+      bank_transfer: {
+        deposit: 0,
+        depositRefund: 0,
+        paymentAtSale: 0,
+        uncollectedDeposit: 0,
+        refund: 0,
+        total: 0,
+      },
+    };
+
+    const resolveDepositMethod = (method: string): 'cash' | 'card' | 'bank_transfer' => {
+      if (method === 'cash') return 'cash';
+      if (method === 'bank_transfer') return 'bank_transfer';
+      return 'card';
     };
 
     paymentsData.forEach((payment: any) => {
-      const method = payment.method === 'cash' ? 'cash' : 'card';
+      const method = resolveDepositMethod(String(payment.method || 'card'));
       const amount = toNum(payment.amount);
 
       if (payment.type === 'deposit') {
@@ -286,7 +307,8 @@ export async function GET(request: NextRequest) {
 
       const paymentBuckets = [
         { key: 'cash' as const, amount: toNum(refund.cash_amount) },
-        { key: 'card' as const, amount: toNum(refund.card_amount) + toNum(refund.bank_transfer_amount) },
+        { key: 'card' as const, amount: toNum(refund.card_amount) },
+        { key: 'bank_transfer' as const, amount: toNum(refund.bank_transfer_amount) },
       ];
 
       paymentBuckets.forEach(({ key, amount }) => {

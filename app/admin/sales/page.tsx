@@ -455,6 +455,12 @@ function SalesSummaryTable({
         membership: 0,
         total: 0,
       },
+      bank_transfer: {
+        service: 0,
+        product: 0,
+        membership: 0,
+        total: 0,
+      },
     },
   };
 
@@ -561,6 +567,13 @@ function SalesSummaryTable({
                 <td className="px-4 py-2 text-center tabular-nums">{salesData_actual.paymentDetails.card.membership.toLocaleString()}</td>
                 <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.paymentDetails.card.total.toLocaleString()}</td>
               </tr>
+              <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+                <td className="px-4 py-2 font-medium">계좌 이체</td>
+                <td className="px-4 py-2 text-center tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.service ?? 0).toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.product ?? 0).toLocaleString()}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.membership ?? 0).toLocaleString()}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{(salesData_actual.paymentDetails.bank_transfer?.total ?? 0).toLocaleString()}</td>
+              </tr>
               <tr className="bg-gray-50 border-t-2 border-gray-300">
                 <td className="px-4 py-2 font-bold">합계</td>
                 <td className="px-4 py-2 text-center font-semibold tabular-nums">{salesData_actual.sales.service.amount.toLocaleString()}</td>
@@ -597,9 +610,18 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
       refund: 0,
       total: 0,
     },
+    bank_transfer: {
+      deposit: 0,
+      depositRefund: 0,
+      paymentAtSale: 0,
+      uncollectedDeposit: 0,
+      refund: 0,
+      total: 0,
+    },
   };
 
   const depositData_actual = depositData || data;
+  const bankTransferDeposit = depositData_actual.bank_transfer ?? data.bank_transfer;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -635,25 +657,34 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
             <td className="px-4 py-2 text-center tabular-nums">{depositData_actual.card.refund.toLocaleString()}</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">{depositData_actual.card.total.toLocaleString()}</td>
           </tr>
+          <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+            <td className="px-4 py-2 font-medium">계좌 이체</td>
+            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.deposit.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.depositRefund.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.paymentAtSale.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.uncollectedDeposit.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center tabular-nums">{bankTransferDeposit.refund.toLocaleString()}</td>
+            <td className="px-4 py-2 text-center font-semibold tabular-nums">{bankTransferDeposit.total.toLocaleString()}</td>
+          </tr>
           <tr className="bg-blue-50 border-b-2 border-blue-200">
             <td className="px-4 py-2 font-bold">입금 합계</td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.deposit + depositData_actual.card.deposit).toLocaleString()}
+              {(depositData_actual.cash.deposit + depositData_actual.card.deposit + bankTransferDeposit.deposit).toLocaleString()}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.depositRefund + depositData_actual.card.depositRefund).toLocaleString()}
+              {(depositData_actual.cash.depositRefund + depositData_actual.card.depositRefund + bankTransferDeposit.depositRefund).toLocaleString()}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.paymentAtSale + depositData_actual.card.paymentAtSale).toLocaleString()}
+              {(depositData_actual.cash.paymentAtSale + depositData_actual.card.paymentAtSale + bankTransferDeposit.paymentAtSale).toLocaleString()}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.uncollectedDeposit + depositData_actual.card.uncollectedDeposit).toLocaleString()}
+              {(depositData_actual.cash.uncollectedDeposit + depositData_actual.card.uncollectedDeposit + bankTransferDeposit.uncollectedDeposit).toLocaleString()}
             </td>
             <td className="px-4 py-2 text-center font-semibold tabular-nums">
-              {(depositData_actual.cash.refund + depositData_actual.card.refund).toLocaleString()}
+              {(depositData_actual.cash.refund + depositData_actual.card.refund + bankTransferDeposit.refund).toLocaleString()}
             </td>
             <td className="px-4 py-2 text-center font-bold tabular-nums">
-              {(depositData_actual.cash.total + depositData_actual.card.total).toLocaleString()}
+              {(depositData_actual.cash.total + depositData_actual.card.total + bankTransferDeposit.total).toLocaleString()}
             </td>
           </tr>
         </tbody>
