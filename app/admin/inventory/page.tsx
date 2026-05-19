@@ -2738,7 +2738,22 @@ function PurchaseEditModal({ mode, shopId, onClose }: PurchaseEditModalProps) {
           shopId={shopId}
           onClose={() => setShowItemPicker(false)}
           onConfirm={(selected) => {
-            setItems(selected);
+            setItems((prev) => {
+              const merged = [...prev];
+              for (const row of selected) {
+                const idx = merged.findIndex((p) => p.inventoryItemId === row.inventoryItemId);
+                if (idx >= 0) {
+                  merged[idx] = {
+                    ...merged[idx],
+                    unitPrice: row.unitPrice,
+                    quantity: merged[idx].quantity + row.quantity,
+                  };
+                } else {
+                  merged.push(row);
+                }
+              }
+              return merged;
+            });
             setShowItemPicker(false);
           }}
         />
