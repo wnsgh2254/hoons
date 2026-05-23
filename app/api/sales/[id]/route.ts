@@ -4,6 +4,10 @@ import {
   adjustInventoryStockForSaleItem,
   adjustPrepaidBalance,
 } from '@/lib/sales-reconciliation';
+import {
+  deleteLinkedBookingForSale,
+  resolveBookingIdForSale,
+} from '@/lib/sale-booking-link';
 
 export async function GET(
   request: NextRequest,
@@ -81,6 +85,30 @@ export async function DELETE(
       );
     }
 
+    const saleId = Number(id);
+    const { data: saleRow, error: saleLookupError } = await supabase
+      .from('sales')
+      .select('id, booking_id, customer_id, shop_id, sales_date, sales_time')
+      .eq('id', saleId)
+      .maybeSingle();
+
+    if (saleLookupError) {
+      console.error('Error loading sale before delete:', saleLookupError);
+      return NextResponse.json(
+        { error: '판매를 불러오지 못했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    if (!saleRow) {
+      return NextResponse.json(
+        { error: '판매를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    const linkedBookingId = await resolveBookingIdForSale(supabase, saleRow);
+
     // Delete sales_items first (child rows)
     const { error: itemsError } = await supabase
       .from('sales_items')
@@ -99,7 +127,7 @@ export async function DELETE(
     const { error: headerError } = await supabase
       .from('sales')
       .delete()
-      .eq('id', Number(id));
+      .eq('id', saleId);
 
     if (headerError) {
       console.error('Error deleting sale:', headerError);
@@ -109,7 +137,19 @@ export async function DELETE(
       );
     }
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    if (linkedBookingId) {
+      try {
+        await deleteLinkedBookingForSale(supabase, linkedBookingId);
+      } catch (bookingDeleteError: any) {
+        console.error('Error deleting linked booking after sale delete:', bookingDeleteError);
+        return NextResponse.json(
+          { error: bookingDeleteError.message || '연결된 예약 삭제에 실패했습니다.' },
+          { status: 500 }
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, deleted_booking_id: linkedBookingId }, { status: 200 });
   } catch (error: any) {
     console.error('Error in sales DELETE route:', error);
     return NextResponse.json(
@@ -145,6 +185,22 @@ export async function PUT(
         { status: 400 }
       );
     }
+
+    const { data: existingSale, error: existingSaleError } = await supabase
+      .from('sales')
+      .select('shop_id, booking_id')
+      .eq('id', Number(id))
+      .maybeSingle();
+
+    if (existingSaleError || !existingSale) {
+      return NextResponse.json(
+        { error: '판매를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    const resolvedShopId =
+      shop_id != null && shop_id !== '' ? Number(shop_id) : existingSale.shop_id ?? null;
 
     const { data: customer, error: customerError } = await supabase
       .from('customers')
@@ -203,7 +259,8 @@ export async function PUT(
         customer_id,
         // Comment: Snapshot the customer name so historical sales keep their display name.
         customer_name: customer.name || null,
-        shop_id: shop_id || null,
+        shop_id: resolvedShopId,
+        booking_id: existingSale.booking_id ?? null,
         sales_date: sales_date || new Date().toISOString().split('T')[0],
         sales_time: sales_time || new Date().toTimeString().slice(0, 5),
         sales_amount: sales_amount || 0,
@@ -277,7 +334,7 @@ export async function PUT(
       const delta = newQty - oldQty;
       if (delta !== 0) {
         await adjustInventoryStockForSaleItem(supabase, {
-          shopId: shop_id,
+          shopId: resolvedShopId,
           itemName,
           quantityDelta: -delta,
         });
@@ -287,7 +344,7 @@ export async function PUT(
 
     for (const [itemName, qty] of newProductQuantityMap.entries()) {
       await adjustInventoryStockForSaleItem(supabase, {
-        shopId: shop_id,
+        shopId: resolvedShopId,
         itemName,
         quantityDelta: -qty,
       });

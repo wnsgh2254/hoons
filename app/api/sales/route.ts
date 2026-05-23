@@ -24,15 +24,16 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customer_id');
+    const bookingId = searchParams.get('booking_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
     const designerId = searchParams.get('designer_id');
     const itemType = searchParams.get('item_type');
     const shopId = searchParams.get('shop_id');
 
-    if (!customerId && !startDate) {
+    if (!customerId && !bookingId && !startDate) {
       return NextResponse.json(
-        { error: 'customer_id or start_date is required' },
+        { error: 'customer_id, booking_id, or start_date is required' },
         { status: 400 },
       );
     }
@@ -49,6 +50,9 @@ export async function GET(request: NextRequest) {
 
     if (customerId) {
       query = query.eq('customer_id', customerId);
+    }
+    if (bookingId) {
+      query = query.eq('booking_id', Number(bookingId));
     }
     if (startDate) {
       query = query.gte('sales_date', startDate);
@@ -161,6 +165,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const linkedBookingId =
+      booking_id != null && booking_id !== '' && !Number.isNaN(Number(booking_id))
+        ? Number(booking_id)
+        : null;
+
     const { data: saleHeader, error: headerError } = await supabase
       .from('sales')
       .insert({
@@ -168,6 +177,7 @@ export async function POST(request: NextRequest) {
         // Comment: Snapshot the customer name so historical sales keep their display name.
         customer_name: customer.name || null,
         shop_id: shop_id || null,
+        booking_id: linkedBookingId,
         sales_date: sales_date || new Date().toISOString().split('T')[0],
         sales_time: sales_time || new Date().toTimeString().slice(0, 5),
         sales_amount: sales_amount || 0,

@@ -42,6 +42,7 @@ import RefundRegistrationModal from '@/components/admin/appointments/RefundRegis
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
+import { fetchSaleDetailForBooking } from '@/lib/fetch-sale-detail-for-booking';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import {
   GRID_START_HOUR,
@@ -2064,62 +2065,9 @@ export default function AppointmentsManagementPage() {
         setBookingMenuPosition(null);
         bookingMenuOriginalPositionRef.current = null;
 
-        const customerId = (booking as any).customer?.id ?? (booking as any).customer_id;
-        if (!customerId) return;
-
         try {
-          const res = await fetch(`/api/sales?customer_id=${customerId}`);
-          if (!res.ok) return;
-          const { sales = [] } = await res.json();
-          if (!sales.length) return;
-
-          const bookingDate = (booking as any).booking_date;
-          const bookingTime = (booking as any).booking_time || '';
-          const sameDay = sales.filter((s: any) => s.sales_date === bookingDate);
-          const candidates = sameDay.length > 0 ? sameDay : sales;
-          const sale = candidates.reduce((best: any, cur: any) => {
-            if (!best) return cur;
-            const bestDiff = Math.abs(String(best.sales_time || '').localeCompare(bookingTime));
-            const curDiff = Math.abs(String(cur.sales_time || '').localeCompare(bookingTime));
-            return curDiff < bestDiff ? cur : best;
-          }, null as any);
-          if (!sale) return;
-
-          const customerName =
-            (booking as any).customer?.name || (booking as any).customer_name || '';
-          const salesDetail = {
-            id: sale.id,
-            customer_id: sale.customer_id ?? customerId,
-            shop_id: sale.shop_id ?? null,
-            customer_name: customerName,
-            sales_date: sale.sales_date,
-            sales_time: sale.sales_time || '',
-            sales_amount: sale.sales_amount || 0,
-            discount_amount: sale.discount_amount || 0,
-            total_amount: sale.total_amount || 0,
-            cash_amount: sale.cash_amount || 0,
-            card_amount: sale.card_amount || 0,
-            bank_transfer_amount: sale.bank_transfer_amount || 0,
-            payment_method: sale.payment_method || null,
-            point_accumulation: sale.point_accumulation || 0,
-            memo: sale.memo || null,
-            items: (sale.sales_items || []).map((i: any) => ({
-              item_type: i.item_type || 'service',
-              item_name: i.item_name || '-',
-              unit_price: Number(i.unit_price) || 0,
-              quantity: Number(i.quantity) || 1,
-              discount: Number(i.discount) || 0,
-              discount_type: i.discount_type || null,
-              discount_value: i.discount_value ?? null,
-              amount: Number(i.amount) || 0,
-              manager: i.manager || null,
-              sales_classification: i.sales_classification || null,
-              prepaid_deduction: Number(i.prepaid_deduction) || 0,
-            })),
-            created_by: sale.created_by,
-            created_at: sale.created_at,
-            edit_history: sale.edit_history || [],
-          };
+          const salesDetail = await fetchSaleDetailForBooking(booking as any);
+          if (!salesDetail) return;
           setSalesDetailData(salesDetail);
           setIsSalesDetailModalOpen(true);
         } catch (err) {
@@ -2713,6 +2661,12 @@ export default function AppointmentsManagementPage() {
                               return;
                             }
                             if (booking.id) setSalesLinkedBookingId(booking.id);
+                            setSalesDefaultDate((booking as any).booking_date || selectedDate);
+                            setSalesDefaultTime(
+                              typeof (booking as any).booking_time === 'string' && (booking as any).booking_time.length >= 5
+                                ? (booking as any).booking_time.slice(0, 5)
+                                : null,
+                            );
                             setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
                             setSalesDefaultManager((booking as any).designer?.name || null);
                             setSalesLinkedDepositPaid(
@@ -2742,6 +2696,7 @@ export default function AppointmentsManagementPage() {
                               bookingMenuOriginalPositionRef.current = null;
                             }
                           }}
+                          onViewSaleDetail={scheduleDayViewMenuHandlers.onViewSaleDetail}
                           movingBooking={movingBooking}
                           onSelectMoveTarget={(target) => {
                             if (!movingBooking) return;
@@ -4359,6 +4314,9 @@ export default function AppointmentsManagementPage() {
           setEditingSaleData(currentData);
           setEditingSaleId(currentData.id);
           setSalesRegistrationShopId(currentData.shop_id || null);
+          if (currentData.booking_id) {
+            setSalesLinkedBookingId(currentData.booking_id);
+          }
           setIsSalesRegistrationModalOpen(true);
         }}
         onDelete={() => {
@@ -4372,7 +4330,7 @@ export default function AppointmentsManagementPage() {
       <AlertModal
         isOpen={isDeleteSaleAlertOpen}
         title="판매 삭제"
-        message="이 판매 내역을 삭제하시겠습니까? 삭제된 내역은 복구할 수 없습니다."
+        message="이 판매 내역을 삭제하시겠습니까? 연결된 예약도 함께 삭제되며, 삭제된 내역은 복구할 수 없습니다."
         highlightText="복구할 수 없습니다"
         variant="confirm"
         zIndex={Z.MODAL_ALERT_TOP}
@@ -4393,6 +4351,7 @@ export default function AppointmentsManagementPage() {
             if (viewingCustomerId) {
               await loadCustomerInfo(viewingCustomerId);
             }
+            await refreshBookings();
           } catch (error: any) {
             console.error('판매 삭제 오류:', error);
             alert(error.message || '판매 삭제 중 오류가 발생했습니다.');

@@ -10,6 +10,7 @@ export function mapSaleRecordToDetailData(sale: any, customerNameFallback = ''):
     id: sale.id,
     customer_id: sale.customer_id ?? 0,
     shop_id: sale.shop_id ?? null,
+    booking_id: sale.booking_id ?? null,
     customer_name: name,
     sales_date: sale.sales_date,
     sales_time: sale.sales_time || '',

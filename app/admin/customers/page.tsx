@@ -325,6 +325,7 @@ export default function CustomersPage() {
             id: item.id,
             customer_id: item.customer_id ?? viewingCustomerId ?? 0,
             shop_id: item.shop_id ?? null,
+            booking_id: item.booking_id ?? null,
             customer_name: viewingCustomer?.name || '',
             sales_date: item.sales_date,
             sales_time: item.sales_time || '',

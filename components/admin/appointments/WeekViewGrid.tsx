@@ -96,6 +96,7 @@ interface WeekViewGridProps {
   onBookingStatusChange?: (booking: BookingWithRelations, newStatus: 'ARRIVED' | 'NOSHOW' | 'BOOKED') => Promise<void>;
   onCancelBooking?: (booking: BookingWithRelations) => void;
   onRegisterSale?: (booking: BookingWithRelations) => void;
+  onViewSaleDetail?: (booking: BookingWithRelations) => void;
   movingBooking: BookingWithRelations | null;
   weekViewAvailableDates?: Set<string>;
   setNewBookingDate?: (date: string) => void;
@@ -146,6 +147,7 @@ export default function WeekViewGrid({
   onBookingStatusChange,
   onCancelBooking,
   onRegisterSale,
+  onViewSaleDetail,
   movingBooking,
   onSelectMoveTarget,
   weekViewAvailableDates = new Set<string>(),
@@ -1345,8 +1347,7 @@ export default function WeekViewGrid({
                               }
                             }}
                             onViewSaleDetail={(booking) => {
-                              // TODO: 판매 상세 구현
-                              console.log('View sale detail:', booking.id);
+                              onViewSaleDetail?.(booking);
                               setBookingMenuOpen(null);
                               setBookingMenuPosition(null);
                               if (bookingMenuOriginalPositionRef.current) {

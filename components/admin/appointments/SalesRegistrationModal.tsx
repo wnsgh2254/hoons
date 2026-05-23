@@ -345,6 +345,7 @@ export default function SalesRegistrationModal({
         setMemo(initialData.memo || '');
         setSalesDate(initialData.sales_date);
         setSalesTime(initialData.sales_time);
+        setSelectedShopId(initialData.shop_id ?? shopId ?? null);
         setPointAccumulation(initialData.point_accumulation || 0);
         const newSalesAmount = mappedItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
         const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
