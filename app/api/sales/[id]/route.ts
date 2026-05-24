@@ -8,6 +8,10 @@ import {
   deleteLinkedBookingForSale,
   resolveBookingIdForSale,
 } from '@/lib/sale-booking-link';
+import {
+  normalizePaymentAmounts,
+  resolvePaymentMethodFromAmounts,
+} from '@/lib/sales-payment-utils';
 
 export async function GET(
   request: NextRequest,
@@ -252,6 +256,10 @@ export async function PUT(
       );
     });
 
+    const normalizedPayments = normalizePaymentAmounts(payment_amounts);
+    const resolvedPaymentMethod =
+      resolvePaymentMethodFromAmounts(normalizedPayments) || payment_method || null;
+
     // 1. Update the sales header (no edit_history column in DB — omit to avoid PGRST204)
     const { data: updatedSale, error: headerError } = await supabase
       .from('sales')
@@ -266,10 +274,10 @@ export async function PUT(
         sales_amount: sales_amount || 0,
         discount_amount: discount_amount || 0,
         total_amount: total || 0,
-        payment_method: payment_method || null,
-        cash_amount: payment_amounts?.cash || 0,
-        card_amount: payment_amounts?.card || 0,
-        bank_transfer_amount: payment_amounts?.bank_transfer || 0,
+        payment_method: resolvedPaymentMethod,
+        cash_amount: normalizedPayments.cash,
+        card_amount: normalizedPayments.card,
+        bank_transfer_amount: normalizedPayments.bank_transfer,
         point_accumulation: point_accumulation || 0,
         memo: memo || null,
       })

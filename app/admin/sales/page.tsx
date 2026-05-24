@@ -1397,9 +1397,9 @@ function SalesHistoryModal({
           prepaid_deduction: item.prepaid_deduction,
         })),
         payments: [
-          ...(Number(sale.cash_amount) > 0 ? [{ method: 'cash', amount: Number(sale.cash_amount) }] : []),
-          ...(Number(sale.card_amount) > 0 ? [{ method: 'card', amount: Number(sale.card_amount) }] : []),
-          ...(Number(sale.bank_transfer_amount) > 0
+          ...(Number(sale.cash_amount) !== 0 ? [{ method: 'cash', amount: Number(sale.cash_amount) }] : []),
+          ...(Number(sale.card_amount) !== 0 ? [{ method: 'card', amount: Number(sale.card_amount) }] : []),
+          ...(Number(sale.bank_transfer_amount) !== 0
             ? [{ method: 'bank_transfer', amount: Number(sale.bank_transfer_amount) }]
             : []),
         ],

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatNumberWithCommas } from '@/lib/utils';
+import { formatAudNumber, roundToCents } from '@/lib/utils';
+import { addDigits, removeLastDigit, parseAmount } from '@/lib/utils/numeric-input-utils';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
@@ -43,11 +44,7 @@ export default function PrepaidDeductionModal({
 
   useEffect(() => {
     if (isOpen && customerId) {
-      if (initialAmount > 0) {
-        setInputValue(initialAmount.toLocaleString());
-      } else {
-        setInputValue('0');
-      }
+      setInputValue(initialAmount > 0 ? formatAudNumber(initialAmount) : '0');
       fetchPrepaidPasses();
     }
   }, [isOpen, customerId, initialAmount]);
@@ -94,27 +91,17 @@ export default function PrepaidDeductionModal({
 
   if (!isOpen) return null;
 
-  const formatNumber = formatNumberWithCommas;
-
   const handleNumberClick = (num: string) => {
-    setInputValue((prev) => {
-      const current = prev.replace(/,/g, '');
-      if (current === '0') return num;
-      return formatNumber(current + num);
-    });
+    setInputValue((prev) => addDigits(prev, num, 2));
   };
 
   const handleBackspace = () => {
-    setInputValue((prev) => {
-      const current = prev.replace(/,/g, '');
-      if (current.length <= 1) return '0';
-      return formatNumber(current.slice(0, -1));
-    });
+    setInputValue((prev) => removeLastDigit(prev, 2));
   };
 
   const handleClear = () => setInputValue('0');
 
-  const getNumericValue = (): number => Number(inputValue.replace(/,/g, ''));
+  const getNumericValue = (): number => roundToCents(parseAmount(inputValue));
 
   const handleComplete = () => {
     const amount = getNumericValue();
@@ -178,7 +165,7 @@ export default function PrepaidDeductionModal({
                       onClick={() => setSelectedPrepaidPass(pass)}
                     >
                       <td className="py-3 px-4 text-sm text-gray-900">{pass.name}</td>
-                      <td className="py-3 px-4 text-sm text-gray-900">{pass.points.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900">{formatAudNumber(pass.points)}</td>
                       <td className="py-3 px-4 text-sm text-gray-900">{formatDate(pass.expires_at)}</td>
                     </tr>
                   ))
@@ -195,7 +182,7 @@ export default function PrepaidDeductionModal({
           <div className="relative flex items-center mb-4">
             <input
               type="text"
-              value={formatNumber(inputValue.replace(/,/g, ''))}
+              value={inputValue.replace(/,/g, '')}
               readOnly
               className="w-full px-4 pr-11.5 py-3 text-right text-lg border-2 border-blue-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
             />
@@ -216,6 +203,7 @@ export default function PrepaidDeductionModal({
             <NumericKeypad
               onNumberClick={handleNumberClick}
               onBackspace={handleBackspace}
+              allowDecimal
               className="flex-1 space-y-2"
             />
 

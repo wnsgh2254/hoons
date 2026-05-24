@@ -3,6 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { Select, Badge } from '@/components/ui';
 import { formatPaymentMethod, formatTimeString, formatAudNumber } from '@/lib/utils';
+import {
+  getActivePaymentLines,
+  saleRecordToPaymentAmounts,
+} from '@/lib/sales-payment-utils';
 
 interface SalesItemRecord {
   id: number;
@@ -134,14 +138,43 @@ export default function SalesHistoryTable({
   };
 
   const getPaymentMethodLabel = (sale: SalesRecord) => {
-    const methods: string[] = [];
-    if (sale.cash_amount > 0) methods.push('현금');
-    if (sale.card_amount > 0) methods.push('카드');
-    if (sale.bank_transfer_amount > 0) methods.push('계좌이체');
+    const amounts = saleRecordToPaymentAmounts(sale);
+    const methods = getActivePaymentLines(amounts).map(({ method }) => formatPaymentMethod(method));
     if (methods.length === 0 && sale.payment_method) {
       return formatPaymentMethod(sale.payment_method);
     }
     return methods.join(', ') || '-';
+  };
+
+  const renderPaymentAmount = (sale: SalesRecord, isRefund: boolean) => {
+    const amounts = saleRecordToPaymentAmounts(sale);
+    const paymentLines = getActivePaymentLines(amounts);
+
+    if (paymentLines.length === 0) {
+      const fallback = Number(sale.total_amount || 0);
+      const formatted = formatAudNumber(fallback);
+      return isRefund ? `-${formatted}` : formatted;
+    }
+
+    if (paymentLines.length === 1) {
+      const formatted = formatAudNumber(Math.abs(paymentLines[0].amount));
+      const prefix = isRefund || paymentLines[0].amount < 0 ? '-' : '';
+      return `${prefix}${formatted}`;
+    }
+
+    return (
+      <div className={`flex flex-col gap-0.5 items-end ${isRefund ? 'text-red-500 font-medium' : ''}`}>
+        {paymentLines.map(({ method, amount }) => {
+          const formatted = formatAudNumber(Math.abs(amount));
+          const prefix = isRefund || amount < 0 ? '-' : '';
+          return (
+            <div key={method} className="whitespace-nowrap">
+              {formatPaymentMethod(method)} {prefix}{formatted}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -237,7 +270,7 @@ export default function SalesHistoryTable({
                         {getPaymentMethodLabel(sale)}
                       </td>
                       <td className={`px-4 py-3 text-sm text-right ${isRefund ? 'text-red-500 font-medium' : 'text-gray-900'}`}>
-                        {isRefund ? `-${formatAudNumber(Number(sale.total_amount || 0))}` : formatAudNumber(Number(sale.total_amount || 0))}
+                        {renderPaymentAmount(sale, !!isRefund)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">{sale.memo || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900">

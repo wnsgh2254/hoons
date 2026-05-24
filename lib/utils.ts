@@ -65,6 +65,12 @@ export function formatPaymentMethod(method: string): string {
     prepaid_pass: '정액권',
     stripe: 'Stripe',
   };
+  if (method.includes('+')) {
+    return method
+      .split('+')
+      .map((part) => map[part.trim()] || part.trim())
+      .join(', ');
+  }
   return map[method] || method;
 }
 

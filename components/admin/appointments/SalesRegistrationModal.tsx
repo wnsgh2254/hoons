@@ -10,6 +10,10 @@ import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
 import { Z } from '@/lib/constants';
 import type { SalesDetailData } from '@/lib/types';
 import { getSydneyToday } from '@/lib/utils/appointment-utils';
+import {
+  normalizePaymentAmounts,
+  resolvePaymentMethodFromAmounts,
+} from '@/lib/sales-payment-utils';
 import { formatAudAmount, roundToCents } from '@/lib/utils';
 
 function formatPaymentTimestamp(iso: string): string {
@@ -475,16 +479,17 @@ export default function SalesRegistrationModal({
 
   const performSaleRegistration = async (options?: {
     paymentAmountsOverride?: typeof paymentAmounts;
-    paymentMethodOverride?: typeof paymentMethod;
   }) => {
     if (!customer || salesItems.length === 0) {
       return;
     }
 
     const isEditMode = !!editSaleId;
-    const paymentAmountsToSave = options?.paymentAmountsOverride || paymentAmounts;
+    const paymentAmountsToSave = normalizePaymentAmounts(
+      options?.paymentAmountsOverride || paymentAmounts,
+    );
     const paymentMethodToSave =
-      options?.paymentMethodOverride !== undefined ? options.paymentMethodOverride : paymentMethod;
+      resolvePaymentMethodFromAmounts(paymentAmountsToSave) ?? paymentMethod;
 
     setIsSaving(true);
     try {
@@ -556,57 +561,30 @@ export default function SalesRegistrationModal({
 
   const handlePaymentComplete = async (amount: number) => {
     if (paymentMethod) {
-      const newAmounts = {
+      const newAmounts = normalizePaymentAmounts({
         ...paymentAmounts,
-        [paymentMethod]: paymentAmounts[paymentMethod] + amount,
-      };
+        [paymentMethod]: roundToCents(paymentAmounts[paymentMethod] + amount),
+      });
       setPaymentAmounts(newAmounts);
-      
+
       // 금액 재계산 (새로운 paymentAmounts 사용)
       recalculateAmounts(salesItems, newAmounts);
-      
+
       // 받을 금액 계산
       const positivePaymentAmount = Math.max(0, newAmounts.cash) + Math.max(0, newAmounts.card) + Math.max(0, newAmounts.bank_transfer);
       const negativePaymentAmount = Math.abs(Math.min(0, newAmounts.cash)) + Math.abs(Math.min(0, newAmounts.card)) + Math.abs(Math.min(0, newAmounts.bank_transfer));
       const gross = salesAmount - discountAmount;
       const netDue = netDueAfterDeposit(gross, depositCredit);
       const newAmountToReceive = netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
-      
-      // 받을 금액이 0이면 판매 등록 완료
-      // NOTE: handleComplete()는 paymentAmounts state를 다시 읽기 때문에,
-      // setPaymentAmounts가 아직 반영되지 않은 상태에서 호출하면 stale state를 읽게 됨.
-      // 따라서 이미 계산된 newAmountToReceive로 판단 후 performSaleRegistration()을 직접 호출.
-      if (newAmountToReceive <= 0) {
-        // 판매 등록 완료
+
+      setIsPaymentInputModalOpen(false);
+
+      // NOTE: handleComplete() reads paymentAmounts state asynchronously — pass overrides directly.
+      // Partial payment in new sale: keep registering other methods, then use main "계산 완료".
+      if (newAmountToReceive <= 0 || editSaleId) {
         await performSaleRegistration({
           paymentAmountsOverride: newAmounts,
-          paymentMethodOverride: paymentMethod,
         });
-        setIsPaymentInputModalOpen(false);
-      } else if (editSaleId) {
-        await performSaleRegistration({
-          paymentAmountsOverride: newAmounts,
-          paymentMethodOverride: paymentMethod,
-        });
-        setIsPaymentInputModalOpen(false);
-      } else {
-        // 받을 금액이 남아있으면 확인 알림 표시
-        const aud = formatAudAmount(newAmountToReceive);
-        setConfirmationAlertData({
-          title: '알림',
-          message: `미수금이 ${aud} 발생됩니다. 계산완료 하시겠습니까?`,
-          highlightText: aud,
-          onConfirm: async () => {
-            await performSaleRegistration({
-              paymentAmountsOverride: newAmounts,
-              paymentMethodOverride: paymentMethod,
-            });
-            setIsPaymentInputModalOpen(false);
-            setIsConfirmationAlertOpen(false);
-            setConfirmationAlertData(null);
-          },
-        });
-        setIsConfirmationAlertOpen(true);
       }
     }
   };
@@ -615,10 +593,10 @@ export default function SalesRegistrationModal({
     // 추가 입력 시 음수로 처리 (예: 현금 -2,000)
     if (paymentMethod && amount > 0) {
       setPaymentAmounts((prev) => {
-        const newAmounts = {
+        const newAmounts = normalizePaymentAmounts({
           ...prev,
-          [paymentMethod]: prev[paymentMethod] - amount, // 음수로 빼기
-        };
+          [paymentMethod]: roundToCents(prev[paymentMethod] - amount),
+        });
         // 새로운 paymentAmounts로 재계산
         recalculateAmounts(salesItems, newAmounts);
         return newAmounts;

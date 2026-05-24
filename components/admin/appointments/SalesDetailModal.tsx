@@ -6,6 +6,10 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
 import { formatAudAmount } from '@/lib/utils';
+import {
+  getActivePaymentLines,
+  saleRecordToPaymentAmounts,
+} from '@/lib/sales-payment-utils';
 
 /** Same rule as SalesRegistrationModal — gross minus deposit credit (capped) */
 function netDueAfterDeposit(grossTotal: number, depositPaid: number): number {
@@ -81,18 +85,23 @@ export default function SalesDetailModal({
   const data = detailData || salesData;
   if (!data) return null;
 
-  const rawCash = data.cash_amount || 0;
-  const rawCard = data.card_amount || 0;
-  const rawBank = data.bank_transfer_amount || 0;
+  const paymentAmounts = saleRecordToPaymentAmounts(data);
+  const paymentLines = getActivePaymentLines(paymentAmounts);
   const rawMethod = (data.payment_method || '').toLowerCase();
   const grossTotal = Math.max(0, Number(data.total_amount || 0));
   const prepaidItemTotal =
     (data.items || []).reduce((s, it) => s + Number(it.prepaid_deduction || 0), 0) || 0;
-  const hasExplicitAmount = rawCash !== 0 || rawCard !== 0 || rawBank !== 0;
-  const displayCash = !hasExplicitAmount && rawMethod === 'cash' && grossTotal > 0 ? grossTotal : rawCash;
-  const displayCard = !hasExplicitAmount && rawMethod === 'card' && grossTotal > 0 ? grossTotal : rawCard;
-  const displayBank = !hasExplicitAmount && rawMethod === 'bank_transfer' && grossTotal > 0 ? grossTotal : rawBank;
-  const totalPayment = displayCash + displayCard + displayBank;
+  const hasExplicitAmount = paymentLines.length > 0;
+  const legacyFallbackAmount =
+    !hasExplicitAmount && (rawMethod === 'cash' || rawMethod === 'card' || rawMethod === 'bank_transfer') && grossTotal > 0
+      ? grossTotal
+      : 0;
+  const displayLines = hasExplicitAmount
+    ? paymentLines
+    : legacyFallbackAmount > 0
+      ? [{ method: rawMethod as 'cash' | 'card' | 'bank_transfer', amount: legacyFallbackAmount }]
+      : [];
+  const totalPayment = displayLines.reduce((sum, line) => sum + line.amount, 0);
   // Infer deposit credit when POS paid less than gross (e.g. card 44 + deposit 11 = gross 55)
   const impliedDepositCredit = Math.max(0, grossTotal - prepaidItemTotal - totalPayment);
   const netDue = netDueAfterDeposit(grossTotal, impliedDepositCredit);
@@ -202,26 +211,19 @@ export default function SalesDetailModal({
                   </div>
                 )}
 
-                {(displayCash > 0 || displayCard > 0 || displayBank > 0) && (
+                {displayLines.length > 0 && (
                   <div className="space-y-2 pt-1">
-                    {displayCash > 0 && (
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-700">현금</span>
-                        <span className="font-medium text-gray-900">{formatAudAmount(Number(displayCash))}</span>
+                    {displayLines.map(({ method, amount }) => (
+                      <div key={method} className="flex justify-between items-center text-sm">
+                        <span className="text-gray-700">
+                          {method === 'cash' ? '현금' : method === 'card' ? '카드' : '계좌이체'}
+                        </span>
+                        <span className={`font-medium ${amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                          {amount < 0 ? '-' : ''}
+                          {formatAudAmount(Math.abs(amount))}
+                        </span>
                       </div>
-                    )}
-                    {displayCard > 0 && (
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-700">카드</span>
-                        <span className="font-medium text-gray-900">{formatAudAmount(Number(displayCard))}</span>
-                      </div>
-                    )}
-                    {displayBank > 0 && (
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-700">계좌이체</span>
-                        <span className="font-medium text-gray-900">{formatAudAmount(Number(displayBank))}</span>
-                      </div>
-                    )}
+                    ))}
                     {totalPayment > 0 && data.created_at && (
                       <div className="text-xs text-gray-500 mt-2">
                         [결제 일시 {formatDateTime(data.created_at)}]

@@ -5,6 +5,10 @@ import {
   adjustInventoryStockForSaleItem,
   adjustPrepaidBalance,
 } from '@/lib/sales-reconciliation';
+import {
+  normalizePaymentAmounts,
+  resolvePaymentMethodFromAmounts,
+} from '@/lib/sales-payment-utils';
 
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
 
@@ -170,6 +174,10 @@ export async function POST(request: NextRequest) {
         ? Number(booking_id)
         : null;
 
+    const normalizedPayments = normalizePaymentAmounts(payment_amounts);
+    const resolvedPaymentMethod =
+      resolvePaymentMethodFromAmounts(normalizedPayments) || payment_method || null;
+
     const { data: saleHeader, error: headerError } = await supabase
       .from('sales')
       .insert({
@@ -183,10 +191,10 @@ export async function POST(request: NextRequest) {
         sales_amount: sales_amount || 0,
         discount_amount: discount_amount || 0,
         total_amount: total || 0,
-        payment_method: payment_method || null,
-        cash_amount: payment_amounts?.cash || 0,
-        card_amount: payment_amounts?.card || 0,
-        bank_transfer_amount: payment_amounts?.bank_transfer || 0,
+        payment_method: resolvedPaymentMethod,
+        cash_amount: normalizedPayments.cash,
+        card_amount: normalizedPayments.card,
+        bank_transfer_amount: normalizedPayments.bank_transfer,
         point_accumulation: point_accumulation || 0,
         memo: memo || null,
       })
