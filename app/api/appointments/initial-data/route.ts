@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { isCancelledBookingStatus } from '@/lib/booking-status';
+import { fetchMonthBookingDayCounts } from '@/lib/month-booking-day-counts';
 import { supabase } from '@/lib/supabase';
 import { getWeekStart, getWeekEnd } from '@/lib/utils/appointment-utils';
 import { loadDesignerShopsMap, mergeDesignerShopIds } from '@/lib/designer-multi-venue';
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const [designersRes, shopsRes, servicesRes, bookingModalServicesRes, weekBookingsRes, monthBookingsRes, restrictionsRes, memoRes, designerShopsMap] =
+    const [designersRes, shopsRes, servicesRes, bookingModalServicesRes, weekBookingsRes, monthDayCounts, restrictionsRes, memoRes, designerShopsMap] =
       await Promise.all([
         supabase
           .from('designers')
@@ -76,11 +76,7 @@ export async function GET(request: NextRequest) {
           .lte('booking_date', weekEnd)
           .order('booking_date', { ascending: false })
           .order('booking_time', { ascending: false }),
-        supabase
-          .from('bookings')
-          .select('booking_date, status')
-          .gte('booking_date', monthStart)
-          .lte('booking_date', monthEnd),
+        fetchMonthBookingDayCounts(supabase, monthStart, monthEnd),
         supabase
           .from('booking_restrictions')
           .select('*')
@@ -90,14 +86,13 @@ export async function GET(request: NextRequest) {
         loadDesignerShopsMap(),
       ]);
 
-    if (designersRes.error || shopsRes.error || servicesRes.error || bookingModalServicesRes.error || weekBookingsRes.error || monthBookingsRes.error || restrictionsRes.error || memoRes.error) {
+    if (designersRes.error || shopsRes.error || servicesRes.error || bookingModalServicesRes.error || weekBookingsRes.error || restrictionsRes.error || memoRes.error) {
       console.error('Error loading appointments initial data:', {
         designers: designersRes.error,
         shops: shopsRes.error,
         services: servicesRes.error,
         bookingModalServices: bookingModalServicesRes.error,
         weekBookings: weekBookingsRes.error,
-        monthBookings: monthBookingsRes.error,
         restrictions: restrictionsRes.error,
         memo: memoRes.error,
       });
@@ -120,15 +115,6 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    const dayCounts: Record<number, number> = {};
-    (monthBookingsRes.data || []).forEach((b: { booking_date: string; status: string | null }) => {
-      if (isCancelledBookingStatus(b.status)) return;
-      const day = new Date(b.booking_date).getDate();
-      if (!Number.isNaN(day)) {
-        dayCounts[day] = (dayCounts[day] || 0) + 1;
-      }
-    });
-
     return NextResponse.json(
       {
         userRole,
@@ -142,7 +128,7 @@ export async function GET(request: NextRequest) {
         bookingModalServices: bookingModalServicesRes.data || [],
         bookings: weekBookings,
         bookingRestrictions: restrictionsRes.data || [],
-        dayCounts,
+        dayCounts: monthDayCounts,
         availableDesignerIdsByShop,
       },
       { status: 200 },

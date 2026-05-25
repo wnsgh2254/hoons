@@ -1038,7 +1038,7 @@ export default function AppointmentsManagementPage() {
         const start = `${monthKey}-01`;
         const end = `${monthKey}-${String(daysInMonth).padStart(2, '0')}`;
 
-        // Comment: minimal=true returns only booking_date+status — no joins, no COUNT query
+        // Comment: minimal=true returns server-aggregated dayCounts for the month
         const res = await fetch(
           `/api/appointment?minimal=true&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`
         );
@@ -1047,14 +1047,7 @@ export default function AppointmentsManagementPage() {
 
         if (!res.ok) throw new Error(data.error || 'Failed to load monthly bookings');
 
-        const counts: Record<number, number> = {};
-        (data.bookings || []).forEach((b: { booking_date: string; status: string }) => {
-          if (isCancelledBookingStatus(b.status)) return;
-          const d = new Date(b.booking_date);
-          if (Number.isNaN(d.getTime())) return;
-          counts[d.getDate()] = (counts[d.getDate()] || 0) + 1;
-        });
-        if (isMounted) setDayCounts(counts);
+        if (isMounted) setDayCounts(data.dayCounts || {});
       } catch (err) {
         // Silent fail – calendar dots are non-critical
         if (isMounted) {

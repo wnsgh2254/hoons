@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicBooking, buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from '@/lib/data';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
+import { fetchMonthBookingDayCounts } from '@/lib/month-booking-day-counts';
 import { supabase } from '@/lib/supabase';
 import { invokeBookingConfirmationEdge } from '@/lib/booking-confirmation-edge';
 
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
-    // Comment: minimal=true returns only booking_date+status — used for calendar dot counts (no joins, no count)
+    // Comment: minimal=true returns per-day booking counts for the calendar (paginated server-side)
     const minimal = searchParams.get('minimal') === 'true';
 
     const page = Number(searchParams.get('page')) || 1;
@@ -139,31 +140,22 @@ export async function GET(request: NextRequest) {
         : null;
 
     if (minimal) {
-      // Comment: Lightweight path for calendar dot counts — skips joins and COUNT overhead
-      let minimalQuery = supabase
-        .from('bookings')
-        .select('booking_date, status')
-        .order('booking_date', { ascending: true });
-
-      if (numericShopFilter != null) minimalQuery = minimalQuery.eq('shop_id', numericShopFilter);
-      if (designerId) minimalQuery = minimalQuery.eq('designer_id', designerId);
-      if (startDate && endDate) {
-        minimalQuery = minimalQuery.gte('booking_date', startDate).lte('booking_date', endDate);
-      } else if (date) {
-        minimalQuery = minimalQuery.eq('booking_date', date);
+      // Comment: Paginated aggregation for calendar day counts (Supabase caps at 1000 rows per request)
+      const rangeStart = startDate && endDate ? startDate : date;
+      const rangeEnd = startDate && endDate ? endDate : date;
+      if (!rangeStart || !rangeEnd) {
+        return NextResponse.json({ error: '날짜 범위가 필요합니다.' }, { status: 400 });
       }
-      // Comment: No pagination limit for minimal queries — only booking_date+status returned
-      const { data: minData, error: minError } = await minimalQuery;
-      if (minError) {
-        console.error('Error fetching minimal bookings:', minError);
+      try {
+        const dayCounts = await fetchMonthBookingDayCounts(supabase, rangeStart, rangeEnd, {
+          shopId: numericShopFilter,
+          designerId: designerId ? Number(designerId) : undefined,
+        });
+        return NextResponse.json({ dayCounts }, { status: 200 });
+      } catch (minError) {
+        console.error('Error fetching minimal booking day counts:', minError);
         return NextResponse.json({ error: '예약 조회에 실패했습니다.' }, { status: 500 });
       }
-      return NextResponse.json({
-        bookings: ((minData || []) as Array<{ booking_date: string; status: string | null }>).map((booking) => ({
-          ...booking,
-          status: isCancelledBookingStatus(booking.status) ? 'cancelled' : booking.status,
-        })),
-      }, { status: 200 });
     }
 
     let query = supabase

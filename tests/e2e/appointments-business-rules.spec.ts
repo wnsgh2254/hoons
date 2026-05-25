@@ -150,19 +150,12 @@ test.describe('[API] 예약 비즈니스 규칙 — API 직접 검증', () => {
     }
   });
 
-  test('1-8. GET /api/appointment minimal 모드는 booking_date와 status만 반환해야 함', async () => {
+  test('1-8. GET /api/appointment minimal 모드는 날짜별 예약 수(dayCounts)를 반환해야 함', async () => {
     const res = await apiCtx.get(`/api/appointment?minimal=true&date=${todayStr()}`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(Array.isArray(body.bookings)).toBe(true);
-
-    // Minimal response should NOT include joins like designer, service, customer
-    for (const b of body.bookings) {
-      expect(b).toHaveProperty('booking_date');
-      expect(b).toHaveProperty('status');
-      expect(b.designer).toBeUndefined();
-      expect(b.service).toBeUndefined();
-    }
+    expect(body.dayCounts).toBeDefined();
+    expect(typeof body.dayCounts).toBe('object');
   });
 
   // ── 1-5. 예약 상태 전환 API ───────────────────────────────────────────────
