@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { formatAudNumber } from '@/lib/utils';
 
 interface CustomerSummarySectionProps {
   customer: any;
@@ -36,7 +37,7 @@ export default function CustomerSummarySection({
       <div className="flex items-center gap-3">
         <p className="text-xs text-gray-500 w-20 flex-shrink-0">정액권 잔액</p>
         <p className="text-sm font-medium text-black">
-          {Number(points).toLocaleString()}
+          {formatAudNumber(points)}
         </p>
       </div>
 

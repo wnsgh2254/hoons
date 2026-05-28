@@ -19,6 +19,7 @@ import {
 } from '@/components/ui';
 import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDrawer';
 import { useSalesDetailActions } from '@/hooks/useSalesDetailActions';
+import { buildSaleHistoryPayments, getSaleLineGrossAmount } from '@/lib/sales-payment-utils';
 
 type TabType = 'total' | 'byStaff' | 'byItem';
 type DateMode = 'daily' | 'period';
@@ -1396,13 +1397,7 @@ function SalesHistoryModal({
           sales_classification: item.sales_classification,
           prepaid_deduction: item.prepaid_deduction,
         })),
-        payments: [
-          ...(Number(sale.cash_amount) !== 0 ? [{ method: 'cash', amount: Number(sale.cash_amount) }] : []),
-          ...(Number(sale.card_amount) !== 0 ? [{ method: 'card', amount: Number(sale.card_amount) }] : []),
-          ...(Number(sale.bank_transfer_amount) !== 0
-            ? [{ method: 'bank_transfer', amount: Number(sale.bank_transfer_amount) }]
-            : []),
-        ],
+        payments: buildSaleHistoryPayments(sale, sale.sales_items || []),
       }));
 
       const registeredRefundHistory = (registeredRefundsData.refunds || []).map((refund: any) => ({
@@ -1850,15 +1845,18 @@ function SalesHistoryModal({
       align: 'right' as const,
       render: (item: any) => (
         <div className={`flex flex-col gap-1 items-end ${item._isRefund ? 'text-red-500 font-medium' : ''}`}>
-          {item.items.map((it: any, i: number) => (
-            <div key={i} className="whitespace-nowrap">
-              {Number(it.amount ?? it.total_amount)
-                ? (item._isRefund
-                    ? `-${formatAudNumber(Number(it.amount ?? it.total_amount))}`
-                    : formatAudNumber(Number(it.amount ?? it.total_amount)))
-                : '-'}
-            </div>
-          ))}
+          {item.items.map((it: any, i: number) => {
+            const gross = getSaleLineGrossAmount(it);
+            return (
+              <div key={i} className="whitespace-nowrap">
+                {gross > 0
+                  ? (item._isRefund
+                      ? `-${formatAudNumber(gross)}`
+                      : formatAudNumber(gross))
+                  : '-'}
+              </div>
+            );
+          })}
         </div>
       ),
     },
@@ -1882,12 +1880,16 @@ function SalesHistoryModal({
             item.items.reduce((sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0), 0);
           return <span className="text-red-500 font-medium whitespace-nowrap">-{formatAudNumber(Number(refundTotal))}</span>;
         }
-        const totalAmount = item.items.reduce(
-          (sum: number, i: any) => sum + (Number(i.amount ?? i.total_amount) || 0),
+        const totalGross = item.items.reduce(
+          (sum: number, i: any) => sum + getSaleLineGrossAmount(i),
           0,
         );
         const totalPayment = item.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-        return <span className="whitespace-nowrap">{formatAudNumber(totalPayment > 0 ? totalPayment : totalAmount)}</span>;
+        return (
+          <span className="whitespace-nowrap">
+            {formatAudNumber(totalPayment > 0 ? totalPayment : totalGross)}
+          </span>
+        );
       },
     },
     {

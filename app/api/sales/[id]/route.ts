@@ -10,7 +10,7 @@ import {
 } from '@/lib/sale-booking-link';
 import {
   normalizePaymentAmounts,
-  resolvePaymentMethodFromAmounts,
+  resolveSalePaymentMethod,
 } from '@/lib/sales-payment-utils';
 
 export async function GET(
@@ -181,6 +181,7 @@ export async function PUT(
       customer_id, shop_id, items, sales_amount, discount_amount,
       total, payment_method, payment_amounts,
       point_accumulation, memo, sales_date, sales_time,
+      prepaid_customer_id,
     } = body;
 
     if (!customer_id || !items || items.length === 0) {
@@ -257,8 +258,17 @@ export async function PUT(
     });
 
     const normalizedPayments = normalizePaymentAmounts(payment_amounts);
-    const resolvedPaymentMethod =
-      resolvePaymentMethodFromAmounts(normalizedPayments) || payment_method || null;
+    const resolvedPaymentMethod = resolveSalePaymentMethod(
+      normalizedPayments,
+      newPrepaidDeductionTotal,
+      payment_method,
+    );
+    const prepaidCustomerId =
+      prepaid_customer_id != null &&
+      prepaid_customer_id !== '' &&
+      !Number.isNaN(Number(prepaid_customer_id))
+        ? Number(prepaid_customer_id)
+        : Number(customer_id);
 
     // 1. Update the sales header (no edit_history column in DB — omit to avoid PGRST204)
     const { data: updatedSale, error: headerError } = await supabase
@@ -360,7 +370,7 @@ export async function PUT(
 
     if (prepaidDelta !== 0) {
       await adjustPrepaidBalance(supabase, {
-        customerId: Number(customer_id),
+        customerId: prepaidCustomerId,
         pointsDelta: -prepaidDelta,
       });
     }

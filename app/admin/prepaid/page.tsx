@@ -14,6 +14,7 @@ import {
   Badge,
   AlertModal,
 } from '@/components/ui';
+import { formatAudAmount } from '@/lib/utils';
 
 export default function PrepaidPassManagementPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,7 +103,7 @@ export default function PrepaidPassManagementPage() {
       header: '정액권',
       render: (member: any) => (
         <span className="font-medium text-black">
-          {`$${Number(member.points || 0).toLocaleString()}`}
+          {formatAudAmount(Number(member.points || 0))}
         </span>
       ),
     },
@@ -709,7 +710,7 @@ function ViewMemberModal({
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-500">정액권</span>
             <span className="text-sm font-bold text-black">
-              {member.points !== undefined ? `${Number(member.points).toLocaleString()}` : '0'}
+              {member.points !== undefined ? formatAudAmount(Number(member.points)) : formatAudAmount(0)}
             </span>
           </div>
           <div className="flex justify-between items-center">

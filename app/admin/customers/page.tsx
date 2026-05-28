@@ -21,6 +21,7 @@ import type { Customer, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import { useStaff } from '@/hooks/useStaff';
 import { useSalesDetailActions } from '@/hooks/useSalesDetailActions';
+import { formatAudNumber } from '@/lib/utils';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -188,7 +189,7 @@ export default function CustomersPage() {
     {
       key: 'prepaid_balance',
       header: '정액권 잔액',
-      render: (c: Customer) => c.prepaid_balance || 0,
+      render: (c: Customer) => formatAudNumber(Number(c.prepaid_balance ?? 0)),
     },
     {
       key: 'total_sales',

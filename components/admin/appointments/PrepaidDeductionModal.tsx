@@ -18,7 +18,12 @@ interface PrepaidPass {
 
 interface PrepaidDeductionModalProps {
   isOpen: boolean;
+  /** Comment: Customer whose prepaid balance will be deducted */
   customerId: number | null;
+  /** Comment: Customer on the sale (service recipient) */
+  saleCustomerId?: number | null;
+  saleCustomerName?: string | null;
+  onPrepaidCustomerChange?: (customer: { id: number; name: string }) => void;
   initialAmount?: number;
   selectedItemId?: string | null;
   onClose: () => void;
@@ -30,6 +35,9 @@ interface PrepaidDeductionModalProps {
 export default function PrepaidDeductionModal({
   isOpen,
   customerId,
+  saleCustomerId = null,
+  saleCustomerName = null,
+  onPrepaidCustomerChange,
   initialAmount = 0,
   selectedItemId = null,
   onClose,
@@ -41,6 +49,11 @@ export default function PrepaidDeductionModal({
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPrepaidPass, setSelectedPrepaidPass] = useState<PrepaidPass | null>(null);
+  const [ownerSearch, setOwnerSearch] = useState('');
+  const [ownerSearchResults, setOwnerSearchResults] = useState<Array<{ id: number; name: string }>>([]);
+  const [isOwnerSearching, setIsOwnerSearching] = useState(false);
+  const [showOwnerSearch, setShowOwnerSearch] = useState(false);
+  const [prepaidOwnerName, setPrepaidOwnerName] = useState('');
 
   useEffect(() => {
     if (isOpen && customerId) {
@@ -48,6 +61,47 @@ export default function PrepaidDeductionModal({
       fetchPrepaidPasses();
     }
   }, [isOpen, customerId, initialAmount]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowOwnerSearch(false);
+      setOwnerSearch('');
+      setOwnerSearchResults([]);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !showOwnerSearch) return;
+    const q = ownerSearch.trim();
+    if (!q) {
+      setOwnerSearchResults([]);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        setIsOwnerSearching(true);
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.customers)) {
+          setOwnerSearchResults(
+            data.customers.map((c: any) => ({
+              id: Number(c.id),
+              name: String(c.name || ''),
+            })),
+          );
+        } else {
+          setOwnerSearchResults([]);
+        }
+      } catch {
+        setOwnerSearchResults([]);
+      } finally {
+        setIsOwnerSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [isOpen, showOwnerSearch, ownerSearch]);
 
   const fetchPrepaidPasses = async () => {
     if (!customerId) return;
@@ -64,13 +118,19 @@ export default function PrepaidDeductionModal({
             ? [data.member]
             : [];
         const mapped = source.map((m: any) => ({
-            id: m.id,
-            name: m.name || '정액권',
-            points: Number(m.points || 0),
-            expires_at: m.expires_at || null,
-            is_active: m.is_active ?? true,
-          }));
+          id: m.id,
+          name: m.name || '정액권',
+          points: Number(m.points || 0),
+          expires_at: m.expires_at || null,
+          is_active: m.is_active ?? true,
+        }));
         setPrepaidPasses(mapped);
+        const ownerLabel =
+          data.member?.name ||
+          mapped[0]?.name ||
+          saleCustomerName ||
+          '';
+        if (ownerLabel) setPrepaidOwnerName(ownerLabel);
         const totalBalance = mapped.reduce(
           (sum: number, pass: PrepaidPass) => sum + Number(pass.points || 0),
           0,
@@ -87,6 +147,14 @@ export default function PrepaidDeductionModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectPrepaidOwner = (customer: { id: number; name: string }) => {
+    onPrepaidCustomerChange?.(customer);
+    setPrepaidOwnerName(customer.name);
+    setShowOwnerSearch(false);
+    setOwnerSearch('');
+    setOwnerSearchResults([]);
   };
 
   if (!isOpen) return null;
@@ -125,6 +193,11 @@ export default function PrepaidDeductionModal({
     return `${date.getFullYear()}. ${String(date.getMonth() + 1).padStart(2, '0')}. ${String(date.getDate()).padStart(2, '0')}.`;
   };
 
+  const usingAnotherCustomersPrepaid =
+    saleCustomerId != null &&
+    customerId != null &&
+    Number(saleCustomerId) !== Number(customerId);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -133,6 +206,62 @@ export default function PrepaidDeductionModal({
       zIndex={Z.MODAL_NESTED}
       maxWidth="max-w-[95vw] md:max-w-4xl"
     >
+      <div className="mb-4 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-gray-700">
+            정액권 소유:{' '}
+            <span className="font-semibold text-black">{prepaidOwnerName || saleCustomerName || '-'}</span>
+          </p>
+          {onPrepaidCustomerChange && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowOwnerSearch((prev) => !prev)}
+            >
+              {showOwnerSearch ? '검색 닫기' : '다른 고객 정액권'}
+            </Button>
+          )}
+        </div>
+        {usingAnotherCustomersPrepaid && saleCustomerName && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            판매 고객({saleCustomerName})의 시술에 {prepaidOwnerName || '다른 고객'}님 정액권이 차감됩니다.
+          </p>
+        )}
+        {showOwnerSearch && onPrepaidCustomerChange && (
+          <div className="relative border border-gray-200 rounded-lg p-3 bg-gray-50">
+            <input
+              type="text"
+              value={ownerSearch}
+              onChange={(e) => setOwnerSearch(e.target.value)}
+              placeholder="정액권 소유 고객 검색"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+            />
+            {isOwnerSearching && (
+              <p className="text-xs text-gray-500 mt-2">검색 중...</p>
+            )}
+            {!isOwnerSearching && ownerSearch.trim() && ownerSearchResults.length === 0 && (
+              <p className="text-xs text-gray-500 mt-2">검색 결과가 없습니다.</p>
+            )}
+            {ownerSearchResults.length > 0 && (
+              <ul className="mt-2 max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-lg divide-y">
+                {ownerSearchResults.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      onClick={() => handleSelectPrepaidOwner(c)}
+                    >
+                      {c.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         {/* Left: Prepaid Pass List */}
         <div className="w-full md:w-80 md:flex-shrink-0">
@@ -178,7 +307,6 @@ export default function PrepaidDeductionModal({
 
         {/* Right: Input and Keypad */}
         <div className="flex-1 min-w-0">
-          {/* Input Field */}
           <div className="relative flex items-center mb-4">
             <input
               type="text"
@@ -198,7 +326,6 @@ export default function PrepaidDeductionModal({
             )}
           </div>
 
-          {/* Keypad and Action Buttons */}
           <div className="flex flex-col gap-3 md:flex-row md:gap-4">
             <NumericKeypad
               onNumberClick={handleNumberClick}
@@ -207,7 +334,6 @@ export default function PrepaidDeductionModal({
               className="flex-1 space-y-2"
             />
 
-            {/* Action Buttons */}
             <div className="grid grid-cols-3 gap-2 md:flex md:flex-col md:gap-2 md:w-32">
               <Button size="lg" className="w-full" onClick={handleComplete}>확인</Button>
               <Button variant="ghost" size="lg" className="w-full" onClick={handleAdditionalInput}>추가 입력</Button>

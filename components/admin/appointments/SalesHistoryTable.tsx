@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Select, Badge } from '@/components/ui';
 import { formatPaymentMethod, formatTimeString, formatAudNumber } from '@/lib/utils';
 import {
-  getActivePaymentLines,
-  saleRecordToPaymentAmounts,
+  buildSaleHistoryPayments,
+  getSaleLineGrossAmount,
 } from '@/lib/sales-payment-utils';
 
 interface SalesItemRecord {
@@ -18,6 +18,7 @@ interface SalesItemRecord {
   amount: number;
   manager: string | null;
   sales_classification: string | null;
+  prepaid_deduction?: number;
 }
 
 interface SalesRecord {
@@ -137,9 +138,11 @@ export default function SalesHistoryTable({
     return shop?.name || '-';
   };
 
+  const getHistoryPayments = (sale: SalesRecord) =>
+    buildSaleHistoryPayments(sale, sale.sales_items);
+
   const getPaymentMethodLabel = (sale: SalesRecord) => {
-    const amounts = saleRecordToPaymentAmounts(sale);
-    const methods = getActivePaymentLines(amounts).map(({ method }) => formatPaymentMethod(method));
+    const methods = getHistoryPayments(sale).map((p) => formatPaymentMethod(p.method));
     if (methods.length === 0 && sale.payment_method) {
       return formatPaymentMethod(sale.payment_method);
     }
@@ -147,11 +150,14 @@ export default function SalesHistoryTable({
   };
 
   const renderPaymentAmount = (sale: SalesRecord, isRefund: boolean) => {
-    const amounts = saleRecordToPaymentAmounts(sale);
-    const paymentLines = getActivePaymentLines(amounts);
+    const paymentLines = getHistoryPayments(sale);
+    const grossFallback = (sale.sales_items || []).reduce(
+      (sum, item) => sum + getSaleLineGrossAmount(item),
+      0,
+    );
 
     if (paymentLines.length === 0) {
-      const fallback = Number(sale.total_amount || 0);
+      const fallback = grossFallback > 0 ? grossFallback : Number(sale.total_amount || 0);
       const formatted = formatAudNumber(fallback);
       return isRefund ? `-${formatted}` : formatted;
     }
@@ -264,7 +270,12 @@ export default function SalesHistoryTable({
                         {sale.discount_amount > 0 ? formatAudNumber(Number(sale.discount_amount)) : '-'}
                       </td>
                       <td className={`px-4 py-3 text-sm text-right ${isRefund ? 'text-red-500 font-medium' : 'text-gray-900'}`}>
-                        {isRefund ? `-${formatAudNumber(Number(sale.sales_amount || 0))}` : formatAudNumber(Number(sale.sales_amount || 0))}
+                        {(() => {
+                          const gross =
+                            items.reduce((sum, i) => sum + getSaleLineGrossAmount(i), 0) ||
+                            Number(sale.sales_amount || 0);
+                          return isRefund ? `-${formatAudNumber(gross)}` : formatAudNumber(gross);
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {getPaymentMethodLabel(sale)}

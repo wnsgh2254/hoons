@@ -8,6 +8,7 @@ import BookingHistoryTable from './BookingHistoryTable';
 import Modal from '@/components/ui/Modal';
 import Tabs from '@/components/ui/Tabs';
 import { Z } from '@/lib/constants';
+import { formatAudNumber } from '@/lib/utils';
 
 interface CustomerInfoDrawerProps {
   customerId: number | null;
@@ -131,9 +132,13 @@ export default function CustomerInfoDrawer({
                           <tr key={idx} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm text-gray-900">{ticket.name || '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">
-                              {Number(ticket.balance || 0).toLocaleString()}
+                              {formatAudNumber(Number(ticket.points ?? ticket.balance ?? 0))}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{ticket.expiry_date || '무제한'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {ticket.expires_at
+                                ? new Date(ticket.expires_at).toLocaleDateString('ko-KR')
+                                : ticket.expiry_date || '무제한'}
+                            </td>
                           </tr>
                         ))
                       ) : (

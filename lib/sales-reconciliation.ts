@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { roundToCents } from '@/lib/utils';
 
 const normalizeName = (value: string | null | undefined) => String(value || '').trim().toLowerCase();
 
@@ -71,7 +72,7 @@ export async function adjustPrepaidBalance(
     pointsDelta: number;
   },
 ): Promise<void> {
-  const pointsDelta = Math.round(Number(params.pointsDelta) || 0);
+  const pointsDelta = roundToCents(Number(params.pointsDelta) || 0);
   if (pointsDelta === 0) return;
 
   const { data, error } = await supabase

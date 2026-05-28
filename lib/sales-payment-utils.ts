@@ -51,3 +51,64 @@ export function saleRecordToPaymentAmounts(sale: {
     bank_transfer: sale.bank_transfer_amount ?? 0,
   });
 }
+
+export type SaleHistoryPaymentLine = {
+  method: PaymentMethodKey | 'prepaid_pass';
+  amount: number;
+};
+
+export function getSalePrepaidDeductionTotal(
+  items: Array<{ prepaid_deduction?: number | null }> | null | undefined,
+): number {
+  return roundToCents(
+    (items || []).reduce((sum, item) => sum + Number(item.prepaid_deduction || 0), 0),
+  );
+}
+
+/** Gross line amount before prepaid (unit × qty − discount). */
+export function getSaleLineGrossAmount(item: {
+  amount?: number | null;
+  prepaid_deduction?: number | null;
+  unit_price?: number | null;
+  quantity?: number | null;
+  discount?: number | null;
+}): number {
+  const prepaid = Number(item.prepaid_deduction || 0);
+  const net = Number(item.amount || 0);
+  if (prepaid > 0) return roundToCents(net + prepaid);
+  const unit = Number(item.unit_price || 0);
+  const qty = Math.max(1, Number(item.quantity || 1));
+  const discount = Number(item.discount || 0);
+  return roundToCents(unit * qty - discount);
+}
+
+export function buildSaleHistoryPayments(
+  sale: {
+    cash_amount?: number | null;
+    card_amount?: number | null;
+    bank_transfer_amount?: number | null;
+  },
+  items: Array<{ prepaid_deduction?: number | null }> | null | undefined,
+): SaleHistoryPaymentLine[] {
+  const amounts = saleRecordToPaymentAmounts(sale);
+  const payments: SaleHistoryPaymentLine[] = getActivePaymentLines(amounts).map(
+    ({ method, amount }) => ({ method, amount }),
+  );
+  const prepaidTotal = getSalePrepaidDeductionTotal(items);
+  if (prepaidTotal > 0) {
+    payments.push({ method: 'prepaid_pass', amount: prepaidTotal });
+  }
+  return payments;
+}
+
+/** Stored payment_method including prepaid when no cash/card/bank was used. */
+export function resolveSalePaymentMethod(
+  amounts: SalePaymentAmounts,
+  prepaidTotal: number,
+  fallback?: string | null,
+): string | null {
+  const fromAmounts = resolvePaymentMethodFromAmounts(amounts);
+  if (prepaidTotal > 0 && !fromAmounts) return 'prepaid_pass';
+  if (prepaidTotal > 0 && fromAmounts) return `${fromAmounts}+prepaid_pass`;
+  return fromAmounts || fallback || null;
+}

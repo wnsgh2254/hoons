@@ -143,15 +143,27 @@ export default function SalesRegistrationModal({
   });
   const [prepaidDeductionAmount, setPrepaidDeductionAmount] = useState(0);
   const [availablePrepaidBalance, setAvailablePrepaidBalance] = useState(0);
+  const [prepaidCustomerId, setPrepaidCustomerId] = useState<number | null>(null);
+  const [prepaidCustomerName, setPrepaidCustomerName] = useState('');
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
   const [depositCredit, setDepositCredit] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (customer?.id) {
+      setPrepaidCustomerId(customer.id);
+      setPrepaidCustomerName(customer.name || '');
+    }
+  }, [customer?.id, customer?.name]);
+
   // 정액권 잔액 확인 헬퍼 함수
   const validatePrepaidBalance = (newDeductionAmount: number): boolean => {
-    if (!customer) return false;
-    const fallbackBalance = Number(customer?.prepaid_balance ?? customer?.points ?? 0);
+    if (!prepaidCustomerId) return false;
+    const fallbackBalance =
+      prepaidCustomerId === customer?.id
+        ? Number(customer?.prepaid_balance ?? customer?.points ?? 0)
+        : 0;
     const customerPrepaidBalance = Math.max(availablePrepaidBalance, fallbackBalance);
     return newDeductionAmount <= customerPrepaidBalance;
   };
@@ -533,6 +545,10 @@ export default function SalesRegistrationModal({
           memo: memo,
           sales_date: salesDate,
           sales_time: salesTime,
+          prepaid_customer_id:
+            prepaidCustomerId && prepaidCustomerId !== customer.id
+              ? prepaidCustomerId
+              : undefined,
         }),
       });
 
@@ -1173,7 +1189,14 @@ export default function SalesRegistrationModal({
       {/* Global Prepaid Deduction Modal (for deduction section) */}
       <PrepaidDeductionModal
         isOpen={isGlobalPrepaidDeductionModalOpen}
-        customerId={customer?.id || null}
+        customerId={prepaidCustomerId ?? customer?.id ?? null}
+        saleCustomerId={customer?.id ?? null}
+        saleCustomerName={customer?.name ?? null}
+        onPrepaidCustomerChange={(owner) => {
+          setPrepaidCustomerId(owner.id);
+          setPrepaidCustomerName(owner.name);
+          setAvailablePrepaidBalance(0);
+        }}
         initialAmount={amountToReceive}
         selectedItemId={null}
         onBalanceLoaded={(balance) => setAvailablePrepaidBalance(balance)}

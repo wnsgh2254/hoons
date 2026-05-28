@@ -176,7 +176,9 @@ export default function NewBookingModal({
 
     Promise.all([
       needsShops ? fetch('/api/shops').then((r) => r.json()) : Promise.resolve({ shops }),
-      needsServices ? fetch('/api/services').then((r) => r.json()) : Promise.resolve({ services: selfLoadedServices }),
+      needsServices
+        ? fetch('/api/booking-modal-services').then((r) => r.json())
+        : Promise.resolve({ services: selfLoadedServices }),
     ])
       .then(([shopsData, servicesData]) => {
         if (cancelled) return;
@@ -187,7 +189,10 @@ export default function NewBookingModal({
         }
 
         if (needsServices) {
-          setSelfLoadedServices(servicesData.services || []);
+          const modalServices = (servicesData.services || []).filter(
+            (s: { is_active?: boolean }) => s.is_active !== false,
+          );
+          setSelfLoadedServices(modalServices);
         }
       })
       .catch(console.error)
@@ -252,7 +257,7 @@ export default function NewBookingModal({
   const effectiveLoadingOptions =
     newBookingLoadingOptions || selfLoadingBaseOptions || selfLoadingDesigners;
   const editPrefillDoneForIdRef = useRef<number | null>(null);
-  // Services are provided via the newBookingServices prop (loaded by initial-data on the parent page)
+  // Services: parent passes booking_modal_services via newBookingServices; otherwise self-load same API
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(() => {
     const d = new Date();
