@@ -240,52 +240,21 @@ export default function RefundRegistrationModal({
     await performRefundRegistration();
   };
 
-  const handlePaymentComplete = async (amount: number) => {
-    if (paymentMethod) {
-      const newAmounts = {
-        ...paymentAmounts,
-        [paymentMethod]: paymentAmounts[paymentMethod] + amount,
-      };
-      setPaymentAmounts(newAmounts);
-      recalculateAmounts(refundItems, newAmounts);
-
-      const positivePaymentAmount = Math.max(0, newAmounts.cash) + Math.max(0, newAmounts.card) + Math.max(0, newAmounts.bank_transfer);
-      const negativePaymentAmount = Math.abs(Math.min(0, newAmounts.cash)) + Math.abs(Math.min(0, newAmounts.card)) + Math.abs(Math.min(0, newAmounts.bank_transfer));
-      const newAmountToReceive = totalAmount - positivePaymentAmount - negativePaymentAmount;
-
-      if (newAmountToReceive <= 0) {
-        await performRefundRegistration();
-        setIsPaymentInputModalOpen(false);
-      } else {
-        setConfirmationAlertData({
-          title: '알림',
-          message: `미수금이 ${newAmountToReceive.toLocaleString()}원 발생됩니다. 계산완료 하시겠습니까?`,
-          highlightText: `${newAmountToReceive.toLocaleString()}원`,
-          onConfirm: async () => {
-            await performRefundRegistration();
-            setIsPaymentInputModalOpen(false);
-            setIsConfirmationAlertOpen(false);
-            setConfirmationAlertData(null);
-          },
-        });
-        setIsConfirmationAlertOpen(true);
-      }
-    }
+  const handlePaymentConfirm = (amount: number) => {
+    if (!paymentMethod) return;
+    const newAmounts = {
+      ...paymentAmounts,
+      [paymentMethod]: amount,
+    };
+    setPaymentAmounts(newAmounts);
+    recalculateAmounts(refundItems, newAmounts);
+    setIsPaymentInputModalOpen(false);
   };
 
-  const handleAdditionalPaymentInput = (amount: number) => {
-    if (paymentMethod && amount > 0) {
-      setPaymentAmounts((prev) => {
-        const newAmounts = {
-          ...prev,
-          [paymentMethod]: prev[paymentMethod] - amount,
-        };
-        recalculateAmounts(refundItems, newAmounts);
-        return newAmounts;
-      });
-      setIsPaymentInputModalOpen(false);
-    }
-  };
+  const paymentInputInitialAmount =
+    paymentMethod && paymentAmounts[paymentMethod] > 0
+      ? paymentAmounts[paymentMethod]
+      : amountToReceive;
 
   return (
     <Modal
@@ -600,10 +569,9 @@ export default function RefundRegistrationModal({
       <PaymentInputModal
         isOpen={isPaymentInputModalOpen}
         paymentMethod={paymentMethod}
-        initialAmount={amountToReceive}
+        initialAmount={paymentInputInitialAmount}
         onClose={() => setIsPaymentInputModalOpen(false)}
-        onComplete={handlePaymentComplete}
-        onAdditionalInput={handleAdditionalPaymentInput}
+        onConfirm={handlePaymentConfirm}
       />
 
       {/* Confirmation Alert Modal */}

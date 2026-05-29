@@ -13,8 +13,7 @@ interface PaymentInputModalProps {
   paymentMethod: 'cash' | 'card' | 'bank_transfer' | null;
   initialAmount?: number;
   onClose: () => void;
-  onComplete: (amount: number) => void;
-  onAdditionalInput: (amount: number) => void;
+  onConfirm: (amount: number) => void;
 }
 
 export default function PaymentInputModal({
@@ -22,8 +21,7 @@ export default function PaymentInputModal({
   paymentMethod,
   initialAmount = 0,
   onClose,
-  onComplete,
-  onAdditionalInput,
+  onConfirm,
 }: PaymentInputModalProps) {
   const [inputValue, setInputValue] = useState('0');
 
@@ -45,19 +43,11 @@ export default function PaymentInputModal({
     setInputValue('0');
   };
 
-  const handleComplete = () => {
+  const handleConfirm = () => {
     const amount = roundToCents(parseAmount(inputValue));
     if (amount > 0) {
-      onComplete(amount);
+      onConfirm(amount);
       onClose();
-    }
-  };
-
-  const handleAdditionalInput = () => {
-    const amount = roundToCents(parseAmount(inputValue));
-    if (amount > 0) {
-      onAdditionalInput(amount);
-      setInputValue('0');
     }
   };
 
@@ -91,7 +81,6 @@ export default function PaymentInputModal({
 
         {/* Keypad and Action Buttons */}
         <div className="flex gap-4">
-          {/* Numeric Keypad */}
           <NumericKeypad
             onNumberClick={handleNumberClick}
             onBackspace={handleBackspace}
@@ -99,13 +88,9 @@ export default function PaymentInputModal({
             className="flex-1 space-y-2"
           />
 
-          {/* Action Buttons */}
           <div className="flex flex-col gap-2 w-32">
-            <Button variant="primary" size="lg" onClick={handleComplete}>
-              계산 완료
-            </Button>
-            <Button variant="ghost" size="lg" onClick={handleAdditionalInput}>
-              추가 입력
+            <Button variant="primary" size="lg" onClick={handleConfirm}>
+              확인
             </Button>
             <Button variant="ghost" size="lg" onClick={onClose}>
               취소

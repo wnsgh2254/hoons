@@ -575,52 +575,21 @@ export default function SalesRegistrationModal({
     }
   };
 
-  const handlePaymentComplete = async (amount: number) => {
-    if (paymentMethod) {
-      const newAmounts = normalizePaymentAmounts({
-        ...paymentAmounts,
-        [paymentMethod]: roundToCents(paymentAmounts[paymentMethod] + amount),
-      });
-      setPaymentAmounts(newAmounts);
-
-      // 금액 재계산 (새로운 paymentAmounts 사용)
-      recalculateAmounts(salesItems, newAmounts);
-
-      // 받을 금액 계산
-      const positivePaymentAmount = Math.max(0, newAmounts.cash) + Math.max(0, newAmounts.card) + Math.max(0, newAmounts.bank_transfer);
-      const negativePaymentAmount = Math.abs(Math.min(0, newAmounts.cash)) + Math.abs(Math.min(0, newAmounts.card)) + Math.abs(Math.min(0, newAmounts.bank_transfer));
-      const gross = salesAmount - discountAmount;
-      const netDue = netDueAfterDeposit(gross, depositCredit);
-      const newAmountToReceive = netDue - positivePaymentAmount - negativePaymentAmount - prepaidDeductionAmount;
-
-      setIsPaymentInputModalOpen(false);
-
-      // NOTE: handleComplete() reads paymentAmounts state asynchronously — pass overrides directly.
-      // Partial payment in new sale: keep registering other methods, then use main "계산 완료".
-      if (newAmountToReceive <= 0 || editSaleId) {
-        await performSaleRegistration({
-          paymentAmountsOverride: newAmounts,
-        });
-      }
-    }
+  const handlePaymentConfirm = (amount: number) => {
+    if (!paymentMethod) return;
+    const newAmounts = normalizePaymentAmounts({
+      ...paymentAmounts,
+      [paymentMethod]: roundToCents(amount),
+    });
+    setPaymentAmounts(newAmounts);
+    recalculateAmounts(salesItems, newAmounts);
+    setIsPaymentInputModalOpen(false);
   };
 
-  const handleAdditionalPaymentInput = (amount: number) => {
-    // 추가 입력 시 음수로 처리 (예: 현금 -2,000)
-    if (paymentMethod && amount > 0) {
-      setPaymentAmounts((prev) => {
-        const newAmounts = normalizePaymentAmounts({
-          ...prev,
-          [paymentMethod]: roundToCents(prev[paymentMethod] - amount),
-        });
-        // 새로운 paymentAmounts로 재계산
-        recalculateAmounts(salesItems, newAmounts);
-        return newAmounts;
-      });
-      // 모달 닫기
-      setIsPaymentInputModalOpen(false);
-    }
-  };
+  const paymentInputInitialAmount =
+    paymentMethod && paymentAmounts[paymentMethod] > 0
+      ? paymentAmounts[paymentMethod]
+      : amountToReceive;
 
   const handleCancel = () => {
     if (isSaving) return;
@@ -1126,10 +1095,9 @@ export default function SalesRegistrationModal({
       <PaymentInputModal
         isOpen={isPaymentInputModalOpen}
         paymentMethod={paymentMethod}
-        initialAmount={amountToReceive}
+        initialAmount={paymentInputInitialAmount}
         onClose={() => setIsPaymentInputModalOpen(false)}
-        onComplete={handlePaymentComplete}
-        onAdditionalInput={handleAdditionalPaymentInput}
+        onConfirm={handlePaymentConfirm}
       />
 
       {/* Sales Classification Modal */}
