@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import {
+  applyPaymentsToDepositSummary,
+  applyRefundsToDepositSummary,
+  applySalesToDepositSummary,
+  emptyDepositSummary,
+  recalculateDepositTotals,
+} from '@/lib/sales-deposit-summary';
 import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
@@ -38,6 +45,7 @@ export async function GET(request: NextRequest) {
         cash_amount,
         card_amount,
         bank_transfer_amount,
+        payment_method,
         sales_items (
           item_type,
           quantity,
@@ -67,21 +75,14 @@ export async function GET(request: NextRequest) {
       .gte('refund_date', startDate)
       .lte('refund_date', endDate);
 
-    let bookingsQuery = supabase
-      .from('bookings')
-      .select('id, shop_id')
-      .gte('booking_date', startDate)
-      .lte('booking_date', endDate);
-
     if (shopId) {
       const numericShopId = Number(shopId);
       salesQuery = salesQuery.eq('shop_id', numericShopId);
       refundsQuery = refundsQuery.eq('shop_id', numericShopId);
-      bookingsQuery = bookingsQuery.eq('shop_id', numericShopId);
     }
 
-    const [{ data: sales, error: salesError }, { data: refunds, error: refundsError }, { data: bookings, error: bookingsError }] =
-      await Promise.all([salesQuery, refundsQuery, bookingsQuery]);
+    const [{ data: sales, error: salesError }, { data: refunds, error: refundsError }] =
+      await Promise.all([salesQuery, refundsQuery]);
 
     if (salesError) {
       console.error('Error fetching sales:', salesError);
@@ -99,33 +100,31 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (bookingsError && !isTransientUpstreamError(bookingsError)) {
-      console.error('Error fetching bookings:', bookingsError);
-      return NextResponse.json(
-        { error: 'Failed to load booking data.' },
-        { status: 500 },
-      );
-    }
-
     if (refundsError) {
       console.warn('Transient upstream error fetching refunds for sales total; using empty refund summary.', refundsError);
     }
 
-    if (bookingsError) {
-      console.warn('Transient upstream error fetching bookings for sales total; deposit summary may be incomplete.', bookingsError);
-    }
-
-    const bookingIds = ((bookings as any[]) || []).map((booking: any) => booking.id);
+    // Payments by payment date (created_at), not booking appointment date.
     let paymentsQuery = supabase
       .from('payments')
-      .select('id, booking_id, amount, method, type, created_at')
+      .select(
+        `
+        id,
+        booking_id,
+        amount,
+        method,
+        type,
+        created_at,
+        bookings!inner (
+          shop_id
+        )
+      `,
+      )
       .gte('created_at', `${startDate}T00:00:00`)
-      .lte('created_at', `${endDate}T23:59:59`);
+      .lte('created_at', `${endDate}T23:59:59.999`);
 
-    if (bookingIds.length > 0) {
-      paymentsQuery = paymentsQuery.in('booking_id', bookingIds);
-    } else {
-      paymentsQuery = paymentsQuery.eq('booking_id', -1);
+    if (shopId) {
+      paymentsQuery = paymentsQuery.eq('bookings.shop_id', Number(shopId));
     }
 
     const { data: payments, error: paymentsError } = await paymentsQuery;
@@ -216,6 +215,12 @@ export async function GET(request: NextRequest) {
         membership: 0,
         total: 0,
       },
+      prepaid_pass: {
+        service: 0,
+        product: 0,
+        membership: 0,
+        total: 0,
+      },
     };
 
     salesData.forEach((sale: any) => {
@@ -252,78 +257,25 @@ export async function GET(request: NextRequest) {
         paymentDetails[key].membership += roundToCents(membershipShare);
         paymentDetails[key].total += roundToCents(amount);
       });
-    });
 
-    const depositSummary = {
-      cash: {
-        deposit: 0,
-        depositRefund: 0,
-        paymentAtSale: 0,
-        uncollectedDeposit: 0,
-        refund: 0,
-        total: 0,
-      },
-      card: {
-        deposit: 0,
-        depositRefund: 0,
-        paymentAtSale: 0,
-        uncollectedDeposit: 0,
-        refund: 0,
-        total: 0,
-      },
-      bank_transfer: {
-        deposit: 0,
-        depositRefund: 0,
-        paymentAtSale: 0,
-        uncollectedDeposit: 0,
-        refund: 0,
-        total: 0,
-      },
-    };
-
-    const resolveDepositMethod = (method: string): 'cash' | 'card' | 'bank_transfer' => {
-      if (method === 'cash') return 'cash';
-      if (method === 'bank_transfer') return 'bank_transfer';
-      return 'card';
-    };
-
-    paymentsData.forEach((payment: any) => {
-      const method = resolveDepositMethod(String(payment.method || 'card'));
-      const amount = toNum(payment.amount);
-
-      if (payment.type === 'deposit') {
-        depositSummary[method].deposit += amount;
-      } else if (payment.type === 'balance') {
-        depositSummary[method].paymentAtSale += amount;
-      }
-
-      depositSummary[method].total += amount;
-    });
-
-    refundsData.forEach((refund: any) => {
-      const totalRefundAmount = toNum(refund.total_amount);
-      const depositRefundAmount = (refund.refund_items || [])
-        .filter((item: any) => String(item.item_type) === 'deposit')
-        .reduce((sum: number, item: any) => sum + toNum(item.amount), 0);
-
-      const paymentBuckets = [
-        { key: 'cash' as const, amount: toNum(refund.cash_amount) },
-        { key: 'card' as const, amount: toNum(refund.card_amount) },
-        { key: 'bank_transfer' as const, amount: toNum(refund.bank_transfer_amount) },
-      ];
-
-      paymentBuckets.forEach(({ key, amount }) => {
-        if (amount <= 0) return;
-
-        const depositShare =
-          totalRefundAmount > 0 ? Math.min(amount, (depositRefundAmount / totalRefundAmount) * amount) : 0;
-        const regularRefundShare = Math.max(0, amount - depositShare);
-
-        depositSummary[key].depositRefund += depositShare;
-        depositSummary[key].refund += regularRefundShare;
-        depositSummary[key].total -= amount;
+      items.forEach((item: any) => {
+        const prepaidDeduction = toNum(item.prepaid_deduction);
+        if (prepaidDeduction <= 0) return;
+        if (item.item_type === 'service') {
+          paymentDetails.prepaid_pass.service += prepaidDeduction;
+        } else if (item.item_type === 'product') {
+          paymentDetails.prepaid_pass.product += prepaidDeduction;
+        }
+        paymentDetails.prepaid_pass.total += prepaidDeduction;
       });
     });
+
+    const depositSummary = emptyDepositSummary();
+
+    applyPaymentsToDepositSummary(depositSummary, paymentsData);
+    applySalesToDepositSummary(depositSummary, salesData);
+    applyRefundsToDepositSummary(depositSummary, refundsData);
+    recalculateDepositTotals(depositSummary);
 
     const membershipDeductions = {
       service: { quantity: 0, amount: 0 },

@@ -171,27 +171,52 @@ export default function SalesItemPickerModal({
     };
   }, [isOpen, activeTab]);
 
-  // activeTab이 변경되면 초기화
+  // Reset picker cart only when the modal opens (not when parent switches service/product tab)
   useEffect(() => {
-    if (isOpen) {
-      setActiveTab(initialTab);
-      setSelectedCategory(null);
-      setSelectedPaymentType('card');
-      setSelectedManager(defaultManager || managers[0]?.name || '');
-      setSelectedPrepaid(null);
-      setCustomPrice('');
-      setAccumulatedAmount('');
-      setValidityPeriod(null);
-      setValidityUnit('month');
-      setIsUnlimited(false);
-      setSelectedItems([]);
-      setProductSearchTerm('');
-      setSelectedProductCategory('전체');
-    }
-  }, [isOpen, initialTab, defaultManager, managers]);
+    if (!isOpen) return;
+    setActiveTab(initialTab);
+    setSelectedCategory(null);
+    setSelectedPaymentType('card');
+    setSelectedManager(defaultManager || managers[0]?.name || '');
+    setSelectedPrepaid(null);
+    setCustomPrice('');
+    setAccumulatedAmount('');
+    setValidityPeriod(null);
+    setValidityUnit('month');
+    setIsUnlimited(false);
+    setSelectedItems([]);
+    setProductSearchTerm('');
+    setSelectedProductCategory('전체');
+  }, [isOpen, defaultManager]);
+
+  // Sync tab from parent while keeping accumulated service/product selections
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveTab(initialTab);
+    setSelectedCategory(null);
+    setSelectedPaymentType('card');
+    setSelectedPrepaid(null);
+    setCustomPrice('');
+    setAccumulatedAmount('');
+    setValidityPeriod(null);
+    setValidityUnit('month');
+    setIsUnlimited(false);
+    setProductSearchTerm('');
+    setSelectedProductCategory('전체');
+  }, [isOpen, initialTab]);
 
 
   if (!isOpen) return null;
+
+  const cartDisplayItems = selectedItems.filter(
+    (item) => item.type === 'service' || item.type === 'product',
+  );
+
+  const cartItemTypeLabel = (type: SalesItemType) =>
+    type === 'service' ? '서비스' : type === 'product' ? '제품' : '';
+
+  const isItemSelectedInTab = (id: number) =>
+    selectedItems.some((selected) => selected.id === id && selected.type === activeTab);
 
   const handleItemSelect = (item: { id: number; name: string; price: number }) => {
     // 서비스 또는 제품 탭인 경우 선택 목록에 추가 (중복 체크)
@@ -203,8 +228,9 @@ export default function SalesItemPickerModal({
         type: activeTab,
         manager: selectedManager,
       };
-      // 이미 선택된 항목인지 확인
-      const isAlreadySelected = selectedItems.some((selected) => selected.id === item.id);
+      const isAlreadySelected = selectedItems.some(
+        (selected) => selected.id === item.id && selected.type === activeTab,
+      );
       if (!isAlreadySelected) {
         setSelectedItems((prev) => [...prev, newItem]);
       }
@@ -221,20 +247,56 @@ export default function SalesItemPickerModal({
     }
   };
 
-  const handleRemoveItem = (itemId: number) => {
-    setSelectedItems((prev) => prev.filter((item) => item.id !== itemId));
+  const handleRemoveItem = (itemId: number, itemType: SalesItemType) => {
+    setSelectedItems((prev) =>
+      prev.filter((item) => !(item.id === itemId && item.type === itemType)),
+    );
   };
 
+  const renderSelectedItemsSidebar = () => (
+    <div className="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-gray-200 pt-4 lg:pt-0 pl-0 lg:pl-5.5">
+      <h3 className="text-sm font-semibold text-gray-700 mb-4">선택한 항목</h3>
+      {cartDisplayItems.length === 0 ? (
+        <div className="text-sm text-gray-500">선택한 항목이 없습니다</div>
+      ) : (
+        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white max-h-[450px] overflow-y-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 sticky top-0">
+              <tr>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">구분</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">항목</th>
+                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">삭제</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cartDisplayItems.map((item) => (
+                <tr key={`${item.type}-${item.id}`} className="border-t border-gray-100">
+                  <td className="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
+                    {cartItemTypeLabel(item.type)}
+                  </td>
+                  <td className="py-2 px-3 text-sm text-gray-900">{item.name}</td>
+                  <td className="py-2 px-3">
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(item.id, item.type)}
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base">close</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
   const handleConfirm = () => {
-    // 서비스 또는 제품 탭인 경우 선택한 모든 항목을 한 번에 전달 (현재 선택된 담당자로 업데이트)
-    if ((activeTab === 'service' || activeTab === 'product') && selectedItems.length > 0) {
-      const itemsWithManager = selectedItems.map((item) => ({
-        ...item,
-        manager: selectedManager,
-      }));
-      // 모든 항목을 배열로 한 번에 전달 (parent onSelect closes modal)
-      onSelect(itemsWithManager);
-    } else if (activeTab === 'prepaid' && selectedPrepaid && customPrice !== '') {
+    const serviceAndProductItems = cartDisplayItems;
+
+    if (activeTab === 'prepaid' && selectedPrepaid && customPrice !== '') {
       if (accumulatedAmount === '') {
         alert('적립 금액을 입력해 주세요.');
         return;
@@ -254,8 +316,13 @@ export default function SalesItemPickerModal({
         prepaid_expires_at: buildPrepaidExpiresAtIso(isUnlimited, validityPeriod, validityUnit),
       };
       onSelect(prepaidItem);
+    } else if (serviceAndProductItems.length > 0) {
+      const itemsWithManager = serviceAndProductItems.map((item) => ({
+        ...item,
+        manager: selectedManager,
+      }));
+      onSelect(itemsWithManager);
     } else {
-      // 서비스/제품이 아닌 경우는 이미 handleItemSelect에서 처리됨
       onClose();
     }
   };
@@ -388,7 +455,7 @@ export default function SalesItemPickerModal({
                   {currentItems.map((item) => {
                     const displayName = item.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim();
                     const duration = item.duration_minutes ? ` · ${item.duration_minutes}분` : '';
-                    const isSelected = selectedItems.some((selected) => selected.id === item.id);
+                    const isSelected = isItemSelectedInTab(item.id);
                     return (
                       <button
                         key={item.id}
@@ -419,42 +486,7 @@ export default function SalesItemPickerModal({
           )}
         </div>
 
-        {/* Right: Selected Items */}
-        <div className="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-gray-200 pt-4 lg:pt-0 pl-0 lg:pl-5.5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">
-            {activeTab === 'service' ? '서비스' : activeTab === 'product' ? '제품' : '정액권'}
-          </h3>
-          {selectedItems.length === 0 ? (
-            <div className="text-sm text-gray-500">선택한 항목이 없습니다</div>
-          ) : (
-            <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">선택한 항목</th>
-                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">삭제</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedItems.map((item) => (
-                    <tr key={item.id} className="border-t border-gray-100">
-                      <td className="py-2 px-3 text-sm text-gray-900">{item.name}</td>
-                      <td className="py-2 px-3">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(item.id)}
-                          className="text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-base">close</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {renderSelectedItemsSidebar()}
       </div>
     );
   };
@@ -541,7 +573,7 @@ export default function SalesItemPickerModal({
                   </tr>
                 ) : (
                   filteredProducts.map((product) => {
-                    const isSelected = selectedItems.some((selected) => selected.id === product.id);
+                    const isSelected = isItemSelectedInTab(product.id);
                     return (
                       <tr
                         key={product.id}
@@ -564,40 +596,7 @@ export default function SalesItemPickerModal({
           </div>
         </div>
 
-        {/* Right: Selected Items */}
-        <div className="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-gray-200 pt-4 lg:pt-0 pl-0 lg:pl-5.5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">제품</h3>
-          {selectedItems.length === 0 ? (
-            <div className="text-sm text-gray-500">선택한 항목이 없습니다</div>
-          ) : (
-            <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">선택한 항목</th>
-                    <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">삭제</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedItems.map((item) => (
-                    <tr key={item.id} className="border-t border-gray-100">
-                      <td className="py-2 px-3 text-sm text-gray-900">{item.name}</td>
-                      <td className="py-2 px-3">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(item.id)}
-                          className="text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-base">close</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        {renderSelectedItemsSidebar()}
       </div>
     );
   };
@@ -716,6 +715,8 @@ export default function SalesItemPickerModal({
             </div>
           )}
         </div>
+
+        {renderSelectedItemsSidebar()}
       </div>
     );
   };
@@ -769,7 +770,6 @@ export default function SalesItemPickerModal({
             setValidityPeriod(null);
             setValidityUnit('month');
             setIsUnlimited(false);
-            setSelectedItems([]);
             setProductSearchTerm('');
             setSelectedProductCategory('전체');
           }}

@@ -462,6 +462,12 @@ function SalesSummaryTable({
         membership: 0,
         total: 0,
       },
+      prepaid_pass: {
+        service: 0,
+        product: 0,
+        membership: 0,
+        total: 0,
+      },
     },
   };
 
@@ -575,6 +581,13 @@ function SalesSummaryTable({
                 <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.bank_transfer?.membership ?? 0))}</td>
                 <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.bank_transfer?.total ?? 0))}</td>
               </tr>
+              <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+                <td className="px-4 py-2 font-medium">정액권</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.prepaid_pass?.service ?? 0))}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.prepaid_pass?.product ?? 0))}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.prepaid_pass?.membership ?? 0))}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.prepaid_pass?.total ?? 0))}</td>
+              </tr>
               <tr className="bg-gray-50 border-t-2 border-gray-300">
                 <td className="px-4 py-2 font-bold">합계</td>
                 <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.service.amount)}</td>
@@ -623,6 +636,10 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
 
   const depositData_actual = depositData || data;
   const bankTransferDeposit = depositData_actual.bank_transfer ?? data.bank_transfer;
+  const uncollectedTotal =
+    (depositData_actual.cash.uncollectedDeposit ?? 0) +
+    (depositData_actual.card.uncollectedDeposit ?? 0) +
+    (bankTransferDeposit.uncollectedDeposit ?? 0);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -692,7 +709,7 @@ function DepositSummaryTable({ depositData }: { depositData?: any }) {
       </table>
       </div>
       <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
-        <p className="text-xs text-gray-600">* 미수 발생 합계: 0</p>
+        <p className="text-xs text-gray-600">* 미수 발생 합계: {formatAudNumber(uncollectedTotal)}</p>
       </div>
     </div>
   );
