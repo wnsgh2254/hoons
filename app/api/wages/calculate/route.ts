@@ -199,7 +199,11 @@ export async function GET(request: NextRequest) {
       (designers || []).map(async (designer: any) => {
         const sales = staffSalesMap.get(designer.id) || {
           sales: { service: { amount: 0 }, product: { amount: 0 } },
-          membershipDeduction: { service: { amount: 0 }, subtotal: 0 },
+          membershipDeduction: {
+            service: { amount: 0 },
+            product: { amount: 0 },
+            subtotal: 0,
+          },
           total: { subtotal: 0 },
         };
 
@@ -209,7 +213,9 @@ export async function GET(request: NextRequest) {
           (sales.membershipDeduction?.service?.amount ?? sales.membershipDeduction?.subtotal) || 0
         );
         const productSalesRaw = toNum(sales.sales?.product?.amount || 0);
-        const productDeductionRaw = 0;
+        const productDeductionRaw = toNum(
+          (sales.membershipDeduction?.product?.amount ?? 0) || 0,
+        );
 
         // Comment: Hourly pay from staff_attendance (actual clock-in/out) × designer hourly_rate
         const attendanceMinutes = await getAttendanceTotalMinutes(designer.id, startDate, endDate);

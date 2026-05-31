@@ -967,8 +967,8 @@ function ByStaffSalesTab({
                         <td className="px-4 py-2 font-medium !border-l !border-gray-200">회원권 차감</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.quantity}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.service.amount)}</td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center"></td>
+                        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.product?.quantity ?? 0}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.product?.amount ?? 0)}</td>
                         <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
                         <td className="px-4 py-2 text-center"></td>
                         <td className="px-4 py-2 text-center"></td>

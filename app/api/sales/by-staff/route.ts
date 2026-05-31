@@ -16,6 +16,7 @@ type StaffSalesData = {
   };
   membershipDeduction: {
     service: { quantity: number; amount: number };
+    product: { quantity: number; amount: number };
     subtotal: number;
   };
   total: {
@@ -132,6 +133,7 @@ export async function GET(request: NextRequest) {
           },
           membershipDeduction: {
             service: { quantity: 0, amount: 0 },
+            product: { quantity: 0, amount: 0 },
             subtotal: 0,
           },
           total: {
@@ -171,6 +173,11 @@ export async function GET(request: NextRequest) {
           if (item.item_type === 'product') {
             staffData.sales.product.quantity += quantity;
             staffData.sales.product.amount += amount;
+
+            if (prepaidDeduction > 0) {
+              staffData.membershipDeduction.product.quantity += 1;
+              staffData.membershipDeduction.product.amount += prepaidDeduction;
+            }
             return;
           }
 
@@ -189,11 +196,13 @@ export async function GET(request: NextRequest) {
         staffData.sales.subtotal + staffData.sales.membership.amount;
 
       staffData.membershipDeduction.subtotal =
-        staffData.membershipDeduction.service.amount;
+        staffData.membershipDeduction.service.amount +
+        staffData.membershipDeduction.product.amount;
 
       staffData.total.service.amount =
         staffData.sales.service.amount + staffData.membershipDeduction.service.amount;
-      staffData.total.product.amount = staffData.sales.product.amount;
+      staffData.total.product.amount =
+        staffData.sales.product.amount + staffData.membershipDeduction.product.amount;
       staffData.total.subtotal =
         staffData.total.service.amount + staffData.total.product.amount;
     });
