@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import {
   adjustInventoryStockForSaleItem,
   adjustPrepaidBalance,
+  assertSufficientPrepaidBalance,
 } from '@/lib/sales-reconciliation';
 import {
   deleteLinkedBookingForSale,
@@ -269,6 +270,17 @@ export async function PUT(
       !Number.isNaN(Number(prepaid_customer_id))
         ? Number(prepaid_customer_id)
         : Number(customer_id);
+
+    if (prepaidDelta > 0) {
+      try {
+        await assertSufficientPrepaidBalance(supabase, prepaidCustomerId, prepaidDelta);
+      } catch (prepaidValidationError: any) {
+        return NextResponse.json(
+          { error: prepaidValidationError?.message || '정액권 잔액을 확인할 수 없습니다.' },
+          { status: 400 },
+        );
+      }
+    }
 
     // 1. Update the sales header (no edit_history column in DB — omit to avoid PGRST204)
     const { data: updatedSale, error: headerError } = await supabase

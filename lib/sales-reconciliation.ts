@@ -64,6 +64,44 @@ export async function adjustInventoryStockForSaleItem(
   }
 }
 
+export async function getActivePrepaidBalance(
+  supabase: SupabaseClient,
+  customerId: number,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('prepaid_passes')
+    .select('points')
+    .eq('is_active', true)
+    .eq('customer_id', customerId);
+  if (error) {
+    throw new Error(error.message);
+  }
+  return roundToCents(
+    (data || []).reduce(
+      (sum, row) => sum + Number((row as { points?: number | string | null }).points || 0),
+      0,
+    ),
+  );
+}
+
+/** Reject prepaid deductions when the owner has no pass or insufficient balance. */
+export async function assertSufficientPrepaidBalance(
+  supabase: SupabaseClient,
+  customerId: number,
+  deductionAmount: number,
+): Promise<void> {
+  const amount = roundToCents(Number(deductionAmount) || 0);
+  if (amount <= 0) return;
+
+  const balance = await getActivePrepaidBalance(supabase, customerId);
+  if (balance <= 0) {
+    throw new Error('사용 가능한 정액권이 없습니다.');
+  }
+  if (amount > balance) {
+    throw new Error('정액권 잔액이 부족합니다.');
+  }
+}
+
 export async function adjustPrepaidBalance(
   supabase: SupabaseClient,
   params: {
@@ -86,7 +124,12 @@ export async function adjustPrepaidBalance(
   }
 
   const rows = (data || []) as PrepaidPassRow[];
-  if (rows.length === 0) return;
+  if (rows.length === 0) {
+    if (pointsDelta < 0) {
+      throw new Error('사용 가능한 정액권이 없습니다.');
+    }
+    return;
+  }
 
   const preferredRows = rows.filter(
     (row) => normalizeName(row.name) === normalizeName(params.passLabel),
@@ -121,5 +164,9 @@ export async function adjustPrepaidBalance(
       throw new Error(updateError.message);
     }
     remaining -= deduct;
+  }
+
+  if (remaining > 0) {
+    throw new Error('정액권 잔액이 부족합니다.');
   }
 }

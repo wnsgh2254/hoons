@@ -4,6 +4,7 @@ import { issuePrepaidPassFromSale } from '@/lib/data';
 import {
   adjustInventoryStockForSaleItem,
   adjustPrepaidBalance,
+  assertSufficientPrepaidBalance,
 } from '@/lib/sales-reconciliation';
 import {
   normalizePaymentAmounts,
@@ -191,6 +192,21 @@ export async function POST(request: NextRequest) {
       !Number.isNaN(Number(prepaid_customer_id))
         ? Number(prepaid_customer_id)
         : Number(customer_id);
+
+    if (totalPrepaidDeductionFromRequest > 0) {
+      try {
+        await assertSufficientPrepaidBalance(
+          supabase,
+          prepaidCustomerId,
+          totalPrepaidDeductionFromRequest,
+        );
+      } catch (prepaidValidationError: any) {
+        return NextResponse.json(
+          { error: prepaidValidationError?.message || '정액권 잔액을 확인할 수 없습니다.' },
+          { status: 400 },
+        );
+      }
+    }
 
     const { data: saleHeader, error: headerError } = await supabase
       .from('sales')

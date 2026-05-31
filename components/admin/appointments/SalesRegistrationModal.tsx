@@ -496,6 +496,15 @@ export default function SalesRegistrationModal({
       return;
     }
 
+    const totalPrepaidDeduction = salesItems.reduce(
+      (sum, item) => sum + item.prepaidDeduction,
+      0,
+    );
+    if (totalPrepaidDeduction > 0 && !validatePrepaidBalance(totalPrepaidDeduction)) {
+      showPrepaidBalanceError();
+      return;
+    }
+
     const isEditMode = !!editSaleId;
     const paymentAmountsToSave = normalizePaymentAmounts(
       options?.paymentAmountsOverride || paymentAmounts,
@@ -1171,41 +1180,17 @@ export default function SalesRegistrationModal({
         onClose={() => {
           setIsGlobalPrepaidDeductionModalOpen(false);
         }}
-        onComplete={async (amount) => {
+        onComplete={(amount) => {
           if (!customer) return;
-          
-          // 정액권 잔액 확인 (총액 기준 1회 차감)
-          const totalPrepaidDeduction = amount;
-          
-          if (!validatePrepaidBalance(totalPrepaidDeduction)) {
+
+          if (!validatePrepaidBalance(amount)) {
             showPrepaidBalanceError();
             return;
           }
-          
-          // 모든 항목에 총 정액권 차감액을 분배 적용
+
           const updatedItems = applyTotalPrepaidDeduction(salesItems, amount);
           updatePrepaidDeductionState(updatedItems);
-          
-          // 모달 닫기
-          setIsGlobalPrepaidDeductionModalOpen(false);
-        }}
-        onAdditionalInput={(amount) => {
-          if (!customer) return;
-          
-          // 정액권 잔액 확인
-          const currentTotalPrepaidDeduction = salesItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
-          const newTotalPrepaidDeduction = currentTotalPrepaidDeduction + amount;
-          
-          if (!validatePrepaidBalance(newTotalPrepaidDeduction)) {
-            showPrepaidBalanceError();
-            return;
-          }
-          
-          // 기존 총액 + 추가 입력 금액을 다시 분배 적용
-          const updatedItems = applyTotalPrepaidDeduction(salesItems, newTotalPrepaidDeduction);
-          updatePrepaidDeductionState(updatedItems);
-          
-          // 모달 닫기
+          setSelectedDeduction('prepaid');
           setIsGlobalPrepaidDeductionModalOpen(false);
         }}
       />

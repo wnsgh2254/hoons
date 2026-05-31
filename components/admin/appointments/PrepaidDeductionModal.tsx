@@ -28,7 +28,6 @@ interface PrepaidDeductionModalProps {
   selectedItemId?: string | null;
   onClose: () => void;
   onComplete: (amount: number) => void;
-  onAdditionalInput: (amount: number) => void;
   onBalanceLoaded?: (balance: number) => void;
 }
 
@@ -42,7 +41,6 @@ export default function PrepaidDeductionModal({
   selectedItemId = null,
   onClose,
   onComplete,
-  onAdditionalInput,
   onBalanceLoaded,
 }: PrepaidDeductionModalProps) {
   const [inputValue, setInputValue] = useState('0');
@@ -171,20 +169,27 @@ export default function PrepaidDeductionModal({
 
   const getNumericValue = (): number => roundToCents(parseAmount(inputValue));
 
+  const totalPrepaidBalance = prepaidPasses.reduce(
+    (sum, pass) => sum + Number(pass.points || 0),
+    0,
+  );
+
   const handleComplete = () => {
     const amount = getNumericValue();
-    if (amount > 0) {
-      onComplete(amount);
-      onClose();
+    if (amount <= 0) {
+      alert('차감 금액을 입력해 주세요.');
+      return;
     }
-  };
-
-  const handleAdditionalInput = () => {
-    const amount = getNumericValue();
-    if (amount > 0) {
-      onAdditionalInput(amount);
-      setInputValue('0');
+    if (prepaidPasses.length === 0 || totalPrepaidBalance <= 0) {
+      alert('사용 가능한 정액권이 없습니다.');
+      return;
     }
+    if (amount > totalPrepaidBalance) {
+      alert('정액권 잔액이 부족합니다.');
+      return;
+    }
+    onComplete(amount);
+    onClose();
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -334,9 +339,8 @@ export default function PrepaidDeductionModal({
               className="flex-1 space-y-2"
             />
 
-            <div className="grid grid-cols-3 gap-2 md:flex md:flex-col md:gap-2 md:w-32">
+            <div className="grid grid-cols-2 gap-2 md:flex md:flex-col md:gap-2 md:w-32">
               <Button size="lg" className="w-full" onClick={handleComplete}>확인</Button>
-              <Button variant="ghost" size="lg" className="w-full" onClick={handleAdditionalInput}>추가 입력</Button>
               <Button variant="ghost" size="lg" className="w-full" onClick={onClose}>취소</Button>
             </div>
           </div>
