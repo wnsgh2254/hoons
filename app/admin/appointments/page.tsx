@@ -59,6 +59,7 @@ import {
   labelToDbTime,
   parseLocalDateString,
   getBookingDurationMinutes,
+  getBookingServiceDisplayName,
   clampBookingMenuHorizontalPosition,
   nudgeFixedPopoverIntoViewport,
   BOOKING_CONTEXT_MENU_EST_HEIGHT,
@@ -2298,7 +2299,7 @@ export default function AppointmentsManagementPage() {
                                   ? booking.booking_time.slice(0, 5)
                                   : '—';
                                 const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
-                                const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
+                                const serviceName = getBookingServiceDisplayName(booking as any);
                                 const duration = getBookingDurationMinutes(booking as any);
                                 const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
                                 const statusLabel =
@@ -2353,7 +2354,7 @@ export default function AppointmentsManagementPage() {
                             ? booking.booking_time.slice(0, 5)
                             : '—';
                           const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
-                          const serviceName = (booking as any).service?.name || (booking as any).service_name || '';
+                          const serviceName = getBookingServiceDisplayName(booking as any);
                           const duration = getBookingDurationMinutes(booking as any);
                           const status = String((booking as any).status || (booking as any).booking_status || '').toLowerCase();
                           const statusLabel =

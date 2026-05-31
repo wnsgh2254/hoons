@@ -461,17 +461,6 @@ export default function BookingPage() {
     return 'Other';
   };
 
-  const shouldDisplayAsHotPerm = (service: { name?: string | null; category?: string | null }) => {
-    const name = String(service.name || '').toLowerCase();
-    const category = String(service.category || '').toLowerCase();
-    return (
-      name.includes('digital perm') ||
-      name.includes('hot perm') ||
-      category.includes('digital perm') ||
-      category.includes('hot perm')
-    );
-  };
-
   // Map services loaded from API into UI Service objects
   // Remove "(card)" or "(cash)" from name for display in booking page
   // Only show card services to customers (filter out cash services)
@@ -548,11 +537,9 @@ export default function BookingPage() {
       .filter((ds: any) => ds.is_active && ds.services)
       .map((ds: any) => {
         const svc = ds.services;
-        // Comment: Custom entries show actual service name; others show the category label
+        // Comment: Custom entries show configured service name; others show the category label
         let displayName: string;
-        if (shouldDisplayAsHotPerm(svc)) {
-          displayName = '열펌';
-        } else if (svc.category === 'Custom') {
+        if (svc.category === 'Custom') {
           displayName = svc.name
             ? svc.name.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim()
             : '기타';

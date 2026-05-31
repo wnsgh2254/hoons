@@ -1,6 +1,7 @@
 'use client';
 
 import type { BookingWithRelations } from '@/lib/types';
+import { getBookingServiceDisplayName } from '@/lib/utils/appointment-utils';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
@@ -45,8 +46,8 @@ export default function AppointmentDetailModal({
   const serviceNames = Array.from(
     new Set(
       groupBookings
-        .map((b) => (b as any).custom_service_name || b.service?.name || '')
-        .filter(Boolean)
+        .map((b) => getBookingServiceDisplayName(b))
+        .filter((name) => name !== 'Service')
     )
   );
 

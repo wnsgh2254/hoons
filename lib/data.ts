@@ -43,8 +43,7 @@ function buildBookingDateFromDay(day: number): string {
 
 function normalizeBookingServiceName(name: string | null | undefined): string | null {
   const trimmed = String(name || '').trim();
-  if (!trimmed) return null;
-  return trimmed.replace(/\bdigital\s+perm\b/gi, '열펌');
+  return trimmed || null;
 }
 
 // Comment: Normalize AU phone numbers for lookup/insert (local + e164 + digitsOnly)

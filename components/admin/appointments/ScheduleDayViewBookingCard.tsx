@@ -4,6 +4,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import type { BookingWithRelations } from '@/lib/types';
 import {
+  getBookingServiceDisplayName,
   resolveBookingCardStatusColor,
   COLOR_LABEL_MAP,
   getBookingDurationMinutes,
@@ -84,11 +85,7 @@ function ScheduleDayViewBookingCard({
   const minutes = Number(minuteStr);
   const durationMinutes = getBookingDurationMinutes(booking as any);
 
-  const serviceName =
-    (booking as any).service_for_display ||
-    (booking as any).custom_service_name ||
-    booking.service?.name ||
-    'Service';
+  const serviceName = getBookingServiceDisplayName(booking as any);
   const timeLabel = `${hourStr.padStart(2, '0')}:${minuteStr}`;
   const statusColor = resolveBookingCardStatusColor(booking as any);
   const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';

@@ -1,6 +1,6 @@
 'use client';
 
-import { bookingTimeToLabel } from '@/lib/utils/appointment-utils';
+import { bookingTimeToLabel, getBookingServiceDisplayName } from '@/lib/utils/appointment-utils';
 import type { BookingWithRelations } from '@/lib/types';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -45,7 +45,7 @@ export default function DeleteBookingModal({
         </div>
         <div className="flex justify-between">
           <span className="text-gray-500">Service</span>
-          <span className="font-medium text-gray-900">{booking.service?.name || 'Service'}</span>
+          <span className="font-medium text-gray-900">{getBookingServiceDisplayName(booking)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-500">Designer</span>

@@ -1,3 +1,29 @@
+/** Strip POS payment suffixes from catalog service names for display. */
+export function stripServicePaymentSuffix(name: string | null | undefined): string {
+  return String(name || '')
+    .replace(/\s*\(card\)\s*/gi, '')
+    .replace(/\s*\(cash\)\s*/gi, '')
+    .trim();
+}
+
+/** Service label shown on admin booking cards — prefer stored booking summary over catalog default. */
+export function getBookingServiceDisplayName(booking: {
+  custom_service_name?: string | null;
+  service?: { name?: string | null } | null;
+  service_for_display?: string | null;
+}): string {
+  const override = String(
+    (booking as { service_for_display?: string | null }).service_for_display || '',
+  ).trim();
+  if (override) return override;
+
+  const custom = String(booking.custom_service_name || '').trim();
+  if (custom) return custom;
+
+  const catalog = stripServicePaymentSuffix(booking.service?.name);
+  return catalog || 'Service';
+}
+
 /**
  * Effective booking length in minutes for admin grid / overlap checks.
  * Prefer custom_service_duration (public booking total or admin override), then catalog service.
