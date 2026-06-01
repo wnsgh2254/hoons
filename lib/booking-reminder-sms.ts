@@ -1,4 +1,4 @@
-// Comment: Shared 3-day reminder SMS — keep in sync with `supabase/functions/booking-reminder/index.ts` message helpers.
+// Comment: Shared 3-day reminder SMS — keep in sync with Supabase Edge Function `booking-reminder`.
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -46,17 +46,12 @@ export function buildBookingReminderSmsBody(params: {
 
   return (
     `[Haeyoom Reminder]\n\n` +
-    `Appointment: \n` +
+    `Booking:\n` +
     `${params.appointmentLine}\n\n` +
     `Service: ${params.serviceLabel}\n\n` +
-    `To Change or Cancel: \n` +
-    `Must contact via Call or Text to ${contactPhone}\n\n` +
-    `Deposit Policy:\n` +
-    `* 3+ days: Last day for 100% refund\n` +
-    `* 1-2 days before: 50% refund\n` +
-    `* Same-day: Non-refundable\n` +
-    `* Late over 10 mins: Auto-canceled\n\n` +
-    `Location: ${loc}\n\n` +
-    `See you soon, Team Haeyoom`
+    `Change or Cancel:\n` +
+    `Call or Text\n` +
+    `${contactPhone}\n\n` +
+    `Location: ${loc}`
   );
 }

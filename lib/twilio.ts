@@ -115,6 +115,7 @@ export type SendBookingReminderVenue = {
   customServiceName?: string | null;
   catalogServiceName?: string | null;
   catalogEnglishName?: string | null;
+  shopName?: string | null;
   shopLocation?: string | null;
   shopPhone?: string | null;
 };
@@ -135,7 +136,7 @@ export async function sendBookingReminder(
   const message = buildBookingReminderSmsBody({
     appointmentLine,
     serviceLabel,
-    shopLocation: smsVenueLocationForReminder(venue?.shopLocation),
+    shopLocation: smsVenueLocationForReminder(venue?.shopLocation, venue?.shopName),
     shopPhone: venue?.shopPhone,
   });
 

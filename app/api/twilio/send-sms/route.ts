@@ -35,12 +35,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '고객 전화번호가 없습니다.' }, { status: 400 });
       }
 
-      const shop = booking.shop as { location?: string | null; phone?: string | null } | null;
+      const shop = booking.shop as { name?: string | null; location?: string | null; phone?: string | null } | null;
       const svc = booking.service as { name?: string | null; english_name?: string | null } | null;
       const result = await sendBookingReminder(customerPhone, booking.booking_date, booking.booking_time, {
         customServiceName: (booking as { custom_service_name?: string | null }).custom_service_name,
         catalogServiceName: svc?.name,
         catalogEnglishName: svc?.english_name,
+        shopName: shop?.name ?? null,
         shopLocation: shop?.location ?? '',
         shopPhone: shop?.phone ?? null,
       });

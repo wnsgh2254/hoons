@@ -155,11 +155,22 @@ export function haeyoomSmsHeader(shopName: string | null | undefined): string {
   const t = String(shopName ?? '').trim();
   if (!t) return 'Haeyoom Salon';
   if (containsHangul(t)) return 'Haeyoom Salon';
-  return `Haeyoom ${t}`;
+
+  // Comment: DB shop names may already include "HAEYOOM" / "Haeyoom" — avoid "Haeyoom Haeyoom …".
+  const withoutBrand = t.replace(/^haeyoom\s*/i, '').trim();
+  if (!withoutBrand) return 'Haeyoom Salon';
+  return `Haeyoom ${withoutBrand}`;
 }
 
-/** Reminder Location line: hide Korean addresses, keep Latin. */
-export function smsVenueLocationForReminder(location: string | null | undefined): string {
+/** Reminder Location line: known venues show store name only; hide Korean addresses. */
+export function smsVenueLocationForReminder(
+  location: string | null | undefined,
+  shopName?: string | null | undefined,
+): string {
+  const haystack = `${String(location ?? '')} ${String(shopName ?? '')}`.trim().toLowerCase();
+  if (haystack.includes('meadowbank')) return 'Meadowbank Store';
+  if (haystack.includes('haymarket')) return 'Haymarket Store';
+
   const t = String(location ?? '').trim();
   if (!t) return 'Haeyoom salon';
   if (containsHangul(t)) return 'Your Haeyoom salon';
