@@ -555,6 +555,7 @@ export default function SalesRegistrationModal({
             prepaidCustomerId && prepaidCustomerId !== customer.id
               ? prepaidCustomerId
               : undefined,
+          paid_deposit: depositCredit,
         }),
       });
 

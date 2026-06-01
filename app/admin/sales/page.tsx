@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useStaff } from '@/hooks/useStaff';
 import { useServices } from '@/hooks/useServices';
-import { getSydneyToday } from '@/lib/utils/appointment-utils';
+import { bookingTimeToLabel, getSydneyToday } from '@/lib/utils/appointment-utils';
+import { formatSydneyPayDateTime } from '@/lib/sydney-datetime-range';
 import { formatPaymentMethod, formatAudNumber } from '@/lib/utils';
 import {
   AdminPageLayout,
@@ -21,13 +22,14 @@ import CustomerInfoDrawer from '@/components/admin/appointments/CustomerInfoDraw
 import { useSalesDetailActions } from '@/hooks/useSalesDetailActions';
 import { buildSaleHistoryPayments, getSaleLineGrossAmount } from '@/lib/sales-payment-utils';
 
-type TabType = 'total' | 'byStaff' | 'byItem';
+type TabType = 'total' | 'byStaff' | 'byItem' | 'deposit';
 type DateMode = 'daily' | 'period';
 
 const SALES_TABS = [
   { key: 'total', label: '전체 매출' },
   { key: 'byStaff', label: '직원별 매출' },
   { key: 'byItem', label: '항목별 매출' },
+  { key: 'deposit', label: '디파짓' },
 ];
 
 export default function SalesPage() {
@@ -101,6 +103,18 @@ export default function SalesPage() {
           selectedItemType={selectedItemType}
           setSelectedItemType={setSelectedItemType}
           designers={designers}
+        />
+      )}
+      {activeTab === 'deposit' && (
+        <DepositSalesTab
+          dateMode={dateMode}
+          setDateMode={setDateMode}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
         />
       )}
 
@@ -421,6 +435,226 @@ function TotalSalesTab({
   );
 }
 
+type DepositBookingRow = {
+  id: number;
+  shop_name: string | null;
+  customer_name: string | null;
+  designer_name: string | null;
+  booking_date: string;
+  booking_time: string;
+  service_name: string;
+  deposit_paid: number;
+  created_at: string;
+};
+
+// Comment: Deposit tab — bookings with deposit_paid > 0, filtered by created_at date
+function DepositSalesTab({
+  dateMode,
+  setDateMode,
+  selectedDate,
+  setSelectedDate,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+}: {
+  dateMode: DateMode;
+  setDateMode: (mode: DateMode) => void;
+  selectedDate: string;
+  setSelectedDate: (date: string) => void;
+  startDate: string;
+  setStartDate: (date: string) => void;
+  endDate: string;
+  setEndDate: (date: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [bookings, setBookings] = useState<DepositBookingRow[]>([]);
+  const [summary, setSummary] = useState<{ count: number; totalDeposit: number } | null>(null);
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string>('');
+  const [shouldFetch, setShouldFetch] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchShops = async () => {
+      try {
+        const res = await fetch('/api/shops');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+        setShops(data.shops || []);
+      } catch (error) {
+        console.error('Error fetching shops for deposit sales filter:', error);
+      }
+    };
+
+    fetchShops();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSearch = () => {
+    if (dateMode === 'daily' && !selectedDate) {
+      alert('날짜를 선택해주세요.');
+      return;
+    }
+    if (dateMode === 'period' && (!startDate || !endDate)) {
+      alert('시작 날짜와 종료 날짜를 선택해주세요.');
+      return;
+    }
+    setHasSearched(true);
+    setShouldFetch(true);
+  };
+
+  useEffect(() => {
+    if (!shouldFetch) return;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (dateMode === 'daily') {
+          params.append('start_date', selectedDate);
+          params.append('end_date', selectedDate);
+        } else {
+          params.append('start_date', startDate);
+          params.append('end_date', endDate);
+        }
+        if (selectedShopId) {
+          params.append('shop_id', selectedShopId);
+        }
+
+        const res = await fetch(`/api/sales/deposits?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch deposit bookings');
+        }
+        const data = await res.json();
+        setBookings(data.bookings || []);
+        setSummary(data.summary || { count: 0, totalDeposit: 0 });
+      } catch (error) {
+        console.error('Error fetching deposit bookings:', error);
+        setBookings([]);
+        setSummary(null);
+      } finally {
+        setLoading(false);
+        setShouldFetch(false);
+      }
+    };
+
+    fetchData();
+  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedShopId]);
+
+  const handleDateChange = (direction: 'prev' | 'next') => {
+    if (dateMode === 'daily') {
+      const date = new Date(selectedDate);
+      if (direction === 'prev') {
+        date.setDate(date.getDate() - 1);
+      } else {
+        date.setDate(date.getDate() + 1);
+      }
+      setSelectedDate(date.toISOString().split('T')[0]);
+    }
+  };
+
+  const shopOptions = shops.map((shop: any) => ({
+    value: String(shop.id),
+    label: shop.name,
+  }));
+
+  return (
+    <div className="flex flex-col gap-6">
+      <DateFilterBar
+        dateMode={dateMode}
+        setDateMode={setDateMode}
+        selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        handleDateChange={handleDateChange}
+        handleSearch={handleSearch}
+        extraFilters={
+          <Select
+            value={selectedShopId}
+            onChange={(e) => setSelectedShopId(e.target.value)}
+            options={shopOptions}
+            placeholder="전체 지점"
+            wrapperClassName="flex-1 min-w-0 md:max-w-xs"
+          />
+        }
+      />
+
+      {loading ? (
+        <div className="text-center py-11.5 text-gray-500">Loading...</div>
+      ) : !hasSearched ? null : bookings.length === 0 ? (
+        <EmptyState title="해당 기간에 디파짓이 결제된 예약이 없습니다." />
+      ) : (
+        <div className="flex flex-col gap-4">
+          {summary && (
+            <div className="text-sm text-gray-600">
+              총 <span className="font-semibold text-gray-900">{summary.count}</span>건 · 디파짓 합계{' '}
+              <span className="font-semibold text-gray-900">{formatAudNumber(summary.totalDeposit)}</span>
+            </div>
+          )}
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-sm [&_td]:whitespace-nowrap [&_td]:border-l [&_td]:border-gray-200 [&_th]:whitespace-nowrap [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">페이 시간</th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">손님</th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">디자이너</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">시간</th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider">서비스</th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">예약 날짜</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold text-gray-800 uppercase tracking-wider">디파짓</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map((row) => (
+                    <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-2 text-center tabular-nums">
+                        {formatSydneyPayDateTime(row.created_at)}
+                      </td>
+                      <td className="px-4 py-2 font-medium">{row.customer_name || '-'}</td>
+                      <td className="px-4 py-2">{row.designer_name || '-'}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">
+                        {row.booking_time ? bookingTimeToLabel(row.booking_time) : '-'}
+                      </td>
+                      <td className="px-4 py-2">{row.service_name}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">{row.booking_date}</td>
+                      <td className="px-4 py-2 text-right font-semibold tabular-nums">
+                        {formatAudNumber(row.deposit_paid)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {summary && bookings.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-emerald-50 border-t-2 border-emerald-200">
+                      <td className="px-4 py-2 font-bold" colSpan={6}>
+                        합계 ({summary.count}건)
+                      </td>
+                      <td className="px-4 py-2 text-right font-bold tabular-nums">
+                        {formatAudNumber(summary.totalDeposit)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Comment: Sales Summary Table Component
 function SalesSummaryTable({
   showPaymentDetails,
@@ -463,6 +697,18 @@ function SalesSummaryTable({
         total: 0,
       },
       prepaid_pass: {
+        service: 0,
+        product: 0,
+        membership: 0,
+        total: 0,
+      },
+      deposit: {
+        service: 0,
+        product: 0,
+        membership: 0,
+        total: 0,
+      },
+      columnTotals: {
         service: 0,
         product: 0,
         membership: 0,
@@ -588,12 +834,39 @@ function SalesSummaryTable({
                 <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.prepaid_pass?.membership ?? 0))}</td>
                 <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.prepaid_pass?.total ?? 0))}</td>
               </tr>
+              <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+                <td className="px-4 py-2 font-medium">디파짓</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.deposit?.service ?? 0))}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.deposit?.product ?? 0))}</td>
+                <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.deposit?.membership ?? 0))}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber((salesData_actual.paymentDetails.deposit?.total ?? 0))}</td>
+              </tr>
               <tr className="bg-gray-50 border-t-2 border-gray-300">
                 <td className="px-4 py-2 font-bold">합계</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.service.amount)}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.product.amount)}</td>
-                <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesData_actual.sales.membership.amount)}</td>
-                <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(salesData_actual.sales.total)}</td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">
+                  {formatAudNumber(
+                    salesData_actual.paymentDetails.columnTotals?.service ??
+                      salesData_actual.sales.service.amount,
+                  )}
+                </td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">
+                  {formatAudNumber(
+                    salesData_actual.paymentDetails.columnTotals?.product ??
+                      salesData_actual.sales.product.amount,
+                  )}
+                </td>
+                <td className="px-4 py-2 text-center font-semibold tabular-nums">
+                  {formatAudNumber(
+                    salesData_actual.paymentDetails.columnTotals?.membership ??
+                      salesData_actual.sales.membership.amount,
+                  )}
+                </td>
+                <td className="px-4 py-2 text-center font-bold tabular-nums">
+                  {formatAudNumber(
+                    salesData_actual.paymentDetails.columnTotals?.total ??
+                      salesData_actual.sales.total,
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>

@@ -1,4 +1,4 @@
-import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
+import { resolvePaidDepositFromSaleRecord } from '@/lib/sale-paid-deposit';
 import type { SalesDetailData } from '@/lib/types';
 
 /** Map GET /api/sales/:id (or list row) payload to SalesDetailData for modals */
@@ -12,7 +12,7 @@ export function mapSaleRecordToDetailData(sale: any, customerNameFallback = ''):
     customer_id: sale.customer_id ?? 0,
     shop_id: sale.shop_id ?? null,
     booking_id: sale.booking_id ?? null,
-    booking_deposit_paid: normalizeBookingDepositPaid(sale.booking_deposit_paid),
+    booking_deposit_paid: resolvePaidDepositFromSaleRecord(sale),
     customer_name: name,
     sales_date: sale.sales_date,
     sales_time: sale.sales_time || '',

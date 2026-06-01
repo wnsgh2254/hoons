@@ -1,4 +1,5 @@
-import { normalizeBookingDepositPaid, resolveBookingDepositPaidForSale } from '@/lib/booking-deposit-paid';
+import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
+import { resolvePaidDepositFromSaleRecord } from '@/lib/sale-paid-deposit';
 import { resolveBookingIdForSale } from '@/lib/sale-booking-link';
 import { getSalePrepaidDeductionTotal } from '@/lib/sales-payment-utils';
 
@@ -88,7 +89,9 @@ export async function archiveSaleDeletion(
   }
 
   const bookingId = await resolveBookingIdForSale(supabase, sale);
-  const depositPaid = await resolveBookingDepositPaidForSale(supabase, sale);
+  const depositPaid = normalizeBookingDepositPaid(
+    resolvePaidDepositFromSaleRecord(sale as Parameters<typeof resolvePaidDepositFromSaleRecord>[0]),
+  );
 
   let bookingDesignerName: string | null = null;
   if (bookingId) {

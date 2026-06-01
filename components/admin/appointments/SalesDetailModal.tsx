@@ -206,7 +206,7 @@ export default function SalesDetailModal({
 
                 {depositCredit > 0 && (
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-700">예수금 (납부됨)</span>
+                    <span className="text-sm text-gray-700">디파짓 (납부됨)</span>
                     <span className="text-sm font-medium text-emerald-700">
                       {formatAudAmount(depositCredit)}
                     </span>

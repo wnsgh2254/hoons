@@ -7,6 +7,12 @@ import {
   emptyDepositSummary,
   recalculateDepositTotals,
 } from '@/lib/sales-deposit-summary';
+import { attachBookingDepositPaidToSales } from '@/lib/booking-deposit-paid';
+import {
+  applySaleToPaymentDetails,
+  emptyPaymentDetails,
+  recalculatePaymentDetailColumnTotals,
+} from '@/lib/sales-payment-details';
 import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
@@ -46,6 +52,9 @@ export async function GET(request: NextRequest) {
         card_amount,
         bank_transfer_amount,
         payment_method,
+        booking_id,
+        paid_deposit,
+        bookings:booking_id ( deposit_paid ),
         sales_items (
           item_type,
           quantity,
@@ -196,79 +205,14 @@ export async function GET(request: NextRequest) {
       refundSummary.product.amount +
       refundSummary.membership.amount;
 
-    const paymentDetails = {
-      cash: {
-        service: 0,
-        product: 0,
-        membership: 0,
-        total: 0,
-      },
-      card: {
-        service: 0,
-        product: 0,
-        membership: 0,
-        total: 0,
-      },
-      bank_transfer: {
-        service: 0,
-        product: 0,
-        membership: 0,
-        total: 0,
-      },
-      prepaid_pass: {
-        service: 0,
-        product: 0,
-        membership: 0,
-        total: 0,
-      },
-    };
+    await attachBookingDepositPaidToSales(supabase, salesData);
+
+    const paymentDetails = emptyPaymentDetails();
 
     salesData.forEach((sale: any) => {
-      const items = sale.sales_items || [];
-      const typeTotals = {
-        service: items
-          .filter((item: any) => item.item_type === 'service')
-          .reduce((sum: number, item: any) => sum + toNum(item.amount), 0),
-        product: items
-          .filter((item: any) => item.item_type === 'product')
-          .reduce((sum: number, item: any) => sum + toNum(item.amount), 0),
-        membership: items
-          .filter((item: any) => item.item_type === 'prepaid')
-          .reduce((sum: number, item: any) => sum + toNum(item.amount), 0),
-      };
-      const payableTotal =
-        typeTotals.service + typeTotals.product + typeTotals.membership || toNum(sale.total_amount);
-
-      const paymentBuckets = [
-        { key: 'cash' as const, amount: toNum(sale.cash_amount) },
-        { key: 'card' as const, amount: toNum(sale.card_amount) },
-        { key: 'bank_transfer' as const, amount: toNum(sale.bank_transfer_amount) },
-      ];
-
-      paymentBuckets.forEach(({ key, amount }) => {
-        if (amount <= 0) return;
-
-        const serviceShare = payableTotal > 0 ? (typeTotals.service / payableTotal) * amount : 0;
-        const productShare = payableTotal > 0 ? (typeTotals.product / payableTotal) * amount : 0;
-        const membershipShare = Math.max(0, amount - serviceShare - productShare);
-
-        paymentDetails[key].service += roundToCents(serviceShare);
-        paymentDetails[key].product += roundToCents(productShare);
-        paymentDetails[key].membership += roundToCents(membershipShare);
-        paymentDetails[key].total += roundToCents(amount);
-      });
-
-      items.forEach((item: any) => {
-        const prepaidDeduction = toNum(item.prepaid_deduction);
-        if (prepaidDeduction <= 0) return;
-        if (item.item_type === 'service') {
-          paymentDetails.prepaid_pass.service += prepaidDeduction;
-        } else if (item.item_type === 'product') {
-          paymentDetails.prepaid_pass.product += prepaidDeduction;
-        }
-        paymentDetails.prepaid_pass.total += prepaidDeduction;
-      });
+      applySaleToPaymentDetails(paymentDetails, sale);
     });
+    recalculatePaymentDetailColumnTotals(paymentDetails);
 
     const depositSummary = emptyDepositSummary();
 

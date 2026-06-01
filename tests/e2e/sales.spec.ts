@@ -54,6 +54,15 @@ test.describe('[API] 매출 API 검증', () => {
     const res = await api.get('/api/sales/total');
     expect([400, 422, 500]).toContain(res.status());
   });
+
+  test('디파짓 예약 API — 오늘 날짜 조회 시 200과 bookings 배열 반환', async () => {
+    const res = await api.get(`/api/sales/deposits?start_date=${TODAY}&end_date=${TODAY}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('bookings');
+    expect(Array.isArray(body.bookings)).toBe(true);
+    expect(body).toHaveProperty('summary');
+  });
 });
 
 // ─── UI 수준 검증 ────────────────────────────────────────────────────────────
@@ -62,11 +71,12 @@ test.describe('[UI] 매출 관리 페이지 — Director 권한', () => {
   test.beforeEach(async ({ page }) => { await gotoSales(page); });
 
   // ── 페이지 로드 ──────────────────────────────────────────────────────────
-  test('페이지 로드 시 "매출 관리" 헤딩과 3개 탭이 표시되어야 함', async ({ page }) => {
+  test('페이지 로드 시 "매출 관리" 헤딩과 4개 탭이 표시되어야 함', async ({ page }) => {
     await expect(page.getByRole('heading', { name: '매출 관리' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '전체 매출' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '직원별 매출' })).toBeVisible();
     await expect(page.getByRole('tab', { name: '항목별 매출' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: '디파짓' })).toBeVisible();
   });
 
   test('"판매내역" 버튼이 헤더에 있어야 함', async ({ page }) => {
@@ -161,6 +171,17 @@ test.describe('[UI] 매출 관리 페이지 — Director 권한', () => {
     await page.getByRole('button', { name: /검색/ }).click();
     await page.waitForTimeout(3000);
     await expect(page.locator('body')).toBeVisible();
+  });
+
+  // ── 디파짓 탭 ───────────────────────────────────────────────────────────
+  test('디파짓 탭: 검색 후 예약 목록 테이블 헤더가 표시되어야 함', async ({ page }) => {
+    await page.getByRole('tab', { name: '디파짓' }).click();
+    await expect(page.getByRole('radio', { name: '일별' })).toBeVisible();
+    await page.locator('input[type="date"]').first().fill(TODAY);
+    await page.getByRole('button', { name: /검색/ }).click();
+    await expect(page.getByRole('columnheader', { name: '페이 시간' })).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole('columnheader', { name: '손님' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '디파짓' })).toBeVisible();
   });
 
   // ── 판매내역 모달 ────────────────────────────────────────────────────────

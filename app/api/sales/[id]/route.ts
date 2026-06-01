@@ -9,6 +9,10 @@ import { archiveSaleDeletion } from '@/lib/sale-deletion-log';
 import { restoreBookingAfterSaleDelete } from '@/lib/sale-booking-link';
 import { resolveBookingDepositPaidForSale } from '@/lib/booking-deposit-paid';
 import {
+  resolvePaidDepositForSaleWrite,
+  sumServiceGrossFromSaleItems,
+} from '@/lib/sale-paid-deposit';
+import {
   normalizePaymentAmounts,
   resolveSalePaymentMethod,
 } from '@/lib/sales-payment-utils';
@@ -190,6 +194,7 @@ export async function PUT(
       total, payment_method, payment_amounts,
       point_accumulation, memo, sales_date, sales_time,
       prepaid_customer_id,
+      paid_deposit,
     } = body;
 
     if (!customer_id || !items || items.length === 0) {
@@ -289,6 +294,16 @@ export async function PUT(
       }
     }
 
+    const linkedBookingIdForDeposit =
+      existingSale.booking_id != null && !Number.isNaN(Number(existingSale.booking_id))
+        ? Number(existingSale.booking_id)
+        : null;
+    const paidDepositToStore = await resolvePaidDepositForSaleWrite(supabase, {
+      bookingId: linkedBookingIdForDeposit,
+      paidDepositFromRequest: paid_deposit,
+      grossServiceTotal: sumServiceGrossFromSaleItems(items),
+    });
+
     // 1. Update the sales header (no edit_history column in DB — omit to avoid PGRST204)
     const { data: updatedSale, error: headerError } = await supabase
       .from('sales')
@@ -303,6 +318,7 @@ export async function PUT(
         sales_amount: sales_amount || 0,
         discount_amount: discount_amount || 0,
         total_amount: total || 0,
+        paid_deposit: paidDepositToStore,
         payment_method: resolvedPaymentMethod,
         cash_amount: normalizedPayments.cash,
         card_amount: normalizedPayments.card,

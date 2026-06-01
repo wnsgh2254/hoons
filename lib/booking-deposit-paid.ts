@@ -1,3 +1,7 @@
+import {
+  hasPaidDepositSnapshot,
+  resolvePaidDepositFromSaleRecord,
+} from '@/lib/sale-paid-deposit';
 import { resolveBookingIdForSale, type SaleBookingRow } from '@/lib/sale-booking-link';
 
 /** Stripe (etc.) deposit actually paid on the booking — source of truth for D badge and sale deposit credit. */
@@ -30,11 +34,20 @@ export async function fetchBookingDepositPaid(
   return normalizeBookingDepositPaid(data.deposit_paid);
 }
 
-/** Resolve linked booking (booking_id or legacy match) and return its deposit_paid. */
+type SaleDepositRow = SaleBookingRow & {
+  paid_deposit?: unknown;
+  bookings?: { deposit_paid?: unknown } | { deposit_paid?: unknown }[] | null;
+};
+
+/** Prefer sales.paid_deposit snapshot; else linked booking deposit_paid. */
 export async function resolveBookingDepositPaidForSale(
   supabase: { from: (table: string) => any },
-  sale: SaleBookingRow,
+  sale: SaleDepositRow,
 ): Promise<number> {
+  if (hasPaidDepositSnapshot(sale.paid_deposit)) {
+    return normalizeBookingDepositPaid(sale.paid_deposit);
+  }
+
   let bookingId: number | null =
     sale.booking_id != null && !Number.isNaN(Number(sale.booking_id))
       ? Number(sale.booking_id)
@@ -49,41 +62,58 @@ export async function resolveBookingDepositPaidForSale(
 
 export async function attachBookingDepositPaidToSales(
   supabase: { from: (table: string) => any },
-  sales: Array<{ booking_id?: number | null; booking_deposit_paid?: number; [key: string]: unknown }>,
+  sales: Array<{
+    booking_id?: number | null;
+    paid_deposit?: unknown;
+    bookings?: { deposit_paid?: unknown } | { deposit_paid?: unknown }[] | null;
+    booking_deposit_paid?: number;
+    [key: string]: unknown;
+  }>,
 ): Promise<void> {
-  const bookingIds = [
-    ...new Set(
-      sales
-        .map((s) => s.booking_id)
-        .filter((id): id is number => id != null && !Number.isNaN(Number(id)))
-        .map((id) => Number(id)),
-    ),
-  ];
-
-  if (!bookingIds.length) {
-    for (const sale of sales) {
-      sale.booking_deposit_paid = 0;
-    }
-    return;
-  }
-
-  const { data: bookings, error } = await supabase
-    .from('bookings')
-    .select('id, deposit_paid')
-    .in('id', bookingIds);
+  const needsBookingLookup = sales.some(
+    (s) =>
+      !hasPaidDepositSnapshot(s.paid_deposit) &&
+      s.booking_id != null &&
+      !Number.isNaN(Number(s.booking_id)),
+  );
 
   const depositByBookingId = new Map<number, number>();
-  if (!error && bookings) {
-    for (const row of bookings as Array<{ id: number; deposit_paid?: unknown }>) {
-      depositByBookingId.set(Number(row.id), normalizeBookingDepositPaid(row.deposit_paid));
+
+  if (needsBookingLookup) {
+    const bookingIds = [
+      ...new Set(
+        sales
+          .map((s) => s.booking_id)
+          .filter((id): id is number => id != null && !Number.isNaN(Number(id)))
+          .map((id) => Number(id)),
+      ),
+    ];
+
+    if (bookingIds.length) {
+      const { data: bookings, error } = await supabase
+        .from('bookings')
+        .select('id, deposit_paid')
+        .in('id', bookingIds);
+
+      if (!error && bookings) {
+        for (const row of bookings as Array<{ id: number; deposit_paid?: unknown }>) {
+          depositByBookingId.set(
+            Number(row.id),
+            normalizeBookingDepositPaid(row.deposit_paid),
+          );
+        }
+      }
     }
   }
 
   for (const sale of sales) {
-    const bid =
-      sale.booking_id != null && !Number.isNaN(Number(sale.booking_id))
-        ? Number(sale.booking_id)
-        : null;
-    sale.booking_deposit_paid = bid != null ? depositByBookingId.get(bid) ?? 0 : 0;
+    let deposit = resolvePaidDepositFromSaleRecord(sale);
+    if (deposit === 0 && !hasPaidDepositSnapshot(sale.paid_deposit) && sale.booking_id != null) {
+      const bid = Number(sale.booking_id);
+      if (!Number.isNaN(bid)) {
+        deposit = depositByBookingId.get(bid) ?? 0;
+      }
+    }
+    sale.booking_deposit_paid = deposit;
   }
 }

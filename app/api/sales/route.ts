@@ -8,6 +8,10 @@ import {
 } from '@/lib/sales-reconciliation';
 import { attachBookingDepositPaidToSales } from '@/lib/booking-deposit-paid';
 import {
+  resolvePaidDepositForSaleWrite,
+  sumServiceGrossFromSaleItems,
+} from '@/lib/sale-paid-deposit';
+import {
   normalizePaymentAmounts,
   resolveSalePaymentMethod,
 } from '@/lib/sales-payment-utils';
@@ -151,6 +155,7 @@ export async function POST(request: NextRequest) {
       sales_date,
       sales_time,
       prepaid_customer_id,
+      paid_deposit,
     } = body;
 
     if (!customer_id || !items || items.length === 0) {
@@ -211,6 +216,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const grossServiceTotal = sumServiceGrossFromSaleItems(items);
+    const paidDepositToStore = await resolvePaidDepositForSaleWrite(supabase, {
+      bookingId: linkedBookingId,
+      paidDepositFromRequest: paid_deposit,
+      grossServiceTotal,
+    });
+
     const { data: saleHeader, error: headerError } = await supabase
       .from('sales')
       .insert({
@@ -224,6 +236,7 @@ export async function POST(request: NextRequest) {
         sales_amount: sales_amount || 0,
         discount_amount: discount_amount || 0,
         total_amount: total || 0,
+        paid_deposit: paidDepositToStore,
         payment_method: resolvedPaymentMethod,
         cash_amount: normalizedPayments.cash,
         card_amount: normalizedPayments.card,
