@@ -41,6 +41,7 @@ import SalesDetailModal from '@/components/admin/appointments/SalesDetailModal';
 import RefundRegistrationModal from '@/components/admin/appointments/RefundRegistrationModal';
 import { AlertModal } from '@/components/ui';
 import { Z } from '@/lib/constants';
+import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
 import { fetchSaleDetailForBooking } from '@/lib/fetch-sale-detail-for-booking';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
@@ -2033,7 +2034,9 @@ export default function AppointmentsManagementPage() {
         setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
         setSalesDefaultManager((booking as any).designer?.name || null);
         setSalesLinkedDepositPaid(
-          Math.max(0, Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0),
+          normalizeBookingDepositPaid(
+            (booking as any).deposit_paid ?? (booking as any).depositPaid,
+          ),
         );
         if (customerId) {
           setCloseSalesFlowOnPickerClose(true);
@@ -2666,7 +2669,9 @@ export default function AppointmentsManagementPage() {
                             setSalesLinkedDepositPaid(
                               Math.max(
                                 0,
-                                Number((booking as any).deposit_paid ?? (booking as any).depositPaid ?? 0) || 0,
+                                normalizeBookingDepositPaid(
+                                  (booking as any).deposit_paid ?? (booking as any).depositPaid,
+                                ),
                               ),
                             );
                             if (customerId) {
@@ -4311,6 +4316,9 @@ export default function AppointmentsManagementPage() {
           if (currentData.booking_id) {
             setSalesLinkedBookingId(currentData.booking_id);
           }
+          setSalesLinkedDepositPaid(
+            normalizeBookingDepositPaid(currentData.booking_deposit_paid),
+          );
           setIsSalesRegistrationModalOpen(true);
         }}
         onDelete={() => {
@@ -4324,7 +4332,7 @@ export default function AppointmentsManagementPage() {
       <AlertModal
         isOpen={isDeleteSaleAlertOpen}
         title="판매 삭제"
-        message="이 판매 내역을 삭제하시겠습니까? 연결된 예약도 함께 삭제되며, 삭제된 내역은 복구할 수 없습니다."
+        message="이 판매 내역을 삭제하시겠습니까? 예약은 유지되며 판매 등록 전 상태로 돌아갑니다. 삭제된 판매는 감사 로그에만 남습니다."
         highlightText="복구할 수 없습니다"
         variant="confirm"
         zIndex={Z.MODAL_ALERT_TOP}

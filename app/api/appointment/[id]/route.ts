@@ -92,6 +92,15 @@ export async function PATCH(
     if (typeof body.deposit_amount === 'number' || typeof body.deposit_amount === 'string') {
       updates.deposit_amount = Number(body.deposit_amount);
     }
+    if (body.deposit_paid === null || body.deposit_paid === '') {
+      updates.deposit_paid = null;
+    } else if (
+      typeof body.deposit_paid === 'number' ||
+      typeof body.deposit_paid === 'string'
+    ) {
+      const paid = Number(body.deposit_paid);
+      updates.deposit_paid = Number.isFinite(paid) && paid > 0 ? paid : null;
+    }
     if (body.service_id === null) {
       updates.service_id = null;
     } else if (typeof body.service_id === 'number' || typeof body.service_id === 'string') {

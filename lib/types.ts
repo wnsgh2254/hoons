@@ -174,6 +174,8 @@ export interface SalesDetailData {
   customer_id: number;
   shop_id?: number | null;
   booking_id?: number | null;
+  /** Actual deposit paid on linked booking (bookings.deposit_paid) — same value as D badge */
+  booking_deposit_paid?: number;
   customer_name: string;
   sales_date: string;
   sales_time: string;

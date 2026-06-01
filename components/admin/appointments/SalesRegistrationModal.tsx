@@ -14,6 +14,10 @@ import {
   normalizePaymentAmounts,
   resolvePaymentMethodFromAmounts,
 } from '@/lib/sales-payment-utils';
+import {
+  netDueAfterDeposit,
+  normalizeBookingDepositPaid,
+} from '@/lib/booking-deposit-paid';
 import { formatAudAmount, roundToCents } from '@/lib/utils';
 
 function formatPaymentTimestamp(iso: string): string {
@@ -25,13 +29,6 @@ function formatPaymentTimestamp(iso: string): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mi = String(d.getMinutes()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
-
-/** Gross sale total minus deposit credit (capped), never negative */
-function netDueAfterDeposit(grossTotal: number, depositPaid: number): number {
-  const g = Math.max(0, grossTotal);
-  const d = Math.max(0, depositPaid);
-  return Math.max(0, g - Math.min(d, g));
 }
 
 type DiscountType = 'percentage' | 'amount' | 'category';
@@ -382,14 +379,14 @@ export default function SalesRegistrationModal({
         };
         // Infer deposit only when per-method amounts exist (card 44 + gross 55 → deposit 11).
         // Legacy rows with no amounts: fill one method below with no deposit implied.
-        const grossFromHeader = Number(initialData.total_amount);
-        const headerGross = Number.isFinite(grossFromHeader) ? grossFromHeader : gross;
-        const draftPaid = restoredAmounts.cash + restoredAmounts.card + restoredAmounts.bank_transfer;
-        const impliedDepositCredit = hasExplicitAmount
-          ? Math.max(0, headerGross - newPrepaidDeduction - draftPaid)
-          : 0;
-        setDepositCredit(impliedDepositCredit);
-        const netDue = netDueAfterDeposit(gross, impliedDepositCredit);
+        const depositFromBooking = Math.max(
+          0,
+          normalizeBookingDepositPaid(
+            initialData.booking_deposit_paid ?? bookingDepositPaid,
+          ),
+        );
+        setDepositCredit(depositFromBooking);
+        const netDue = netDueAfterDeposit(gross, depositFromBooking);
         const netPayable = Math.max(0, netDue - newPrepaidDeduction);
         if (!hasExplicitAmount && netPayable > 0 && (rawMethod === 'cash' || rawMethod === 'card' || rawMethod === 'bank_transfer')) {
           restoredAmounts[rawMethod] = netPayable;
@@ -407,7 +404,7 @@ export default function SalesRegistrationModal({
         setAmountToReceive(netDue - totalPaid - newPrepaidDeduction);
       } else {
         // 등록 모드: 모든 상태 초기화
-        setDepositCredit(Math.max(0, Number(bookingDepositPaid) || 0));
+        setDepositCredit(normalizeBookingDepositPaid(bookingDepositPaid));
         setSalesItems([]);
         setSalesAmount(0);
         setDiscountAmount(0);

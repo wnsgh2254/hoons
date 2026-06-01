@@ -5,10 +5,9 @@ import {
   adjustPrepaidBalance,
   assertSufficientPrepaidBalance,
 } from '@/lib/sales-reconciliation';
-import {
-  deleteLinkedBookingForSale,
-  resolveBookingIdForSale,
-} from '@/lib/sale-booking-link';
+import { archiveSaleDeletion } from '@/lib/sale-deletion-log';
+import { restoreBookingAfterSaleDelete } from '@/lib/sale-booking-link';
+import { resolveBookingDepositPaidForSale } from '@/lib/booking-deposit-paid';
 import {
   normalizePaymentAmounts,
   resolveSalePaymentMethod,
@@ -64,8 +63,10 @@ export async function GET(
       customer_name = sale.customer_name || c?.name || '';
     }
 
+    const booking_deposit_paid = await resolveBookingDepositPaidForSale(supabase, sale);
+
     return NextResponse.json(
-      { sale: { ...sale, customer_name } },
+      { sale: { ...sale, customer_name, booking_deposit_paid } },
       { status: 200 }
     );
   } catch (e: any) {
@@ -91,28 +92,31 @@ export async function DELETE(
     }
 
     const saleId = Number(id);
-    const { data: saleRow, error: saleLookupError } = await supabase
+
+    const { data: saleExists } = await supabase
       .from('sales')
-      .select('id, booking_id, customer_id, shop_id, sales_date, sales_time')
+      .select('id')
       .eq('id', saleId)
       .maybeSingle();
 
-    if (saleLookupError) {
-      console.error('Error loading sale before delete:', saleLookupError);
-      return NextResponse.json(
-        { error: '판매를 불러오지 못했습니다.' },
-        { status: 500 }
-      );
-    }
-
-    if (!saleRow) {
+    if (!saleExists) {
       return NextResponse.json(
         { error: '판매를 찾을 수 없습니다.' },
         { status: 404 }
       );
     }
 
-    const linkedBookingId = await resolveBookingIdForSale(supabase, saleRow);
+    let linkedBookingId: number | null = null;
+    try {
+      const archived = await archiveSaleDeletion(supabase, saleId);
+      linkedBookingId = archived.bookingId;
+    } catch (archiveError: any) {
+      console.error('Error archiving sale before delete:', archiveError);
+      return NextResponse.json(
+        { error: archiveError.message || '판매 삭제 기록 저장에 실패했습니다.' },
+        { status: 500 }
+      );
+    }
 
     // Delete sales_items first (child rows)
     const { error: itemsError } = await supabase
@@ -144,17 +148,20 @@ export async function DELETE(
 
     if (linkedBookingId) {
       try {
-        await deleteLinkedBookingForSale(supabase, linkedBookingId);
-      } catch (bookingDeleteError: any) {
-        console.error('Error deleting linked booking after sale delete:', bookingDeleteError);
+        await restoreBookingAfterSaleDelete(supabase, linkedBookingId);
+      } catch (bookingRestoreError: any) {
+        console.error('Error restoring booking after sale delete:', bookingRestoreError);
         return NextResponse.json(
-          { error: bookingDeleteError.message || '연결된 예약 삭제에 실패했습니다.' },
+          { error: bookingRestoreError.message || '예약 상태 복구에 실패했습니다.' },
           { status: 500 }
         );
       }
     }
 
-    return NextResponse.json({ success: true, deleted_booking_id: linkedBookingId }, { status: 200 });
+    return NextResponse.json(
+      { success: true, restored_booking_id: linkedBookingId },
+      { status: 200 },
+    );
   } catch (error: any) {
     console.error('Error in sales DELETE route:', error);
     return NextResponse.json(

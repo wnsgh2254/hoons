@@ -1,4 +1,4 @@
-type SaleBookingRow = {
+export type SaleBookingRow = {
   id?: number;
   booking_id?: number | null;
   customer_id?: number | null;
@@ -111,15 +111,19 @@ export async function resolveBookingIdForSale(
   return best ? Number(best.id) : null;
 }
 
-/** Delete temp draft + booking row after a sale is removed. */
-export async function deleteLinkedBookingForSale(
+/** Clear sale_completed on booking after sale is removed; keep the appointment. */
+export async function restoreBookingAfterSaleDelete(
   supabase: any,
   bookingId: number,
 ): Promise<void> {
   await supabase.from('temp_sales').delete().eq('booking_id', bookingId);
 
-  const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
+  const { error } = await supabase
+    .from('bookings')
+    .update({ sale_completed: 0 })
+    .eq('id', bookingId);
+
   if (error) {
-    throw new Error(error.message || 'Failed to delete linked booking.');
+    throw new Error(error.message || 'Failed to restore booking after sale delete.');
   }
 }

@@ -6,6 +6,7 @@ import {
   adjustPrepaidBalance,
   assertSufficientPrepaidBalance,
 } from '@/lib/sales-reconciliation';
+import { attachBookingDepositPaidToSales } from '@/lib/booking-deposit-paid';
 import {
   normalizePaymentAmounts,
   resolveSalePaymentMethod,
@@ -119,6 +120,8 @@ export async function GET(request: NextRequest) {
         }))
         .filter((sale: any) => (sale.sales_items || []).length > 0);
     }
+
+    await attachBookingDepositPaidToSales(supabase, sales);
 
     return NextResponse.json({ sales }, { status: 200 });
   } catch (error: any) {

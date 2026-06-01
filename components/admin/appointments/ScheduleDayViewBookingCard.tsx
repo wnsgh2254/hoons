@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import type { BookingWithRelations } from '@/lib/types';
 import {
   getBookingServiceDisplayName,
@@ -93,8 +94,9 @@ function ScheduleDayViewBookingCard({
   const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone || '';
   const bookingMemo = (booking as any).memo || (booking as any).note || '';
 
-  const depositPaid =
-    Number((booking as any).deposit_paid ?? (booking as any).depositAmount ?? 0) || 0;
+  const depositPaid = normalizeBookingDepositPaid(
+    (booking as any).deposit_paid ?? (booking as any).depositPaid,
+  );
   const depositAmount =
     Number((booking as any).deposit_amount ?? (booking as any).depositAmount ?? 0) || 0;
   const totalAmount =

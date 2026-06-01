@@ -113,7 +113,7 @@ export function useSalesDetailActions({
       <AlertModal
         isOpen={isDeleteAlertOpen}
         title="판매 삭제"
-        message="이 판매 내역을 삭제하시겠습니까? 연결된 예약도 함께 삭제되며, 삭제된 내역은 복구할 수 없습니다."
+        message="이 판매 내역을 삭제하시겠습니까? 예약은 유지되며 판매 등록 전 상태로 돌아갑니다. 삭제된 판매는 감사 로그에만 남습니다."
         highlightText="복구할 수 없습니다"
         variant="confirm"
         zIndex={Z.MODAL_ALERT_TOP}
@@ -131,6 +131,7 @@ export function useSalesDetailActions({
         editSaleId={editingId}
         shopId={editingData?.shop_id ?? null}
         bookingId={editingData?.booking_id ?? null}
+        bookingDepositPaid={editingData?.booking_deposit_paid ?? 0}
         onClose={resetRegistration}
         onComplete={async () => {
           resetRegistration();

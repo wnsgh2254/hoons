@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import type { BookingWithRelations } from '@/lib/types';
 import {
   getBookingServiceDisplayName,
@@ -108,8 +109,9 @@ function BookingCard({
   const customerPhone =
     (b as any).customer?.phone || (b as any).customer_phone || '';
   const bookingMemo = (b as any).memo || (b as any).note || '';
-  const depositPaid =
-    Number((b as any).deposit_paid ?? (b as any).depositAmount ?? 0) || 0;
+  const depositPaid = normalizeBookingDepositPaid(
+    (b as any).deposit_paid ?? (b as any).depositPaid,
+  );
   const depositAmount =
     Number((b as any).deposit_amount ?? (b as any).depositAmount ?? 0) || 0;
   const totalAmount =

@@ -6,15 +6,13 @@ import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
 import { formatAudAmount } from '@/lib/utils';
+import {
+  netDueAfterDeposit,
+  normalizeBookingDepositPaid,
+} from '@/lib/booking-deposit-paid';
+import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
 import { buildSaleHistoryPayments } from '@/lib/sales-payment-utils';
 import { formatPaymentMethod } from '@/lib/utils';
-
-/** Same rule as SalesRegistrationModal — gross minus deposit credit (capped) */
-function netDueAfterDeposit(grossTotal: number, depositPaid: number): number {
-  const g = Math.max(0, grossTotal);
-  const d = Math.max(0, depositPaid);
-  return Math.max(0, g - Math.min(d, g));
-}
 
 interface SalesDetailModalProps {
   isOpen: boolean;
@@ -47,9 +45,17 @@ export default function SalesDetailModal({
   const fetchSalesDetail = async (salesId: number) => {
     try {
       setLoading(true);
-      setDetailData(salesData);
+      const res = await fetch(`/api/sales/${salesId}`);
+      const payload = await res.json();
+      if (!res.ok || !payload.sale) {
+        throw new Error(payload.error || '판매를 불러오지 못했습니다.');
+      }
+      setDetailData(
+        mapSaleRecordToDetailData(payload.sale, salesData?.customer_name || ''),
+      );
     } catch (error) {
       console.error('Error fetching sales detail:', error);
+      setDetailData(salesData);
     } finally {
       setLoading(false);
     }
@@ -99,9 +105,8 @@ export default function SalesDetailModal({
       ? [{ method: rawMethod as 'cash' | 'card' | 'bank_transfer', amount: legacyFallbackAmount }]
       : [];
   const totalPayment = displayLines.reduce((sum, line) => sum + line.amount, 0);
-  // Infer deposit credit when POS paid less than gross (e.g. card 44 + deposit 11 = gross 55)
-  const impliedDepositCredit = Math.max(0, grossTotal - totalPayment);
-  const netDue = netDueAfterDeposit(grossTotal, impliedDepositCredit);
+  const depositCredit = normalizeBookingDepositPaid(data.booking_deposit_paid);
+  const netDue = netDueAfterDeposit(grossTotal, depositCredit);
   const amountToReceive = Math.max(0, netDue - totalPayment);
 
   return (
@@ -199,11 +204,11 @@ export default function SalesDetailModal({
                   </span>
                 </div>
 
-                {impliedDepositCredit > 0 && (
+                {depositCredit > 0 && (
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-700">예수금 (납부됨)</span>
                     <span className="text-sm font-medium text-emerald-700">
-                      {formatAudAmount(Number(impliedDepositCredit))}
+                      {formatAudAmount(depositCredit)}
                     </span>
                   </div>
                 )}

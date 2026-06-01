@@ -17,6 +17,7 @@ import FormAlert from '@/components/ui/FormAlert';
 import { Z } from '@/lib/constants';
 import type { BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
+import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 
 function resolveEditModalServiceIds(
@@ -143,6 +144,8 @@ export default function NewBookingModal({
   const [bookingDate, setBookingDate] = useState(selectedDate);
   const [memo, setMemo] = useState('');
   const [colorLabel, setColorLabel] = useState<string | null>(null);
+  /** Edit mode only: actual deposit paid (AUD) for D badge / sale deposit credit */
+  const [editDepositPaid, setEditDepositPaid] = useState('');
   // Unregistered customer booking state
   const [isUnregisteredBooking, setIsUnregisteredBooking] = useState(false);
   const [unregisteredName, setUnregisteredName] = useState('');
@@ -380,6 +383,11 @@ export default function NewBookingModal({
     setNewBookingMemo(note || '');
     setColorLabel(((b as { color_label?: string | null }).color_label as string | null) ?? null);
 
+    const paid = normalizeBookingDepositPaid(
+      (b as { deposit_paid?: unknown }).deposit_paid ?? (b as { depositPaid?: unknown }).depositPaid,
+    );
+    setEditDepositPaid(paid > 0 ? String(paid) : '');
+
     return () => {
       cancelled = true;
       editPrefillDoneForIdRef.current = null;
@@ -557,6 +565,7 @@ export default function NewBookingModal({
     setMemo('');
     setNewBookingMemo('');
     setColorLabel(null);
+    setEditDepositPaid('');
     setIsUnregisteredBooking(false);
     setUnregisteredName('');
     setUnregisteredPhone('');
@@ -735,6 +744,12 @@ export default function NewBookingModal({
             custom_service_duration: slot.duration || null,
             memo,
             color_label: colorLabel,
+            deposit_paid: (() => {
+              const raw = editDepositPaid.trim();
+              if (!raw) return null;
+              const n = Number(raw);
+              return Number.isFinite(n) && n > 0 ? n : null;
+            })(),
           }),
         });
         if (!resPatch.ok) {
@@ -1484,6 +1499,26 @@ export default function NewBookingModal({
               </div>
             ))}
           </div>
+
+          {editingBooking ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                디파짓 납부액 (AUD)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={editDepositPaid}
+                onChange={(e) => setEditDepositPaid(e.target.value)}
+                placeholder="예: 18 (비우면 미납)"
+                className="w-full max-w-[200px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Stripe 등으로 받은 실제 디파짓입니다. 저장 시 예약 카드 D 표시와 판매 예수금에 동일하게 반영됩니다.
+              </p>
+            </div>
+          ) : null}
 
           {/* Color Label */}
           <div>
