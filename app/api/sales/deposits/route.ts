@@ -8,6 +8,19 @@ import {
   isCreatedAtInSydneyDateRange,
 } from '@/lib/sydney-datetime-range';
 
+type DepositBookingRow = {
+  id: number;
+  shop_id: number | null;
+  shop_name: string | null;
+  customer_name: string | null;
+  designer_name: string | null;
+  booking_date: string | null;
+  booking_time: string | null;
+  service_name: string;
+  deposit_paid: number;
+  created_at: string;
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -78,8 +91,8 @@ export async function GET(request: NextRequest) {
         !isCancelledBookingStatus(booking.status),
     );
 
-    const rows = filtered
-      .map((booking: any) => {
+    const mapped: DepositBookingRow[] = filtered.map(
+      (booking: any): DepositBookingRow => {
         const depositPaid = normalizeBookingDepositPaid(booking.deposit_paid);
         return {
           id: booking.id,
@@ -91,15 +104,20 @@ export async function GET(request: NextRequest) {
           booking_time: booking.booking_time,
           service_name: getBookingServiceDisplayName(booking),
           deposit_paid: depositPaid,
-          created_at: booking.created_at,
+          created_at: String(booking.created_at),
         };
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      );
+      },
+    );
 
-    const totalDeposit = rows.reduce((sum, row) => sum + row.deposit_paid, 0);
+    const rows = [...mapped].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+    const totalDeposit = rows.reduce(
+      (sum: number, row) => sum + row.deposit_paid,
+      0,
+    );
 
     return NextResponse.json({
       bookings: rows,
