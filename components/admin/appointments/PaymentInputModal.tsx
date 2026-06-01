@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
 import { Z } from '@/lib/constants';
-import { formatAudNumber, roundToCents } from '@/lib/utils';
+import { formatAudAmount, formatAudNumber, roundToCents } from '@/lib/utils';
 import { addDigits, removeLastDigit, parseAmount } from '@/lib/utils/numeric-input-utils';
 import NumericKeypad from './NumericKeypad';
 
@@ -12,14 +12,19 @@ interface PaymentInputModalProps {
   isOpen: boolean;
   paymentMethod: 'cash' | 'card' | 'bank_transfer' | null;
   initialAmount?: number;
+  /** Remaining balance this payment can cover (for change preview on cash). */
+  amountDue?: number;
   onClose: () => void;
   onConfirm: (amount: number) => void;
 }
+
+const CASH_QUICK_AMOUNTS = [20, 50, 100];
 
 export default function PaymentInputModal({
   isOpen,
   paymentMethod,
   initialAmount = 0,
+  amountDue = 0,
   onClose,
   onConfirm,
 }: PaymentInputModalProps) {
@@ -30,6 +35,12 @@ export default function PaymentInputModal({
       setInputValue(initialAmount > 0 ? formatAudNumber(initialAmount) : '0');
     }
   }, [isOpen, initialAmount]);
+
+  const parsedAmount = useMemo(() => roundToCents(parseAmount(inputValue)), [inputValue]);
+  const due = Math.max(0, roundToCents(amountDue));
+  const isCash = paymentMethod === 'cash';
+  const changeDue =
+    isCash && parsedAmount > due ? roundToCents(parsedAmount - due) : 0;
 
   const handleNumberClick = (num: string) => {
     setInputValue((prev) => addDigits(prev, num, 2));
@@ -43,10 +54,13 @@ export default function PaymentInputModal({
     setInputValue('0');
   };
 
+  const handleQuickAmount = (amount: number) => {
+    setInputValue(formatAudNumber(amount));
+  };
+
   const handleConfirm = () => {
-    const amount = roundToCents(parseAmount(inputValue));
-    if (amount > 0) {
-      onConfirm(amount);
+    if (parsedAmount > 0) {
+      onConfirm(parsedAmount);
       onClose();
     }
   };
@@ -59,6 +73,12 @@ export default function PaymentInputModal({
       zIndex={Z.MODAL_SALES_SUB}
     >
       <div className="space-y-4">
+        {isCash && due > 0 && (
+          <p className="text-sm text-gray-600 text-right">
+            받을 금액 {formatAudAmount(due)}
+          </p>
+        )}
+
         {/* Input Field */}
         <div className="relative flex items-center">
           <input
@@ -78,6 +98,30 @@ export default function PaymentInputModal({
             </button>
           )}
         </div>
+
+        {isCash && changeDue > 0 && (
+          <div className="flex justify-between items-center px-1 py-2 rounded-lg bg-amber-50 border border-amber-200">
+            <span className="text-sm font-medium text-amber-900">거스름돈</span>
+            <span className="text-sm font-semibold text-amber-900">
+              {formatAudAmount(changeDue)}
+            </span>
+          </div>
+        )}
+
+        {isCash && (
+          <div className="flex gap-2">
+            {CASH_QUICK_AMOUNTS.map((amount) => (
+              <button
+                key={amount}
+                type="button"
+                onClick={() => handleQuickAmount(amount)}
+                className="flex-1 px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg bg-white text-gray-800 hover:bg-gray-50 transition-colors"
+              >
+                ${amount}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Keypad and Action Buttons */}
         <div className="flex gap-4">

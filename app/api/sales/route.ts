@@ -11,6 +11,7 @@ import {
   resolvePaidDepositForSaleWrite,
   sumServiceGrossFromSaleItems,
 } from '@/lib/sale-paid-deposit';
+import { cashTenderedForStorage } from '@/lib/sales-cash-payment';
 import {
   normalizePaymentAmounts,
   resolveSalePaymentMethod,
@@ -156,6 +157,7 @@ export async function POST(request: NextRequest) {
       sales_time,
       prepaid_customer_id,
       paid_deposit,
+      cash_tendered,
     } = body;
 
     if (!customer_id || !items || items.length === 0) {
@@ -239,6 +241,10 @@ export async function POST(request: NextRequest) {
         paid_deposit: paidDepositToStore,
         payment_method: resolvedPaymentMethod,
         cash_amount: normalizedPayments.cash,
+        cash_tendered: cashTenderedForStorage(
+          normalizedPayments.cash,
+          cash_tendered,
+        ),
         card_amount: normalizedPayments.card,
         bank_transfer_amount: normalizedPayments.bank_transfer,
         point_accumulation: point_accumulation || 0,

@@ -11,6 +11,7 @@ import {
   normalizeBookingDepositPaid,
 } from '@/lib/booking-deposit-paid';
 import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
+import { resolveCashChangeDisplay } from '@/lib/sales-cash-payment';
 import { buildSaleHistoryPayments } from '@/lib/sales-payment-utils';
 import { formatPaymentMethod } from '@/lib/utils';
 
@@ -108,6 +109,10 @@ export default function SalesDetailModal({
   const depositCredit = normalizeBookingDepositPaid(data.booking_deposit_paid);
   const netDue = netDueAfterDeposit(grossTotal, depositCredit);
   const amountToReceive = Math.max(0, netDue - totalPayment);
+  const { cashDisplay, changeDue } = resolveCashChangeDisplay(
+    Number(data.cash_amount || 0),
+    data.cash_tendered,
+  );
 
   return (
     <Modal
@@ -215,15 +220,29 @@ export default function SalesDetailModal({
 
                 {displayLines.length > 0 && (
                   <div className="space-y-2 pt-1">
-                    {displayLines.map(({ method, amount }) => (
-                      <div key={method} className="flex justify-between items-center text-sm">
-                        <span className="text-gray-700">{formatPaymentMethod(method)}</span>
-                        <span className={`font-medium ${amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {amount < 0 ? '-' : ''}
-                          {formatAudAmount(Math.abs(amount))}
+                    {displayLines.map(({ method, amount }) => {
+                      const lineAmount =
+                        method === 'cash' ? cashDisplay : amount;
+                      return (
+                        <div key={method} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-700">{formatPaymentMethod(method)}</span>
+                          <span
+                            className={`font-medium ${lineAmount < 0 ? 'text-red-600' : 'text-gray-900'}`}
+                          >
+                            {lineAmount < 0 ? '-' : ''}
+                            {formatAudAmount(Math.abs(lineAmount))}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {changeDue > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-amber-800">거스름돈</span>
+                        <span className="font-medium text-amber-900">
+                          {formatAudAmount(changeDue)}
                         </span>
                       </div>
-                    ))}
+                    )}
                     {totalPayment > 0 && data.created_at && (
                       <div className="text-xs text-gray-500 mt-2">
                         [결제 일시 {formatDateTime(data.created_at)}]

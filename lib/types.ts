@@ -183,6 +183,8 @@ export interface SalesDetailData {
   discount_amount: number;
   total_amount: number;
   cash_amount: number;
+  /** Physical cash received when greater than cash_amount (change was given). */
+  cash_tendered?: number;
   card_amount: number;
   bank_transfer_amount: number;
   payment_method?: string | null;

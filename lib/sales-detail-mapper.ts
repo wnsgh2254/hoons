@@ -20,6 +20,7 @@ export function mapSaleRecordToDetailData(sale: any, customerNameFallback = ''):
     discount_amount: sale.discount_amount || 0,
     total_amount: sale.total_amount || 0,
     cash_amount: sale.cash_amount || 0,
+    cash_tendered: Number(sale.cash_tendered) || 0,
     card_amount: sale.card_amount || 0,
     bank_transfer_amount: sale.bank_transfer_amount || 0,
     payment_method: sale.payment_method || null,

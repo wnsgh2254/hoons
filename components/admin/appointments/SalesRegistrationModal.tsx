@@ -18,6 +18,11 @@ import {
   netDueAfterDeposit,
   normalizeBookingDepositPaid,
 } from '@/lib/booking-deposit-paid';
+import {
+  capPaymentToRemaining,
+  remainingDueBeforeCash,
+  splitCashTender,
+} from '@/lib/sales-cash-payment';
 import { formatAudAmount, roundToCents } from '@/lib/utils';
 
 function formatPaymentTimestamp(iso: string): string {
@@ -145,6 +150,8 @@ export default function SalesRegistrationModal({
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(shopId || null);
   const [depositCredit, setDepositCredit] = useState(0);
+  /** Physical cash received from customer (may exceed applied cash_amount). */
+  const [cashTendered, setCashTendered] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -337,6 +344,7 @@ export default function SalesRegistrationModal({
       setSelectedItemForClassification(null);
       setIsManagerPickerModalOpen(false);
       setSelectedItemForManager(null);
+      setCashTendered(null);
 
       if (initialData && editSaleId) {
         // 수정 모드: 기존 데이터로 폼 채우기
@@ -393,6 +401,14 @@ export default function SalesRegistrationModal({
         }
 
         setPaymentAmounts(restoredAmounts);
+        const tendered = Number(initialData.cash_tendered) || 0;
+        setCashTendered(
+          tendered > restoredAmounts.cash
+            ? tendered
+            : restoredAmounts.cash > 0
+              ? restoredAmounts.cash
+              : null,
+        );
         setPrepaidDeductionAmount(newPrepaidDeduction);
         setSelectedDeduction(newPrepaidDeduction > 0 ? 'prepaid' : null);
         setPaymentMethod(null);
@@ -421,15 +437,56 @@ export default function SalesRegistrationModal({
           card: 0,
           bank_transfer: 0,
         });
+        setCashTendered(null);
         setPrepaidDeductionAmount(0);
         setActiveTab('service');
       }
     }
   }, [isOpen, initialData, editSaleId, bookingDepositPaid, defaultSalesDate, defaultSalesTime]);
 
+  // Keep booking deposit visible even if parent props flicker while the modal stays open.
+  useEffect(() => {
+    if (!isOpen || editSaleId) return;
+    const fromBooking = normalizeBookingDepositPaid(bookingDepositPaid);
+    if (fromBooking > 0) {
+      setDepositCredit((prev) => (prev > 0 ? prev : fromBooking));
+    }
+  }, [isOpen, editSaleId, bookingDepositPaid]);
+
   useEffect(() => {
     if (!isOpen) setIsSaving(false);
   }, [isOpen]);
+
+  // Re-apply cash tender when net due or other payments change (deposit line stays unchanged).
+  useEffect(() => {
+    if (!isOpen || cashTendered == null || cashTendered <= 0) return;
+    const gross = salesAmount - discountAmount;
+    const net = netDueAfterDeposit(gross, depositCredit);
+    const { cashApplied } = splitCashTender(
+      cashTendered,
+      net,
+      paymentAmounts,
+      prepaidDeductionAmount,
+    );
+    if (cashApplied === paymentAmounts.cash) return;
+    const newAmounts = normalizePaymentAmounts({
+      ...paymentAmounts,
+      cash: cashApplied,
+    });
+    setPaymentAmounts(newAmounts);
+    recalculateAmounts(salesItems, newAmounts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reconcile when inputs change, not when cash field updates
+  }, [
+    isOpen,
+    cashTendered,
+    salesAmount,
+    discountAmount,
+    depositCredit,
+    prepaidDeductionAmount,
+    paymentAmounts.card,
+    paymentAmounts.bank_transfer,
+    salesItems,
+  ]);
 
   // 외부에서 호출할 수 있도록 window에 등록 (useEffect 사용)
   // 주의: 모든 hooks는 early return 이전에 호출되어야 함
@@ -448,6 +505,17 @@ export default function SalesRegistrationModal({
   if (!isOpen || !customer) return null;
 
   const netTotalDisplay = netDueAfterDeposit(total, depositCredit);
+  const grossTotal = salesAmount - discountAmount;
+  const netDue = netDueAfterDeposit(grossTotal, depositCredit);
+  const cashChangeDue =
+    cashTendered != null && cashTendered > paymentAmounts.cash
+      ? roundToCents(cashTendered - paymentAmounts.cash)
+      : 0;
+  const cashDueBeforeEntry = remainingDueBeforeCash(
+    netDue,
+    { card: paymentAmounts.card, bank_transfer: paymentAmounts.bank_transfer },
+    prepaidDeductionAmount,
+  );
 
   const handleAddItem = () => {
     onOpenItemPicker?.(activeTab);
@@ -556,6 +624,7 @@ export default function SalesRegistrationModal({
               ? prepaidCustomerId
               : undefined,
           paid_deposit: depositCredit,
+          cash_tendered: cashTendered,
         }),
       });
 
@@ -584,19 +653,54 @@ export default function SalesRegistrationModal({
 
   const handlePaymentConfirm = (amount: number) => {
     if (!paymentMethod) return;
-    const newAmounts = normalizePaymentAmounts({
-      ...paymentAmounts,
-      [paymentMethod]: roundToCents(amount),
-    });
+    const tendered = roundToCents(amount);
+
+    let newAmounts = { ...paymentAmounts };
+
+    if (paymentMethod === 'cash') {
+      const { cashApplied } = splitCashTender(
+        tendered,
+        netDue,
+        paymentAmounts,
+        prepaidDeductionAmount,
+      );
+      setCashTendered(tendered);
+      newAmounts = normalizePaymentAmounts({
+        ...paymentAmounts,
+        cash: cashApplied,
+      });
+    } else {
+      const capped = capPaymentToRemaining(
+        tendered,
+        netDue,
+        paymentAmounts,
+        prepaidDeductionAmount,
+        paymentMethod,
+      );
+      newAmounts = normalizePaymentAmounts({
+        ...paymentAmounts,
+        [paymentMethod]: capped,
+      });
+    }
+
     setPaymentAmounts(newAmounts);
     recalculateAmounts(salesItems, newAmounts);
     setIsPaymentInputModalOpen(false);
   };
 
   const paymentInputInitialAmount =
-    paymentMethod && paymentAmounts[paymentMethod] > 0
-      ? paymentAmounts[paymentMethod]
-      : amountToReceive;
+    paymentMethod === 'cash'
+      ? cashTendered != null && cashTendered > 0
+        ? cashTendered
+        : cashDueBeforeEntry > 0
+          ? cashDueBeforeEntry
+          : amountToReceive
+      : paymentMethod && paymentAmounts[paymentMethod] > 0
+        ? paymentAmounts[paymentMethod]
+        : amountToReceive;
+
+  const paymentInputAmountDue =
+    paymentMethod === 'cash' ? cashDueBeforeEntry : amountToReceive;
 
   const handleCancel = () => {
     if (isSaving) return;
@@ -844,13 +948,17 @@ export default function SalesRegistrationModal({
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-700">현금</span>
                       <div className="flex items-center gap-2">
-                        <span className={`font-medium ${paymentAmounts.cash < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {paymentAmounts.cash < 0 ? '-' : ''}
-                          {formatAudAmount(Math.abs(paymentAmounts.cash))}
+                        <span className="font-medium text-gray-900">
+                          {formatAudAmount(
+                            cashTendered != null && cashTendered > 0
+                              ? cashTendered
+                              : paymentAmounts.cash,
+                          )}
                         </span>
                         <button
                           type="button"
                           onClick={() => {
+                            setCashTendered(null);
                             setPaymentAmounts((prev) => {
                               const newAmounts = {
                                 ...prev,
@@ -865,6 +973,14 @@ export default function SalesRegistrationModal({
                           ×
                         </button>
                       </div>
+                    </div>
+                  )}
+                  {cashChangeDue > 0 && (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-amber-800">거스름돈</span>
+                      <span className="font-medium text-amber-900">
+                        {formatAudAmount(cashChangeDue)}
+                      </span>
                     </div>
                   )}
                   {paymentAmounts.card !== 0 && (
@@ -1103,6 +1219,7 @@ export default function SalesRegistrationModal({
         isOpen={isPaymentInputModalOpen}
         paymentMethod={paymentMethod}
         initialAmount={paymentInputInitialAmount}
+        amountDue={paymentInputAmountDue}
         onClose={() => setIsPaymentInputModalOpen(false)}
         onConfirm={handlePaymentConfirm}
       />
