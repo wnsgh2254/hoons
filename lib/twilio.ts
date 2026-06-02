@@ -3,6 +3,7 @@ import {
   buildBookingReminderSmsBody,
   formatReminderAppointmentLine,
 } from '@/lib/booking-reminder-sms';
+import { stripPromoFromConfirmationSmsServiceLabel } from '@/lib/booking-confirmation-sms';
 import { haeyoomSmsHeader, smsServiceLabelEn, smsVenueLocationForReminder } from '@/lib/public-booking-labels';
 
 // Comment: Get Twilio credentials from environment variables
@@ -85,6 +86,7 @@ export async function sendBookingConfirmation(params: {
   venuePhone: string | null;
 }): Promise<{ success: boolean; messageSid?: string; error?: string }> {
   const { phone, bookingDate, bookingTime, shopName, serviceName, venuePhone } = params;
+  const serviceLine = stripPromoFromConfirmationSmsServiceLabel(serviceName);
 
   const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
   const formattedContact = formatAuPhoneForSmsDisplay(venuePhone);
@@ -99,7 +101,7 @@ export async function sendBookingConfirmation(params: {
     `${haeyoomSmsHeader(shopName)}\n\n` +
     `Appointment: \n` +
     `${appointmentLine} \n` +
-    `Service: ${serviceName}\n\n` +
+    `Service: ${serviceLine}\n\n` +
     `To Change or Cancel: \n` +
     `${contactInstruction}\n` +
     `Deposit Policy:\n` +

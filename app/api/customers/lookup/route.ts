@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
     if (local) {
       orParts.push(`phone.eq.${local.replace(/[^0-9]/g, '')}`);
     }
+    if (e164) {
+      orParts.push(`phone.eq.${e164}`);
+    }
 
     if (!orParts.length) {
       return NextResponse.json(

@@ -999,15 +999,15 @@ export default function BookingPage() {
     try {
       setLoadingCustomer(true);
       setCustomerGreeting(null);
+      setExistingCustomerId(null);
 
-      // Comment: First, try to look up existing customer by name + phone (read-only)
+      // Comment: Look up existing customer by phone only (names often vary between visits)
       const lookupRes = await fetch('/api/customers/lookup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: customerName,
           phone: customerPhone,
         }),
       });
