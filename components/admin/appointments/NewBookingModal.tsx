@@ -9,6 +9,7 @@ import {
   labelToDbTime,
   bookingTimeToLabel,
   getBookingDurationMinutes,
+  getBookingServiceDisplayName,
 } from '@/lib/utils/appointment-utils';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -560,6 +561,25 @@ export default function NewBookingModal({
   // Comment: Service list for admin booking modal comes from booking_modal_services table.
   const categoryServices = Array.isArray(effectiveServices) ? effectiveServices : [];
 
+  const editingExistingServiceName = editingBooking
+    ? getBookingServiceDisplayName(editingBooking).trim()
+    : '';
+
+  const slotHasRequiredService = (slotIndex: number): boolean => {
+    if ((slotServiceSelections[slotIndex] || []).length > 0) return true;
+    if (editingBooking?.id && slotIndex === 0 && editingExistingServiceName) return true;
+    return false;
+  };
+
+  const resolveServiceNameForSave = (slotIndex: number): string | null => {
+    const fromSelection = getServiceNameSummary(slotServiceSelections[slotIndex] || []);
+    if (fromSelection) return fromSelection;
+    if (editingBooking?.id && slotIndex === 0 && editingExistingServiceName) {
+      return editingExistingServiceName;
+    }
+    return null;
+  };
+
   // Comment: Clear draft fields so each booking gets its own memo (not carried over from the last one).
   const resetBookingFormDraft = () => {
     setMemo('');
@@ -660,7 +680,7 @@ export default function NewBookingModal({
       alert('디자이너, 날짜, 시작 시간을 모두 선택해주세요.');
       return;
     }
-    if (slots.some((_, idx) => (slotServiceSelections[idx] || []).length === 0)) {
+    if (slots.some((_, idx) => !slotHasRequiredService(idx))) {
       alert('각 예약 행에서 최소 1개의 서비스를 선택해주세요.');
       return;
     }
@@ -725,32 +745,38 @@ export default function NewBookingModal({
       if (isEditMode && editingBooking) {
         const slot = slots[0];
         const selectedServiceIds = slotServiceSelections[0] || [];
-        const serviceSummary = getServiceNameSummary(selectedServiceIds);
+        const serviceSummary = resolveServiceNameForSave(0);
         const dbTime = labelToDbTime(slot.time);
         if (!dbTime) {
           alert('시간 형식 오류가 발생했습니다.');
           return;
         }
+        const patchBody: Record<string, unknown> = {
+          booking_date: bookingDate,
+          booking_time: dbTime,
+          designer_id: slot.designerId,
+          shop_id: shopId,
+          custom_service_duration: slot.duration || null,
+          memo,
+          color_label: colorLabel,
+          deposit_paid: (() => {
+            const raw = editDepositPaid.trim();
+            if (!raw) return null;
+            const n = Number(raw);
+            return Number.isFinite(n) && n > 0 ? n : null;
+          })(),
+        };
+        // Comment: Only overwrite service fields when admin explicitly picks new services
+        if (selectedServiceIds.length > 0) {
+          patchBody.service_id = null;
+          if (serviceSummary) patchBody.custom_service_name = serviceSummary;
+        } else if (serviceSummary) {
+          patchBody.custom_service_name = serviceSummary;
+        }
         const resPatch = await fetch(`/api/appointment/${editingBooking.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            booking_date: bookingDate,
-            booking_time: dbTime,
-            designer_id: slot.designerId,
-            shop_id: shopId,
-            service_id: null,
-            custom_service_name: serviceSummary || null,
-            custom_service_duration: slot.duration || null,
-            memo,
-            color_label: colorLabel,
-            deposit_paid: (() => {
-              const raw = editDepositPaid.trim();
-              if (!raw) return null;
-              const n = Number(raw);
-              return Number.isFinite(n) && n > 0 ? n : null;
-            })(),
-          }),
+          body: JSON.stringify(patchBody),
         });
         if (!resPatch.ok) {
           const errorText = await resPatch.text();
@@ -902,7 +928,7 @@ export default function NewBookingModal({
               !bookingDate ||
               newBookingTimeSlots.length === 0 ||
               newBookingTimeSlots.some((s) => !s.designerId || !s.time) ||
-              newBookingTimeSlots.some((_, idx) => (slotServiceSelections[idx] || []).length === 0)
+              newBookingTimeSlots.some((_, idx) => !slotHasRequiredService(idx))
             }
             onClick={handleSubmit}
           >
@@ -1350,7 +1376,15 @@ export default function NewBookingModal({
               >
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                   <div className="min-w-0 md:col-span-10">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
+                    {editingBooking && editingExistingServiceName ? (
+                      <div className="mb-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm">
+                        <span className="text-xs text-gray-500 block mb-0.5">현재 시술</span>
+                        <span className="text-gray-900">{editingExistingServiceName}</span>
+                      </div>
+                    ) : null}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {editingBooking ? '서비스 변경 (선택)' : '서비스'}
+                    </label>
                     <div className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white max-h-36 overflow-y-auto space-y-2">
                       {effectiveLoadingOptions ? (
                         <p className="text-gray-500">로딩 중...</p>
@@ -1461,7 +1495,14 @@ export default function NewBookingModal({
 
                 {/* 서비스 pills */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">서비스</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {editingBooking ? '서비스 변경 (선택)' : '서비스'}
+                  </label>
+                  {editingBooking && editingExistingServiceName ? (
+                    <p className="text-xs text-gray-500 mb-2">
+                      시술명은 그대로 유지됩니다. 바꾸려면 아래에서 선택하세요.
+                    </p>
+                  ) : null}
                   {newBookingLoadingOptions ? (
                     <p className="text-sm text-gray-500 px-1 py-2">로딩 중...</p>
                   ) : (
