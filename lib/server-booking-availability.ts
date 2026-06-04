@@ -7,11 +7,13 @@ import {
 } from '@/lib/booking-time-math';
 import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
 import { loadDesignerWorkingScheduleRowsForShopDate } from '@/lib/designer-availability';
-import { resolvePerShopTimeOffOutcomes, type VenueTimeOffRow } from '@/lib/designer-venue-time-off';
+import {
+  resolvePerShopTimeOffOutcomes,
+  VENUE_TIME_OFF_REASONS,
+  type VenueTimeOffRow,
+} from '@/lib/designer-venue-time-off';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import { assertMultiVenueDefaultShopAllowsBooking } from '@/lib/multi-venue-default-shop';
-
-const DESIGNER_TIME_OFF_REASONS = ['\uC784\uC758 \uD734\uC77C', '\uD2B9\uBCC4 \uADF8\uBB34\uC77C'];
 
 /** Comment: Merge overlapping [start,end) minute intervals from midnight */
 function mergeMinuteIntervals(intervals: { start: number; end: number }[]): { start: number; end: number }[] {
@@ -202,7 +204,7 @@ export async function assertPublicBookingSlotAvailable(
     .from('designer_time_off')
     .select('id, designer_id, shop_id, reason, created_at')
     .eq('designer_id', params.designerId)
-    .in('reason', DESIGNER_TIME_OFF_REASONS)
+    .in('reason', [...VENUE_TIME_OFF_REASONS])
     .lte('start_date', params.date)
     .gte('end_date', params.date);
 

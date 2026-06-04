@@ -2,10 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import {
   resolvePerShopTimeOffOutcomes,
+  VENUE_TIME_OFF_REASONS,
   type VenueTimeOffRow,
 } from '@/lib/designer-venue-time-off';
-
-const DESIGNER_TIME_OFF_REASONS = ['\uC784\uC758 \uD734\uC77C', '\uD2B9\uBCC4 \uADF8\uBB34\uC77C'];
 
 type DesignerScheduleRow = {
   designer_id: number;
@@ -141,7 +140,7 @@ export async function getAvailableDesignerIdsForShop(
   const { data: venueTimeOffRows, error: venueTimeOffError } = await supabase
     .from('designer_time_off')
     .select('id, designer_id, shop_id, reason, created_at')
-    .in('reason', ['임의 휴일', '특별 근무일'])
+    .in('reason', [...VENUE_TIME_OFF_REASONS])
     .lte('start_date', date)
     .gte('end_date', date);
 

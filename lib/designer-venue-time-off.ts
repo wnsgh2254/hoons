@@ -9,7 +9,9 @@ export type VenueTimeOffRow = {
   created_at?: string | null;
 };
 
-const VENUE_TIME_OFF_REASONS = ['임의 휴일', '특별 근무일'] as const;
+/** Comment: DB designer_time_off.reason values for venue-specific overrides (shared by booking APIs). */
+export const VENUE_TIME_OFF_REASONS = ['임의 휴일', '특별 근무일'] as const;
+export type VenueTimeOffReason = (typeof VENUE_TIME_OFF_REASONS)[number];
 
 export function isVenueTimeOffReason(reason: string | null | undefined): boolean {
   return VENUE_TIME_OFF_REASONS.includes(reason as (typeof VENUE_TIME_OFF_REASONS)[number]);
