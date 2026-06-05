@@ -666,6 +666,9 @@ export default function AppointmentsManagementPage() {
   // Tracks the date for which availability was last fetched (ref avoids stale-closure issues).
   // Set to requestDate by initial-data on success, and updated by the availability effect on each fetch.
   const lastAvailabilityFetchedDateRef = useRef<string | null>(null);
+  // Tracks the date for which restrictions were last fetched — same pattern as lastAvailabilityFetchedDateRef.
+  // Using hydratedDate caused A→B→A navigation to skip the re-fetch, leaving B's restrictions on screen.
+  const lastRestrictionFetchedDateRef = useRef<string | null>(null);
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
@@ -700,6 +703,7 @@ export default function AppointmentsManagementPage() {
         setNewBookingServices(data.bookingModalServices || []);
         if (!isStaleRequest) {
           setBookingRestrictions(data.bookingRestrictions || []);
+          lastRestrictionFetchedDateRef.current = requestDate;
           setDayCounts(data.dayCounts || {});
           setAvailableDesignerIdsByShop(data.availableDesignerIdsByShop || {});
           setLoadingDesignerAvailability(false);
@@ -945,8 +949,10 @@ export default function AppointmentsManagementPage() {
   // Comment: Load booking restrictions for selected date or week range
   useEffect(() => {
     if (!initialDataReady) return;
-    // Skip if this date was already loaded by the initial-data API (non-week-view only)
-    if (!isWeekViewMode && selectedDate === hydratedDate) return;
+    // Skip only if this exact date was already fetched (day-view). Unlike hydratedDate,
+    // lastRestrictionFetchedDateRef updates on every successful fetch, so A→B→A navigation
+    // correctly re-fetches A's restrictions instead of showing B's stale data.
+    if (!isWeekViewMode && selectedDate === lastRestrictionFetchedDateRef.current) return;
     let isMounted = true;
     const fetchRestrictions = async () => {
       try {
@@ -957,7 +963,7 @@ export default function AppointmentsManagementPage() {
           endDate.setDate(endDate.getDate() + 6);
           const startDateStr = startDate.toISOString().split('T')[0];
           const endDateStr = endDate.toISOString().split('T')[0];
-          
+
           const res = await fetch(
             `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`
           );
@@ -972,6 +978,7 @@ export default function AppointmentsManagementPage() {
           const data = await res.json();
           if (isMounted && res.ok) {
             setBookingRestrictions(data.restrictions || []);
+            lastRestrictionFetchedDateRef.current = selectedDate;
           }
         }
       } catch (err) {
@@ -983,7 +990,7 @@ export default function AppointmentsManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId, initialDataReady, hydratedDate]);
+  }, [selectedDate, isWeekViewMode, weekViewStartDate, weekViewDesignerId, initialDataReady]);
 
 
   // Comment: Load week view bookings when week view mode is active
