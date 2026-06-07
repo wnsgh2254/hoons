@@ -1,8 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { supabase } from '@/lib/supabase';
 import { calculatePolicyRefundAmount } from '@/lib/cancellation-policy';
 import { refundStripeDepositForBooking } from '@/lib/refund-stripe-deposit';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
+
+type BookingCancelLogRow = {
+  booking_date: string | null;
+  booking_time: string | null;
+  customer?: { name?: string | null; phone?: string | null } | null;
+};
+
+async function readAdminSessionUsername(): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('admin_session');
+    if (!sessionCookie?.value) return null;
+    const session = JSON.parse(sessionCookie.value) as {
+      username?: string;
+      expiresAt?: string;
+    };
+    if (session.expiresAt && new Date(session.expiresAt) <= new Date()) {
+      return null;
+    }
+    return session.username?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function formatSydneyDateTime(value: Date): string {
+  return value.toLocaleString('en-AU', {
+    timeZone: 'Australia/Sydney',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function logAdminBookingCancellation(params: {
+  bookingId: number;
+  before: BookingCancelLogRow | null;
+  adminUsername: string | null;
+}) {
+  const customer = params.before?.customer;
+  const customerLabel = [customer?.name ?? 'unknown', customer?.phone].filter(Boolean).join(' / ');
+  const bookingDate = params.before?.booking_date ?? '?';
+  const bookingTime = (params.before?.booking_time ?? '?').slice(0, 5);
+  const cancelledAt = formatSydneyDateTime(new Date());
+  const admin = params.adminUsername ?? 'unknown';
+
+  console.log(
+    `[admin-booking-cancel] ${cancelledAt} (Sydney) | admin=${admin} | customer=${customerLabel} | booking #${params.bookingId} on ${bookingDate} ${bookingTime}`,
+  );
+}
 
 // Comment: Update a single booking (date/time/status etc.)
 export async function PATCH(
@@ -138,6 +192,27 @@ export async function PATCH(
       body.refund_stripe_deposit === true || body.refund_stripe_deposit === 'true';
     const statusRaw = typeof body.status === 'string' ? body.status.trim() : '';
     const isCancelling = isCancelledBookingStatus(statusRaw);
+
+    let bookingBeforeCancel: BookingCancelLogRow | null = null;
+    if (isCancelling) {
+      const { data: cancelRow, error: cancelRowError } = await supabase
+        .from('bookings')
+        .select(
+          `
+          booking_date,
+          booking_time,
+          customer:customer_id ( name, phone )
+        `,
+        )
+        .eq('id', id)
+        .maybeSingle();
+
+      if (cancelRowError) {
+        console.warn('[admin-booking-cancel] Failed to load booking for cancel log:', cancelRowError);
+      } else if (cancelRow) {
+        bookingBeforeCancel = cancelRow as BookingCancelLogRow;
+      }
+    }
 
     if (refundStripeDeposit && isCancelling) {
       // Comment: Use * so missing optional columns (before SQL migration) does not break the query.
@@ -290,6 +365,15 @@ export async function PATCH(
         console.error('⚠️ 경고: 요청한 status와 저장된 status가 다릅니다!', {
           requested: updates.status,
           saved: data.status
+        });
+      }
+
+      if (isCancelling && isCancelledBookingStatus(data.status)) {
+        const adminUsername = await readAdminSessionUsername();
+        logAdminBookingCancellation({
+          bookingId: Number(id),
+          before: bookingBeforeCancel,
+          adminUsername,
         });
       }
     }
