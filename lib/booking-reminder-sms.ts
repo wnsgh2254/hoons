@@ -1,4 +1,4 @@
-// Comment: Shared 3-day reminder SMS — keep in sync with Supabase Edge Function `booking-reminder`.
+// Comment: Shared 3-day reminder SMS body (sent via Mobile Message from the app).
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 

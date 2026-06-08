@@ -1,0 +1,1 @@
+{"tool":"deploy_edge_function","args":{"project_id":"akzipcsakzuqpknkrjnb","name":"booking-confirmation-sms","entrypoint_path":"index.ts","verify_jwt":true,"fileCount":2}}
