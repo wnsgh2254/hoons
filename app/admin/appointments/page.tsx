@@ -69,6 +69,7 @@ import {
   resolveBookingPopoverVerticalPlacement,
   type BookingHoverCardPosition,
 } from '@/lib/utils/appointment-utils';
+import { compareDesignersByDisplayOrder } from '@/lib/designer-display-order';
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
 
@@ -1289,7 +1290,21 @@ export default function AppointmentsManagementPage() {
       const shopAvailableIds = availableDesignerIdsByShop[shopIdForSched];
       const designersForModal = allDesigners
         .filter((d) => shopAvailableIds == null || shopAvailableIds.includes(d.id))
-        .filter((d) => designerBelongsToShop(d, shopIdForSched));
+        .filter((d) => designerBelongsToShop(d, shopIdForSched))
+        .slice()
+        .sort((a, b) => {
+          const roleOrder: Record<string, number> = {
+            Director: 1,
+            'Senior Designer': 2,
+            Designer: 3,
+          };
+          const roleA = (a.role || '').trim();
+          const roleB = (b.role || '').trim();
+          const orderA = roleOrder[roleA] || 999;
+          const orderB = roleOrder[roleB] || 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return compareDesignersByDisplayOrder(a, b);
+        });
       setNewBookingDesigners(designersForModal);
     } else {
       setNewBookingDesigners([]);
@@ -1509,7 +1524,7 @@ export default function AppointmentsManagementPage() {
       const orderA = roleOrder[roleA] || 999;
       const orderB = roleOrder[roleB] || 999;
       if (orderA !== orderB) return orderA - orderB;
-      return (a.name || '').localeCompare(b.name || '');
+      return compareDesignersByDisplayOrder(a, b);
     };
 
     const sortWithinShop = (a: (typeof allDesigners)[0], b: (typeof allDesigners)[0]) => {
@@ -1518,7 +1533,7 @@ export default function AppointmentsManagementPage() {
       const orderA = roleOrder[roleA] || 999;
       const orderB = roleOrder[roleB] || 999;
       if (orderA !== orderB) return orderA - orderB;
-      return (a.name || '').localeCompare(b.name || '');
+      return compareDesignersByDisplayOrder(a, b);
     };
 
     let filtered = [...allDesigners];
@@ -1580,9 +1595,24 @@ export default function AppointmentsManagementPage() {
 
   // Comment: Designers filtered by shop for the designer select dropdown (Directors in every shop)
   const shopFilteredDesigners = useMemo(() => {
-    if (selectedShopFilter === '전체') return allDesigners;
+    const roleOrder: Record<string, number> = {
+      Director: 1,
+      'Senior Designer': 2,
+      Designer: 3,
+    };
+    const sortForDropdown = (list: typeof allDesigners) =>
+      [...list].sort((a, b) => {
+        const roleA = (a.role || '').trim();
+        const roleB = (b.role || '').trim();
+        const orderA = roleOrder[roleA] || 999;
+        const orderB = roleOrder[roleB] || 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return compareDesignersByDisplayOrder(a, b);
+      });
+
+    if (selectedShopFilter === '전체') return sortForDropdown(allDesigners);
     const shopId = Number(selectedShopFilter);
-    return allDesigners.filter((d) => designerBelongsToShop(d, shopId));
+    return sortForDropdown(allDesigners.filter((d) => designerBelongsToShop(d, shopId)));
   }, [allDesigners, selectedShopFilter]);
 
   // O(1) designer lookup for render loop (replaces O(n) find per column)

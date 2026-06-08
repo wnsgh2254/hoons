@@ -14,6 +14,7 @@ import {
   PUBLIC_BOOKING_MAX_DAYS_AHEAD,
 } from '@/lib/utils/appointment-utils';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
+import { sortDesignersByDisplayOrder } from '@/lib/designer-display-order';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
@@ -277,7 +278,7 @@ export default function BookingPage() {
         .then((r) => r.json())
         .then((json) => {
           if (ac.signal.aborted) return;
-          preloadedDesignersRef.current.set(key, json.designers || []);
+          preloadedDesignersRef.current.set(key, sortDesignersByDisplayOrder(json.designers || []));
         })
         .catch(() => {});
     });
@@ -337,7 +338,7 @@ export default function BookingPage() {
         setAvailableDesignerIds([]);
         return;
       }
-      const designers = json.designers || [];
+      const designers = sortDesignersByDisplayOrder(json.designers || []);
       setDesignersForShop(designers);
       setAvailableDesignerIds(designers.map((d: any) => Number(d.id)));
     } catch (error: unknown) {

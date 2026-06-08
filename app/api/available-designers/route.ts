@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getAvailableDesignerIdsForShop } from '@/lib/designer-availability';
+import { sortDesignersByDisplayOrder } from '@/lib/designer-display-order';
 import { isPublicBookingDateBeyondHorizon } from '@/lib/utils/appointment-utils';
 
 export const dynamic = 'force-dynamic';
@@ -71,16 +72,18 @@ export async function GET(request: NextRequest) {
     }
 
     const idSet = new Set(finalIds.map(Number));
-    const designers = allDesigners
-      .filter((d) => idSet.has(Number(d.id)))
-      .map((d) => ({
-        id: d.id,
-        name: d.name,
-        english_name: d.english_name,
-        role: d.role,
-        shop_id: d.shop_id,
-        shop_ids_at: mergedShopIds(Number(d.id), d.shop_id != null ? Number(d.shop_id) : null),
-      }));
+    const designers = sortDesignersByDisplayOrder(
+      allDesigners
+        .filter((d) => idSet.has(Number(d.id)))
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          english_name: d.english_name,
+          role: d.role,
+          shop_id: d.shop_id,
+          shop_ids_at: mergedShopIds(Number(d.id), d.shop_id != null ? Number(d.shop_id) : null),
+        })),
+    );
 
     return NextResponse.json({ designers, designerIds: finalIds }, { status: 200 });
   } catch (e) {

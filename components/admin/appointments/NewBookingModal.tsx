@@ -16,6 +16,7 @@ import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import FormAlert from '@/components/ui/FormAlert';
 import { Z } from '@/lib/constants';
+import { sortDesignersByDisplayOrder } from '@/lib/designer-display-order';
 import type { BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
@@ -256,7 +257,9 @@ export default function NewBookingModal({
     };
   }, [isOpen, newBookingDesigners.length, bookingDate, selectedDate, shopId]);
 
-  const effectiveDesigners = newBookingDesigners.length > 0 ? newBookingDesigners : selfLoadedDesigners;
+  const effectiveDesigners = sortDesignersByDisplayOrder(
+    newBookingDesigners.length > 0 ? newBookingDesigners : selfLoadedDesigners,
+  );
   const effectiveServices = newBookingServices.length > 0 ? newBookingServices : selfLoadedServices;
   const effectiveLoadingOptions =
     newBookingLoadingOptions || selfLoadingBaseOptions || selfLoadingDesigners;

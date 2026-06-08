@@ -14,6 +14,7 @@ import {
   Badge,
   EmptyState,
 } from '@/components/ui';
+import { sortStaffByRole } from '@/lib/staff-role-order';
 
 const STAFF_ROLE_OPTIONS = [
   { value: 'Director', label: 'Director' },
@@ -107,27 +108,7 @@ export default function StaffManagementPage() {
     };
   }, []);
 
-  // Sort staff members
-  const sortedStaff = staffMembers.sort((a, b) => {
-    // Sort order: Director -> Senior Designer -> Designer -> Others
-    const getRoleOrder = (role: string) => {
-      const roleLower = role.toLowerCase();
-      if (roleLower.includes('director')) return 1;
-      if (roleLower.includes('senior designer')) return 2;
-      if (roleLower.includes('designer') || roleLower.includes('stylist')) return 3;
-      return 4;
-    };
-
-    const orderA = getRoleOrder(a.role);
-    const orderB = getRoleOrder(b.role);
-
-    if (orderA !== orderB) {
-      return orderA - orderB;
-    }
-
-    // If same role order, sort by name
-    return a.name.localeCompare(b.name);
-  });
+  const sortedStaff = sortStaffByRole(staffMembers);
 
   // Format wage display - use DB wage_type value
   const formatWage = (member: Designer) => {
