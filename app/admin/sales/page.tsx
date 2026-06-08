@@ -1265,21 +1265,27 @@ function ByStaffSalesTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {staffSalesData.map((staff, idx) => (
+                  {staffSalesData.map((staff) => {
+                    const depositServiceAmount = staff.deposit?.service?.amount ?? 0;
+                    const salesServiceNet = staff.sales.service.amount - depositServiceAmount;
+                    const salesSubtotalNet = staff.sales.subtotal - depositServiceAmount;
+                    const salesTotalNet = staff.sales.total - depositServiceAmount;
+
+                    return (
                     <React.Fragment key={staff.designerId}>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-4 py-2 font-medium" rowSpan={3}>
+                        <td className="px-4 py-2 font-medium" rowSpan={4}>
                           {staff.name}
                         </td>
                         <td className="px-4 py-2 font-medium">판매</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.service.amount)}</td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesServiceNet)}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.quantity}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.product.amount)}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.sales.subtotal)}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesSubtotalNet)}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.quantity}</td>
                         <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.membership.amount)}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.sales.total)}</td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesTotalNet)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="px-4 py-2 font-medium !border-l !border-gray-200">회원권 차감</td>
@@ -1291,6 +1297,17 @@ function ByStaffSalesTab({
                         <td className="px-4 py-2 text-center"></td>
                         <td className="px-4 py-2 text-center"></td>
                         <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
+                      </tr>
+                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+                        <td className="px-4 py-2 font-medium !border-l !border-gray-200">디파짓</td>
+                        <td className="px-4 py-2 text-center tabular-nums"></td>
+                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
+                        <td className="px-4 py-2 text-center tabular-nums"></td>
+                        <td className="px-4 py-2 text-center tabular-nums"></td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
+                        <td className="px-4 py-2 text-center tabular-nums"></td>
+                        <td className="px-4 py-2 text-center tabular-nums"></td>
+                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
                       </tr>
                       <tr className="bg-yellow-50 border-b-2 border-yellow-200">
                         <td className="px-4 py-2 font-bold !border-l !border-gray-200">합계</td>
@@ -1304,7 +1321,8 @@ function ByStaffSalesTab({
                         <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(staff.total.subtotal)}</td>
                       </tr>
                     </React.Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { attachBookingDepositPaidToSales } from '@/lib/booking-deposit-paid';
+import {
+  capPaidDepositToService,
+  resolvePaidDepositFromSaleRecord,
+} from '@/lib/sale-paid-deposit';
 import { supabase } from '@/lib/supabase';
+import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
@@ -24,6 +30,9 @@ type StaffSalesData = {
     product: { amount: number };
     subtotal: number;
   };
+  deposit: {
+    service: { amount: number };
+  };
 };
 
 export async function GET(request: NextRequest) {
@@ -47,6 +56,9 @@ export async function GET(request: NextRequest) {
         id,
         shop_id,
         sales_date,
+        booking_id,
+        paid_deposit,
+        bookings:booking_id ( deposit_paid ),
         sales_items (
           item_type,
           quantity,
@@ -84,6 +96,9 @@ export async function GET(request: NextRequest) {
         { status: 500 },
       );
     }
+
+    const salesData = sales || [];
+    await attachBookingDepositPaidToSales(supabase, salesData);
 
     const designersMap = new Map<number, { id: number; name: string; english_name?: string | null }>();
     (designers || []).forEach((designer: any) => {
@@ -141,13 +156,45 @@ export async function GET(request: NextRequest) {
             product: { amount: 0 },
             subtotal: 0,
           },
+          deposit: {
+            service: { amount: 0 },
+          },
         });
       }
 
       return staffSalesMap.get(designer.id)!;
     };
 
-    (sales || []).forEach((sale: any) => {
+    const allocateDepositToDesigners = (
+      sale: any,
+      depositCredit: number,
+      designerServiceAmounts: Map<number, number>,
+    ) => {
+      const totalMatched = Array.from(designerServiceAmounts.values()).reduce((sum, amt) => sum + amt, 0);
+      if (totalMatched <= 0 || depositCredit <= 0) return;
+
+      let remaining = roundToCents(depositCredit);
+      const entries = Array.from(designerServiceAmounts.entries()).filter(([designerId]) =>
+        designersMap.has(designerId),
+      );
+
+      entries.forEach(([designerId, serviceAmount], index) => {
+        const designer = designersMap.get(designerId);
+        if (!designer) return;
+
+        const share =
+          index === entries.length - 1
+            ? remaining
+            : roundToCents((serviceAmount / totalMatched) * depositCredit);
+        remaining = roundToCents(remaining - share);
+        if (share <= 0) return;
+
+        const staffData = ensureStaffData(designer);
+        staffData.deposit.service.amount += share;
+      });
+    };
+
+    salesData.forEach((sale: any) => {
       (sale.sales_items || []).forEach((item: any) => {
         const matchedDesigners = resolveDesignersForItem(item);
         if (matchedDesigners.length === 0) return;
@@ -187,6 +234,32 @@ export async function GET(request: NextRequest) {
           }
         });
       });
+
+      const serviceItems = (sale.sales_items || []).filter(
+        (item: any) => item.item_type === 'service',
+      );
+      const serviceGrossTotal = serviceItems.reduce(
+        (sum: number, item: any) => sum + toNum(item.amount),
+        0,
+      );
+      const depositCredit = capPaidDepositToService(
+        resolvePaidDepositFromSaleRecord(sale),
+        serviceGrossTotal,
+      );
+      if (depositCredit <= 0) return;
+
+      const designerServiceAmounts = new Map<number, number>();
+      serviceItems.forEach((item: any) => {
+        const amount = toNum(item.amount);
+        resolveDesignersForItem(item).forEach((designer) => {
+          designerServiceAmounts.set(
+            designer.id,
+            (designerServiceAmounts.get(designer.id) || 0) + amount,
+          );
+        });
+      });
+
+      allocateDepositToDesigners(sale, depositCredit, designerServiceAmounts);
     });
 
     staffSalesMap.forEach((staffData) => {
