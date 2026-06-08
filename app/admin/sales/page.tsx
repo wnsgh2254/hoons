@@ -444,10 +444,13 @@ type DepositBookingRow = {
   booking_time: string;
   service_name: string;
   deposit_paid: number;
+  deposit_refunded: number;
+  deposit_remaining: number;
+  is_cancelled: boolean;
   created_at: string;
 };
 
-// Comment: Deposit tab — bookings with deposit_paid > 0, filtered by created_at date
+// Comment: Deposit tab — bookings with deposit_paid > 0 (incl. cancelled), net after refund
 function DepositSalesTab({
   dateMode,
   setDateMode,
@@ -627,9 +630,14 @@ function DepositSalesTab({
                         {row.booking_time ? bookingTimeToLabel(row.booking_time) : '-'}
                       </td>
                       <td className="px-4 py-2">{row.service_name}</td>
-                      <td className="px-4 py-2 text-center tabular-nums">{row.booking_date}</td>
+                      <td className="px-4 py-2 text-center tabular-nums">
+                        <div>{row.booking_date}</div>
+                        {row.is_cancelled ? (
+                          <div className="text-xs font-semibold text-red-600">Cancelled</div>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-2 text-right font-semibold tabular-nums">
-                        {formatAudNumber(row.deposit_paid)}
+                        {formatAudNumber(row.deposit_remaining)}
                       </td>
                     </tr>
                   ))}

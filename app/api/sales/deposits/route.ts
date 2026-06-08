@@ -18,8 +18,58 @@ type DepositBookingRow = {
   booking_time: string | null;
   service_name: string;
   deposit_paid: number;
+  deposit_refunded: number;
+  deposit_remaining: number;
+  is_cancelled: boolean;
   created_at: string;
 };
+
+const BOOKING_DEPOSIT_REFUND_MEMO_RE = /^Booking #(\d+) deposit refund/;
+
+function resolveDepositRefundedAmount(params: {
+  bookingId: number;
+  depositPaid: number;
+  depositRefundedAt: string | null;
+  refundsByBookingId: Map<number, number>;
+}): number {
+  const fromRefunds = params.refundsByBookingId.get(params.bookingId);
+  if (fromRefunds != null && fromRefunds > 0) {
+    return fromRefunds;
+  }
+  if (params.depositRefundedAt) {
+    return params.depositPaid;
+  }
+  return 0;
+}
+
+async function fetchDepositRefundsByBookingId(
+  bookingIds: number[],
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (!bookingIds.length) return map;
+
+  const idSet = new Set(bookingIds);
+  const { data, error } = await supabase
+    .from('refunds')
+    .select('total_amount, memo')
+    .ilike('memo', 'Booking #% deposit refund%');
+
+  if (error) {
+    console.error('Error fetching booking deposit refunds:', error);
+    return map;
+  }
+
+  for (const row of data || []) {
+    const match = BOOKING_DEPOSIT_REFUND_MEMO_RE.exec(String(row.memo || ''));
+    if (!match) continue;
+    const bookingId = Number(match[1]);
+    if (!idSet.has(bookingId)) continue;
+    const amount = Math.max(0, Number(row.total_amount) || 0);
+    map.set(bookingId, (map.get(bookingId) || 0) + amount);
+  }
+
+  return map;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,6 +103,7 @@ export async function GET(request: NextRequest) {
         booking_date,
         booking_time,
         deposit_paid,
+        deposit_refunded_at,
         status,
         created_at,
         custom_service_name,
@@ -87,13 +138,27 @@ export async function GET(request: NextRequest) {
     const filtered = (data || []).filter(
       (booking: any) =>
         booking.created_at &&
-        isCreatedAtInSydneyDateRange(booking.created_at, startDate, endDate) &&
-        !isCancelledBookingStatus(booking.status),
+        isCreatedAtInSydneyDateRange(booking.created_at, startDate, endDate),
+    );
+
+    const refundsByBookingId = await fetchDepositRefundsByBookingId(
+      filtered.map((booking: any) => Number(booking.id)).filter((id: number) => id > 0),
     );
 
     const mapped: DepositBookingRow[] = filtered.map(
       (booking: any): DepositBookingRow => {
         const depositPaid = normalizeBookingDepositPaid(booking.deposit_paid);
+        const depositRefunded = resolveDepositRefundedAmount({
+          bookingId: Number(booking.id),
+          depositPaid,
+          depositRefundedAt:
+            typeof booking.deposit_refunded_at === 'string'
+              ? booking.deposit_refunded_at
+              : null,
+          refundsByBookingId,
+        });
+        const depositRemaining = Math.max(0, depositPaid - depositRefunded);
+
         return {
           id: booking.id,
           shop_id: booking.shop_id,
@@ -104,6 +169,9 @@ export async function GET(request: NextRequest) {
           booking_time: booking.booking_time,
           service_name: getBookingServiceDisplayName(booking),
           deposit_paid: depositPaid,
+          deposit_refunded: depositRefunded,
+          deposit_remaining: depositRemaining,
+          is_cancelled: isCancelledBookingStatus(booking.status),
           created_at: String(booking.created_at),
         };
       },
@@ -115,7 +183,7 @@ export async function GET(request: NextRequest) {
     );
 
     const totalDeposit = rows.reduce(
-      (sum: number, row) => sum + row.deposit_paid,
+      (sum: number, row) => sum + row.deposit_remaining,
       0,
     );
 
