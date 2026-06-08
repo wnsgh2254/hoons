@@ -438,6 +438,7 @@ function TotalSalesTab({
 type DepositBookingRow = {
   id: number;
   shop_name: string | null;
+  designer_id: number | null;
   customer_name: string | null;
   designer_name: string | null;
   booking_date: string;
@@ -475,6 +476,8 @@ function DepositSalesTab({
   const [summary, setSummary] = useState<{ count: number; totalDeposit: number } | null>(null);
   const [shops, setShops] = useState<any[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string>('');
+  const [selectedDesignerId, setSelectedDesignerId] = useState<string>('');
+  const { staff: designers } = useStaff();
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -530,6 +533,9 @@ function DepositSalesTab({
         if (selectedShopId) {
           params.append('shop_id', selectedShopId);
         }
+        if (selectedDesignerId) {
+          params.append('designer_id', selectedDesignerId);
+        }
 
         const res = await fetch(`/api/sales/deposits?${params.toString()}`);
         if (!res.ok) {
@@ -549,7 +555,7 @@ function DepositSalesTab({
     };
 
     fetchData();
-  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedShopId]);
+  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedShopId, selectedDesignerId]);
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
@@ -568,6 +574,11 @@ function DepositSalesTab({
     label: shop.name,
   }));
 
+  const designerOptions = designers.map((d) => ({
+    value: String(d.id),
+    label: d.name,
+  }));
+
   return (
     <div className="flex flex-col gap-6">
       <DateFilterBar
@@ -582,13 +593,22 @@ function DepositSalesTab({
         handleDateChange={handleDateChange}
         handleSearch={handleSearch}
         extraFilters={
-          <Select
-            value={selectedShopId}
-            onChange={(e) => setSelectedShopId(e.target.value)}
-            options={shopOptions}
-            placeholder="전체 지점"
-            wrapperClassName="flex-1 min-w-0 md:max-w-xs"
-          />
+          <>
+            <Select
+              value={selectedShopId}
+              onChange={(e) => setSelectedShopId(e.target.value)}
+              options={shopOptions}
+              placeholder="전체 지점"
+              wrapperClassName="flex-1 min-w-0 md:max-w-xs"
+            />
+            <Select
+              value={selectedDesignerId}
+              onChange={(e) => setSelectedDesignerId(e.target.value)}
+              options={designerOptions}
+              placeholder="전체 디자이너"
+              wrapperClassName="flex-1 min-w-0 md:max-w-xs"
+            />
+          </>
         }
       />
 
@@ -1565,6 +1585,7 @@ function SalesHistoryModal({
   const [selectedItemType, setSelectedItemType] = useState<string>(initialItemType || '전체');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('전체');
   const [selectedDesignerId, setSelectedDesignerId] = useState<string>(initialDesignerId || '');
+  const [selectedShopId, setSelectedShopId] = useState<string>('');
   const [showDeleted, setShowDeleted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -1653,6 +1674,9 @@ function SalesHistoryModal({
       }
       if (normalizedItemType) {
         salesParams.append('item_type', normalizedItemType);
+      }
+      if (selectedShopId) {
+        salesParams.append('shop_id', selectedShopId);
       }
 
       const [registeredSalesRes, registeredRefundsRes] = await Promise.all([
@@ -1922,7 +1946,7 @@ function SalesHistoryModal({
   useEffect(() => {
     fetchHistory(1);
     setCurrentPage(1);
-  }, [dateMode, selectedDate, startDate, endDate, selectedItemType, selectedPaymentMethod, selectedDesignerId]);
+  }, [dateMode, selectedDate, startDate, endDate, selectedItemType, selectedPaymentMethod, selectedDesignerId, selectedShopId]);
 
   const handleSearch = () => {
     setCurrentPage(1);
@@ -2056,6 +2080,11 @@ function SalesHistoryModal({
   ];
 
   const designerOptions = designers.map((d) => ({ value: String(d.id), label: d.name }));
+
+  const shopOptions = shops.map((shop: any) => ({
+    value: String(shop.id),
+    label: shop.name,
+  }));
 
   const historyColumns = [
     {
@@ -2301,6 +2330,14 @@ function SalesHistoryModal({
               value={selectedDesignerId}
               onChange={(e) => setSelectedDesignerId(e.target.value)}
               options={designerOptions}
+              placeholder="전체"
+              wrapperClassName="min-w-0"
+            />
+            <Select
+              label="지점"
+              value={selectedShopId}
+              onChange={(e) => setSelectedShopId(e.target.value)}
+              options={shopOptions}
               placeholder="전체"
               wrapperClassName="min-w-0"
             />

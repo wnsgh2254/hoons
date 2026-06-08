@@ -69,12 +69,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, size, sku, category, price, cost_price, stock, icon, for_internal, for_retail } = body;
+    const { name, size, sku, category, brand, price, cost_price, stock, icon, for_internal, for_retail } =
+      body;
     const shopIds = resolveCatalogInventoryShopIds(body);
 
-    if (!name || !category || price == null || stock == null) {
+    if (!name || !category || !brand || price == null || stock == null) {
       return NextResponse.json(
-        { error: 'name, category, price, stock 는 필수입니다.' },
+        { error: 'name, brand, category, price, stock 는 필수입니다.' },
         { status: 400 }
       );
     }
@@ -82,13 +83,34 @@ export async function POST(request: NextRequest) {
     const numericPrice = Number(price);
     const numericCostPrice = Number(cost_price ?? 0);
     const numericStock = Number(stock);
+    const trimmedSku = sku && String(sku).trim() ? String(sku).trim() : null;
+
+    if (trimmedSku) {
+      const { data: existingRows, error: lookupError } = await supabase
+        .from('inventory_items')
+        .select('id, shop_id')
+        .in('shop_id', shopIds)
+        .eq('sku', trimmedSku);
+
+      if (lookupError) {
+        return handleApiError(lookupError, 'inventory POST', '인벤토리 상품을 추가하지 못했습니다.');
+      }
+
+      if (existingRows && existingRows.length > 0) {
+        return NextResponse.json(
+          { error: `제품코드 "${trimmedSku}"는 이미 등록되어 있습니다. 다른 코드를 사용해주세요.` },
+          { status: 409 },
+        );
+      }
+    }
 
     const rows = shopIds.map((shop_id) => ({
       name: String(name).trim(),
       shop_id,
       size: size ? String(size).trim() : null,
-      sku: sku ? String(sku).trim() : null,
+      sku: trimmedSku,
       category: String(category).trim(),
+      brand: String(brand).trim(),
       price: numericPrice,
       cost_price: numericCostPrice,
       stock: numericStock,
@@ -101,6 +123,16 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.from('inventory_items').insert(rows).select();
 
     if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json(
+          {
+            error: trimmedSku
+              ? `제품코드 "${trimmedSku}"는 이미 등록되어 있습니다.`
+              : '동일한 제품 정보가 이미 등록되어 있습니다.',
+          },
+          { status: 409 },
+        );
+      }
       return handleApiError(error, 'inventory POST', '인벤토리 상품을 추가하지 못했습니다.');
     }
 
@@ -166,7 +198,8 @@ export async function PUT(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, size, sku, category, price, cost_price, icon, stock, for_internal, for_retail } = body;
+    const { id, name, size, sku, category, brand, price, cost_price, icon, stock, for_internal, for_retail } =
+      body;
     const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
 
     const numericId = Number(id);
@@ -179,6 +212,7 @@ export async function PATCH(request: NextRequest) {
     if (size !== undefined) updates.size = size ? String(size).trim() : null;
     if (sku !== undefined) updates.sku = sku ? String(sku).trim() : null;
     if (category !== undefined) updates.category = String(category).trim();
+    if (brand !== undefined) updates.brand = brand ? String(brand).trim() : null;
     if (price !== undefined) updates.price = Number(price);
     if (cost_price !== undefined) updates.cost_price = Number(cost_price);
     if (icon !== undefined) updates.icon = icon ? String(icon).trim() : null;

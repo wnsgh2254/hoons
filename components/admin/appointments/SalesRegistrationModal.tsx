@@ -24,6 +24,13 @@ import {
   splitCashTender,
 } from '@/lib/sales-cash-payment';
 import { formatAudAmount, roundToCents } from '@/lib/utils';
+import {
+  clearSalesDraft,
+  getSalesDraftKey,
+  loadSalesDraft,
+  saveSalesDraft,
+  type SalesRegistrationDraft,
+} from '@/lib/sales-registration-draft';
 
 function formatPaymentTimestamp(iso: string): string {
   const d = new Date(iso);
@@ -67,6 +74,8 @@ interface SalesRegistrationModalProps {
   } | null;
   onClose: () => void;
   onOpenItemPicker?: (tab: 'service' | 'product' | 'prepaid') => void;
+  /** Clear draft and reopen item picker from scratch (booking unchanged) */
+  onRestartRegistration?: () => void;
   onComplete?: () => void | Promise<void>; // 판매 등록 완료 시 호출
   /** Called after successful sale edit — parent can refresh detail modal without closing it conceptually */
   onEditComplete?: (saleId: number) => void | Promise<void>;
@@ -85,6 +94,7 @@ export default function SalesRegistrationModal({
   customer,
   onClose,
   onOpenItemPicker,
+  onRestartRegistration,
   onComplete,
   onEditComplete,
   initialData,
@@ -153,6 +163,8 @@ export default function SalesRegistrationModal({
   /** Physical cash received from customer (may exceed applied cash_amount). */
   const [cashTendered, setCashTendered] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
+  const [draftRestoredMessage, setDraftRestoredMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (customer?.id) {
@@ -418,31 +430,56 @@ export default function SalesRegistrationModal({
         setTotal(gross);
         const totalPaid = restoredAmounts.cash + restoredAmounts.card + restoredAmounts.bank_transfer;
         setAmountToReceive(netDue - totalPaid - newPrepaidDeduction);
-      } else {
-        // 등록 모드: 모든 상태 초기화
-        setDepositCredit(normalizeBookingDepositPaid(bookingDepositPaid));
-        setSalesItems([]);
-        setSalesAmount(0);
-        setDiscountAmount(0);
-        setTotal(0);
-        setAmountToReceive(0);
-        setPointAccumulation(0);
-        setSelectedDeduction(null);
-        setPaymentMethod(null);
-        setMemo('');
-        setSalesDate(defaultSalesDate || getSydneyToday());
-        setSalesTime(defaultSalesTime || getCurrentLocalTime());
-        setPaymentAmounts({
-          cash: 0,
-          card: 0,
-          bank_transfer: 0,
-        });
-        setCashTendered(null);
-        setPrepaidDeductionAmount(0);
-        setActiveTab('service');
+      } else if (customer) {
+        const draftKey = getSalesDraftKey(customer.id, bookingId);
+        const savedDraft = loadSalesDraft(draftKey);
+
+        if (savedDraft && savedDraft.salesItems.length > 0) {
+          setDraftRestoredMessage('임시 저장된 판매 내용을 불러왔습니다.');
+          setSalesItems(savedDraft.salesItems as SalesItem[]);
+          setMemo(savedDraft.memo);
+          setSalesDate(savedDraft.salesDate);
+          setSalesTime(savedDraft.salesTime);
+          setSelectedShopId(savedDraft.selectedShopId ?? shopId ?? null);
+          setPaymentAmounts(savedDraft.paymentAmounts);
+          setCashTendered(savedDraft.cashTendered);
+          setPrepaidDeductionAmount(savedDraft.prepaidDeductionAmount);
+          setDepositCredit(savedDraft.depositCredit);
+          setActiveTab(savedDraft.activeTab);
+          setSelectedDeduction(savedDraft.prepaidDeductionAmount > 0 ? 'prepaid' : null);
+          setPaymentMethod(null);
+          setPointAccumulation(0);
+          recalculateAmounts(
+            savedDraft.salesItems,
+            savedDraft.paymentAmounts,
+            savedDraft.prepaidDeductionAmount,
+          );
+        } else {
+          setDraftRestoredMessage(null);
+          setDepositCredit(normalizeBookingDepositPaid(bookingDepositPaid));
+          setSalesItems([]);
+          setSalesAmount(0);
+          setDiscountAmount(0);
+          setTotal(0);
+          setAmountToReceive(0);
+          setPointAccumulation(0);
+          setSelectedDeduction(null);
+          setPaymentMethod(null);
+          setMemo('');
+          setSalesDate(defaultSalesDate || getSydneyToday());
+          setSalesTime(defaultSalesTime || getCurrentLocalTime());
+          setPaymentAmounts({
+            cash: 0,
+            card: 0,
+            bank_transfer: 0,
+          });
+          setCashTendered(null);
+          setPrepaidDeductionAmount(0);
+          setActiveTab('service');
+        }
       }
     }
-  }, [isOpen, initialData, editSaleId, bookingDepositPaid, defaultSalesDate, defaultSalesTime]);
+  }, [isOpen, initialData, editSaleId, bookingDepositPaid, defaultSalesDate, defaultSalesTime, customer, bookingId, shopId]);
 
   // Keep booking deposit visible even if parent props flicker while the modal stays open.
   useEffect(() => {
@@ -639,6 +676,10 @@ export default function SalesRegistrationModal({
         return;
       }
 
+      if (!isEditMode && customer) {
+        clearSalesDraft(getSalesDraftKey(customer.id, bookingId));
+      }
+
       if (onComplete) {
         await onComplete();
       }
@@ -702,6 +743,65 @@ export default function SalesRegistrationModal({
   const paymentInputAmountDue =
     paymentMethod === 'cash' ? cashDueBeforeEntry : amountToReceive;
 
+  const resetToNewRegistration = () => {
+    setDraftRestoredMessage(null);
+    setDraftSavedMessage(null);
+    setDepositCredit(normalizeBookingDepositPaid(bookingDepositPaid));
+    setSalesItems([]);
+    setSalesAmount(0);
+    setDiscountAmount(0);
+    setTotal(0);
+    setAmountToReceive(0);
+    setPointAccumulation(0);
+    setSelectedDeduction(null);
+    setPaymentMethod(null);
+    setMemo('');
+    setSalesDate(defaultSalesDate || getSydneyToday());
+    setSalesTime(defaultSalesTime || getCurrentLocalTime());
+    setPaymentAmounts({ cash: 0, card: 0, bank_transfer: 0 });
+    setCashTendered(null);
+    setPrepaidDeductionAmount(0);
+    setActiveTab('service');
+    setSelectedShopId(shopId || null);
+  };
+
+  const handleClearDraft = () => {
+    if (!customer || editSaleId || isSaving) return;
+    setConfirmationAlertData({
+      title: '판매 등록 삭제',
+      message:
+        '임시 저장된 판매 내용을 삭제하고 처음부터 다시 등록합니다. 예약 정보는 변경되지 않습니다. 계속하시겠습니까?',
+      onConfirm: () => {
+        clearSalesDraft(getSalesDraftKey(customer.id, bookingId));
+        resetToNewRegistration();
+        setIsConfirmationAlertOpen(false);
+        setConfirmationAlertData(null);
+        onRestartRegistration?.();
+      },
+    });
+    setIsConfirmationAlertOpen(true);
+  };
+
+  const handleSaveDraft = () => {
+    if (!customer || editSaleId) return;
+    const draftKey = getSalesDraftKey(customer.id, bookingId);
+    saveSalesDraft(draftKey, {
+      salesItems: salesItems as SalesRegistrationDraft['salesItems'],
+      memo,
+      salesDate,
+      salesTime,
+      selectedShopId,
+      paymentAmounts,
+      prepaidDeductionAmount,
+      depositCredit,
+      cashTendered,
+      activeTab,
+      savedAt: new Date().toISOString(),
+    });
+    setDraftSavedMessage('임시 저장되었습니다.');
+    setTimeout(() => setDraftSavedMessage(null), 2500);
+  };
+
   const handleCancel = () => {
     if (isSaving) return;
     onClose();
@@ -723,7 +823,7 @@ export default function SalesRegistrationModal({
       bodyClassName="flex-1 overflow-y-auto min-h-0"
     >
       {/* Customer Info Header */}
-      <div className="bg-gray-100 -mx-5.5 -mt-5.5 px-5.5 py-3 mb-5.5 border-b border-gray-200">
+      <div className="bg-gray-100 -mx-5.5 -mt-5.5 px-5.5 py-3 mb-5.5 border-b border-gray-200 space-y-2">
         <div className="flex items-center gap-3">
           <p className="text-sm font-semibold text-gray-900">{customer.name}</p>
           <span className="text-xs text-gray-400">({customer.id})</span>
@@ -731,6 +831,21 @@ export default function SalesRegistrationModal({
             <p className="text-xs text-gray-500">{customer.phone}</p>
           )}
         </div>
+        {draftRestoredMessage && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-blue-600">{draftRestoredMessage}</p>
+            {!editSaleId && (
+              <button
+                type="button"
+                onClick={handleClearDraft}
+                disabled={isSaving}
+                className="text-xs text-red-600 hover:text-red-800 underline disabled:opacity-50"
+              >
+                판매 등록 삭제
+              </button>
+            )}
+          </div>
+        )}
       </div>
           {/* Sales Item Selection Buttons */}
           <div className="mb-5.5">
@@ -1167,6 +1282,9 @@ export default function SalesRegistrationModal({
               </div>
 
               <div className="space-y-2">
+                {draftSavedMessage && (
+                  <p className="text-xs text-emerald-600 text-center">{draftSavedMessage}</p>
+                )}
                 <Button
                   className="w-full"
                   onClick={handleComplete}
@@ -1175,6 +1293,16 @@ export default function SalesRegistrationModal({
                 >
                   {editSaleId ? (isSaving ? '저장 중...' : '수정 완료') : isSaving ? '처리 중...' : '계산 완료'}
                 </Button>
+                {!editSaleId && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleSaveDraft}
+                    disabled={isSaving || salesItems.length === 0}
+                  >
+                    임시 저장
+                  </Button>
+                )}
                 <Button variant="ghost" className="w-full" onClick={handleCancel} disabled={isSaving}>
                   취소
                 </Button>

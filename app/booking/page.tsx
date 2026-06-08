@@ -10,6 +10,7 @@ import type { DesignerAvailabilityIntervals } from '@/lib/booking-time-math';
 import {
   getSydneyToday,
   getSydneyTodayPlusDays,
+  getSydneyNowTime,
   PUBLIC_BOOKING_MAX_DAYS_AHEAD,
 } from '@/lib/utils/appointment-utils';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
@@ -30,6 +31,7 @@ interface Designer {
 
 interface Service {
   id: string;
+  instanceKey?: string;
   name: string;
   price: number;
   priceLabel: string;
@@ -37,6 +39,17 @@ interface Service {
   description: string;
   image: string;
   selected: boolean;
+}
+
+function formatBookingDateLabel(isoDate: string): string {
+  if (!isoDate) return 'Select a date';
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 // Comment: Short description under service title on booking cards (services table)
@@ -134,7 +147,7 @@ function PaymentForm({
 
 export default function BookingPage() {
   const [step, setStep] = useState<'service' | 'deposit' | 'confirmed'>('service');
-  const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday()); // Comment: Date in YYYY-MM-DD format
+  const [selectedDate, setSelectedDate] = useState<string>(''); // Comment: User must pick a date before continuing
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const [selectedDesigner, setSelectedDesigner] = useState<Designer | null>(null);
   const [selectedServices, setSelectedServices] = useState<Service[]>([]); // Comment: Multi-select support
@@ -702,21 +715,33 @@ export default function BookingPage() {
   const serviceSectionLoading = loadingServices || loadingBookingItems || loadingDesignerServices;
 
   const unavailableSlotLabels = useMemo(() => {
-    if (!availabilityData || !selectedService) return new Set<string>();
-    const dur = selectedServiceDurationMinutes;
     const all = [
       ...dynamicTimeSlots.morning,
       ...dynamicTimeSlots.afternoon,
       ...dynamicTimeSlots.evening,
     ];
     const bad = new Set<string>();
+    const isToday = selectedDate === getSydneyToday();
+    const nowMinutes = isToday
+      ? (() => {
+          const [h, min] = getSydneyNowTime().split(':').map(Number);
+          return h * 60 + min;
+        })()
+      : null;
+
     for (const label of all) {
       const m = timeLabelToMinutes(label);
       if (m == null) continue;
+      if (nowMinutes != null && m < nowMinutes) {
+        bad.add(label);
+        continue;
+      }
+      if (!availabilityData || !selectedService) continue;
+      const dur = selectedServiceDurationMinutes;
       if (isStartSlotUnavailable(m, dur, availabilityData)) bad.add(label);
     }
     return bad;
-  }, [availabilityData, selectedService, selectedServiceDurationMinutes, dynamicTimeSlots]);
+  }, [availabilityData, selectedService, selectedServiceDurationMinutes, dynamicTimeSlots, selectedDate]);
 
   // Comment: Load existing bookings + booking_restrictions for selected designer/date/shop
   useEffect(() => {
@@ -772,6 +797,14 @@ export default function BookingPage() {
   }, [selectedTime, unavailableSlotLabels]);
 
   const handleDateChange = (date: string) => {
+    if (!date) {
+      setSelectedDate('');
+      setSelectedShop(null);
+      setSelectedDesigner(null);
+      setSelectedServices([]);
+      setSelectedTime(null);
+      return;
+    }
     const min = getSydneyToday();
     const max = getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD);
     let next = date;
@@ -801,21 +834,26 @@ export default function BookingPage() {
     setSelectedTime(null);
   };
 
-  const handleServiceToggle = (service: Service) => {
+  const handleServiceAdd = (service: Service) => {
     setSelectedTime(null);
-    setSelectedServices((prev) => {
-      const alreadySelected = prev.some((s) => s.id === service.id);
-      if (alreadySelected) {
-        return prev.filter((s) => s.id !== service.id);
-      }
-      return [...prev, service];
-    });
+    const instanceKey = `${service.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setSelectedServices((prev) => [...prev, { ...service, instanceKey }]);
     setIsServiceModalOpen(false);
     setSelectedCategory(null);
   };
 
+  const handleServiceRemoveOne = (serviceId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedTime(null);
+    setSelectedServices((prev) => {
+      const idx = prev.findIndex((s) => s.id === serviceId);
+      if (idx === -1) return prev;
+      return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+    });
+  };
+
   // Comment: Alias kept for backward-compat with modal close
-  const handleServiceSelect = handleServiceToggle;
+  const handleServiceSelect = handleServiceAdd;
 
   const handleCategoryClick = (category: string) => {
     setSelectedCategory(category);
@@ -824,6 +862,7 @@ export default function BookingPage() {
 
   // Comment: Clamp date if the allowed Sydney window moves (e.g. after midnight) or state is stale
   useEffect(() => {
+    if (!selectedDate) return;
     const min = getSydneyToday();
     const max = getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD);
     if (selectedDate >= min && selectedDate <= max) return;
@@ -834,6 +873,11 @@ export default function BookingPage() {
     setSelectedServices([]);
     setSelectedTime(null);
   }, [selectedDate]);
+
+  // Comment: Focus date picker first when landing on the booking page
+  useEffect(() => {
+    scrollToSection(dateSectionRef);
+  }, []);
 
   // Comment: When each step is selected, scroll to the corresponding section after render
   useEffect(() => {
@@ -1284,7 +1328,7 @@ export default function BookingPage() {
                   <div className="pb-4 border-b border-black space-y-2">
                     <p className="text-xs text-gray-500 mb-1">With {selectedDesigner?.name}</p>
                     {selectedServices.map((svc) => (
-                      <div key={svc.id} className="flex justify-between items-start">
+                      <div key={svc.instanceKey ?? svc.id} className="flex justify-between items-start">
                         <p className="text-sm font-medium text-slate-900 pr-2">{svc.name}</p>
                         <p className="text-sm font-medium text-slate-900 shrink-0">${svc.price.toFixed(2)}</p>
                       </div>
@@ -1295,10 +1339,6 @@ export default function BookingPage() {
                     <span className="text-sm font-medium text-slate-900">
                       {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''} at {selectedTime}
                     </span>
-                  </div>
-                  <div className="flex justify-between pt-2">
-                    <span className="text-sm text-gray-500">Duration</span>
-                    <span className="text-sm font-medium text-slate-900">{selectedService?.duration}</span>
                   </div>
                   <div className="pt-4 border-t border-black">
                     <div className="flex justify-between items-center mb-2">
@@ -1412,14 +1452,25 @@ export default function BookingPage() {
             <p className="font-normal text-lg text-left text-gray-500">Choose your preferred appointment date.</p>
           </div>
           <div className="max-w-md">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => handleDateChange(e.target.value)}
-              min={getSydneyToday()}
-              max={getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD)}
-              className="w-full px-4 py-3 border border-black  text-lg font-medium text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
-            />
+            <label
+              htmlFor="booking-date"
+              className="relative block w-full px-4 py-3 border border-black text-lg font-medium cursor-pointer focus-within:ring-2 focus-within:ring-black focus-within:border-transparent transition-all"
+            >
+              <span className={selectedDate ? 'text-black' : 'text-gray-400'}>
+                {formatBookingDateLabel(selectedDate)}
+              </span>
+              <input
+                id="booking-date"
+                type="date"
+                lang="en-US"
+                value={selectedDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+                min={getSydneyToday()}
+                max={getSydneyTodayPlusDays(PUBLIC_BOOKING_MAX_DAYS_AHEAD)}
+                aria-label="Select appointment date"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+              />
+            </label>
           </div>
         </section>
 
@@ -1580,12 +1631,11 @@ export default function BookingPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {displayServices.map((service) => {
-                  const isSelected = selectedServices.some((s) => s.id === service.id);
+                  const selectedCount = selectedServices.filter((s) => s.id === service.id).length;
+                  const isSelected = selectedCount > 0;
                   return (
-                    <button
+                    <div
                       key={service.id}
-                      type="button"
-                      onClick={() => handleServiceToggle(service)}
                       className={`text-left border p-4 flex flex-col justify-between gap-3 transition-all relative ${
                         isSelected
                           ? 'bg-black text-white border-black'
@@ -1593,27 +1643,40 @@ export default function BookingPage() {
                       }`}
                     >
                       {isSelected && (
-                        <span className="absolute top-3 right-3 material-symbols-outlined text-white text-base">
-                          check_circle
-                        </span>
-                      )}
-                      <div>
-                        <h4 className={`text-base font-bold mb-1 pr-6 ${isSelected ? 'text-white' : 'text-black'}`}>
-                          {service.name}
-                        </h4>
-                        <p className={`text-xs ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
-                          Duration: <span className="font-medium">{service.duration}</span>
-                        </p>
-                        <ServiceCardDescription text={service.description} selected={isSelected} />
-                      </div>
-                      {service.price > 0 && (
-                        <div className="flex items-center justify-between mt-2">
-                          <span className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
-                            From ${service.price.toFixed(0)}
+                        <div className="absolute top-3 right-3 flex items-center gap-1">
+                          <span className="text-xs font-bold bg-white text-black rounded-full min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center">
+                            {selectedCount}
                           </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleServiceRemoveOne(service.id, e)}
+                            className="size-5 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center"
+                            aria-label="Remove one"
+                          >
+                            <span className="material-symbols-outlined text-sm leading-none">remove</span>
+                          </button>
                         </div>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleServiceAdd(service)}
+                        className="text-left flex flex-col justify-between gap-3 flex-1"
+                      >
+                        <div>
+                          <h4 className={`text-base font-bold mb-1 pr-16 ${isSelected ? 'text-white' : 'text-black'}`}>
+                            {service.name}
+                          </h4>
+                          <ServiceCardDescription text={service.description} selected={isSelected} />
+                        </div>
+                        {service.price > 0 && (
+                          <div className="flex items-center justify-between mt-2">
+                            <span className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                              From ${service.price.toFixed(0)}
+                            </span>
+                          </div>
+                        )}
+                      </button>
+                    </div>
                   );
                 })}
               </div>

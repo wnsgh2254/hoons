@@ -25,9 +25,16 @@ export interface InventoryBrand {
   name: string;
 }
 
+export interface InventoryProductCategory {
+  id: number;
+  shop_id?: number | null;
+  name: string;
+}
+
 // Simple in-memory cache
 let cachedItems: InventoryItem[] | null = null;
 let cachedBrands: InventoryBrand[] | null = null;
+let cachedCategories: InventoryProductCategory[] | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL = 30_000; // 30 seconds
 
@@ -38,6 +45,7 @@ function isCacheValid() {
 export function invalidateInventoryCache() {
   cachedItems = null;
   cachedBrands = null;
+  cachedCategories = null;
   cacheTimestamp = 0;
 }
 
@@ -45,6 +53,7 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
   const { enabled = true, shopId = null } = options;
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [brands, setBrands] = useState<InventoryBrand[]>([]);
+  const [categories, setCategories] = useState<InventoryProductCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
@@ -58,11 +67,12 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
     if (!enabled) return;
 
     let cancelled = false;
-    if (shopId == null && isCacheValid() && cachedItems && cachedBrands) {
+    if (shopId == null && isCacheValid() && cachedItems && cachedBrands && cachedCategories) {
       Promise.resolve().then(() => {
-        if (!cancelled && mountedRef.current && cachedItems && cachedBrands) {
+        if (!cancelled && mountedRef.current && cachedItems && cachedBrands && cachedCategories) {
           setItems(cachedItems);
           setBrands(cachedBrands);
+          setCategories(cachedCategories);
         }
       });
       return () => { cancelled = true; };
@@ -77,20 +87,24 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
         return Promise.all([
           fetch(`/api/inventory${query}`).then((r) => r.json()),
           fetch(`/api/inventory-brands${query}`).then((r) => r.json()),
+          fetch(`/api/inventory-product-categories${query}`).then((r) => r.json()),
         ]);
       })
-      .then(([itemsData, brandsData]) => {
+      .then(([itemsData, brandsData, categoriesData]) => {
         if (cancelled) return;
         const itemList: InventoryItem[] = itemsData.items || [];
         const brandList: InventoryBrand[] = brandsData.brands || [];
+        const categoryList: InventoryProductCategory[] = categoriesData.categories || [];
         if (shopId == null) {
           cachedItems = itemList;
           cachedBrands = brandList;
+          cachedCategories = categoryList;
           cacheTimestamp = Date.now();
         }
         if (mountedRef.current) {
           setItems(itemList);
           setBrands(brandList);
+          setCategories(categoryList);
         }
       })
       .catch((err) => {
@@ -114,16 +128,20 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
     return Promise.all([
       fetch(`/api/inventory${query}`).then((r) => r.json()),
       fetch(`/api/inventory-brands${query}`).then((r) => r.json()),
+      fetch(`/api/inventory-product-categories${query}`).then((r) => r.json()),
     ])
-      .then(([itemsData, brandsData]) => {
+      .then(([itemsData, brandsData, categoriesData]) => {
         const itemList: InventoryItem[] = itemsData.items || [];
         const brandList: InventoryBrand[] = brandsData.brands || [];
+        const categoryList: InventoryProductCategory[] = categoriesData.categories || [];
         cachedItems = itemList;
         cachedBrands = brandList;
+        cachedCategories = categoryList;
         cacheTimestamp = Date.now();
         if (mountedRef.current) {
           setItems(itemList);
           setBrands(brandList);
+          setCategories(categoryList);
           setError(null);
         }
       })
@@ -138,5 +156,5 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
       });
   };
 
-  return { items, brands, loading, error, refetch };
+  return { items, brands, categories, loading, error, refetch };
 }

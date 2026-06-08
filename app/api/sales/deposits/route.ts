@@ -12,6 +12,7 @@ type DepositBookingRow = {
   id: number;
   shop_id: number | null;
   shop_name: string | null;
+  designer_id: number | null;
   customer_name: string | null;
   designer_name: string | null;
   booking_date: string | null;
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
     const shopId = searchParams.get('shop_id');
+    const designerId = searchParams.get('designer_id');
 
     if (!startDate || !endDate) {
       return NextResponse.json(
@@ -124,6 +126,12 @@ export async function GET(request: NextRequest) {
         query = query.eq('shop_id', numericShopId);
       }
     }
+    if (designerId) {
+      const numericDesignerId = Number(designerId);
+      if (Number.isFinite(numericDesignerId) && numericDesignerId > 0) {
+        query = query.eq('designer_id', numericDesignerId);
+      }
+    }
 
     const { data, error } = await query;
 
@@ -163,6 +171,7 @@ export async function GET(request: NextRequest) {
           id: booking.id,
           shop_id: booking.shop_id,
           shop_name: booking.shop?.name ?? null,
+          designer_id: booking.designer?.id ?? null,
           customer_name: booking.customer?.name ?? null,
           designer_name: booking.designer?.name ?? null,
           booking_date: booking.booking_date,

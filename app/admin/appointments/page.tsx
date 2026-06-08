@@ -44,6 +44,7 @@ import { Z } from '@/lib/constants';
 import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import { mapSaleRecordToDetailData } from '@/lib/sales-detail-mapper';
 import { fetchSaleDetailForBooking } from '@/lib/fetch-sale-detail-for-booking';
+import { hasSalesRegistrationDraft } from '@/lib/sales-registration-draft';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 import {
   GRID_START_HOUR,
@@ -873,6 +874,56 @@ export default function AppointmentsManagementPage() {
       setCustomerInfoLoading(false);
     }
   }, []);
+
+  const beginSalesRegistrationFromBooking = useCallback(
+    (booking: BookingWithRelations | Booking) => {
+      const customerId = (booking as any).customer?.id || (booking as any).customer_id;
+      const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
+      const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
+
+      if (!customerId) {
+        alert('이 예약에 연결된 고객이 없습니다. 판매를 등록하려면 먼저 고객을 등록해주세요.');
+        return;
+      }
+
+      const bookingId = booking.id ?? null;
+      const hasDraft = hasSalesRegistrationDraft(customerId, bookingId);
+
+      if (bookingId) {
+        setSalesLinkedBookingId(bookingId);
+      }
+      setSalesDefaultDate((booking as any).booking_date || selectedDate);
+      setSalesDefaultTime(
+        typeof (booking as any).booking_time === 'string' && (booking as any).booking_time.length >= 5
+          ? (booking as any).booking_time.slice(0, 5)
+          : null,
+      );
+      setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
+      setSalesDefaultManager((booking as any).designer?.name || null);
+      setSalesLinkedDepositPaid(
+        normalizeBookingDepositPaid(
+          (booking as any).deposit_paid ?? (booking as any).depositPaid,
+        ),
+      );
+
+      setCloseSalesFlowOnPickerClose(!hasDraft);
+      setViewingCustomerId(customerId);
+      loadCustomerInfo(customerId);
+      setSalesRegistrationCustomer({
+        id: customerId,
+        name: customerName,
+        phone: customerPhone,
+      });
+      setIsSalesRegistrationModalOpen(true);
+      if (hasDraft) {
+        setIsSalesItemPickerModalOpen(false);
+      } else {
+        setSalesItemPickerTab('service');
+        setIsSalesItemPickerModalOpen(true);
+      }
+    },
+    [selectedDate, loadCustomerInfo],
+  );
 
   // Comment: Save recent search (memoized for stable callback)
   const saveRecentSearchStable = useCallback((name: string, phone?: string, id?: number) => {
@@ -2019,50 +2070,10 @@ export default function AppointmentsManagementPage() {
         bookingMenuOriginalPositionRef.current = null;
       },
       onRegisterSale: (booking) => {
-        const customerId = (booking as any).customer?.id || (booking as any).customer_id;
-        const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
-        const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
         setBookingMenuOpen(null);
         setBookingMenuPosition(null);
         bookingMenuOriginalPositionRef.current = null;
-        if (!customerId) {
-          alert('이 예약에 연결된 고객이 없습니다. 판매를 등록하려면 먼저 고객을 등록해주세요.');
-          return;
-        }
-        if (booking.id) {
-          setSalesLinkedBookingId(booking.id);
-        }
-        setSalesDefaultDate((booking as any).booking_date || selectedDate);
-        setSalesDefaultTime(
-          typeof (booking as any).booking_time === 'string' && (booking as any).booking_time.length >= 5
-            ? (booking as any).booking_time.slice(0, 5)
-            : null,
-        );
-        setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
-        setSalesDefaultManager((booking as any).designer?.name || null);
-        setSalesLinkedDepositPaid(
-          normalizeBookingDepositPaid(
-            (booking as any).deposit_paid ?? (booking as any).depositPaid,
-          ),
-        );
-        if (customerId) {
-          setCloseSalesFlowOnPickerClose(true);
-          setViewingCustomerId(customerId);
-          loadCustomerInfo(customerId);
-          setSalesRegistrationCustomer({
-            id: customerId,
-            name: customerName,
-            phone: customerPhone,
-          });
-          setIsSalesRegistrationModalOpen(true);
-          setSalesItemPickerTab('service');
-          setIsSalesItemPickerModalOpen(true);
-        } else {
-          alert('고객 정보가 없어 판매 등록을 할 수 없습니다.\n예약 수정에서 고객을 연결해 주세요.');
-        }
-        setBookingMenuOpen(null);
-        setBookingMenuPosition(null);
-        bookingMenuOriginalPositionRef.current = null;
+        beginSalesRegistrationFromBooking(booking);
       },
       onViewSaleDetail: async (booking) => {
         setBookingMenuOpen(null);
@@ -2085,7 +2096,7 @@ export default function AppointmentsManagementPage() {
       weekViewDesignerId,
       weekViewStartDate,
       selectedShopFilter,
-      loadCustomerInfo,
+      beginSalesRegistrationFromBooking,
     ]
   );
 
@@ -2652,55 +2663,12 @@ export default function AppointmentsManagementPage() {
                             setIsCancelBookingModalOpen(true);
                           }}
                           onRegisterSale={(booking) => {
-                            const customerId = (booking as any).customer?.id || (booking as any).customer_id;
-                            const customerName = (booking as any).customer?.name || (booking as any).customer_name || '고객';
-                            const customerPhone = (booking as any).customer?.phone || (booking as any).customer_phone;
                             setBookingMenuOpen(null);
                             setBookingMenuPosition(null);
                             if (bookingMenuOriginalPositionRef.current) {
                               bookingMenuOriginalPositionRef.current = null;
                             }
-                            if (!customerId) {
-                              alert('이 예약에 연결된 고객이 없습니다. 판매를 등록하려면 먼저 고객을 등록해주세요.');
-                              return;
-                            }
-                            if (booking.id) setSalesLinkedBookingId(booking.id);
-                            setSalesDefaultDate((booking as any).booking_date || selectedDate);
-                            setSalesDefaultTime(
-                              typeof (booking as any).booking_time === 'string' && (booking as any).booking_time.length >= 5
-                                ? (booking as any).booking_time.slice(0, 5)
-                                : null,
-                            );
-                            setSalesRegistrationShopId(Number((booking as any).shop_id) || null);
-                            setSalesDefaultManager((booking as any).designer?.name || null);
-                            setSalesLinkedDepositPaid(
-                              Math.max(
-                                0,
-                                normalizeBookingDepositPaid(
-                                  (booking as any).deposit_paid ?? (booking as any).depositPaid,
-                                ),
-                              ),
-                            );
-                            if (customerId) {
-                              setCloseSalesFlowOnPickerClose(true);
-                              setViewingCustomerId(customerId);
-                              loadCustomerInfo(customerId);
-                              setSalesRegistrationCustomer({
-                                id: customerId,
-                                name: customerName,
-                                phone: customerPhone,
-                              });
-                              setIsSalesRegistrationModalOpen(true);
-                              setSalesItemPickerTab('service');
-                              setIsSalesItemPickerModalOpen(true);
-                            } else {
-                              alert('고객 정보가 없어 판매 등록을 할 수 없습니다.\n예약 수정에서 고객을 연결해 주세요.');
-                            }
-                            setBookingMenuOpen(null);
-                            setBookingMenuPosition(null);
-                            if (bookingMenuOriginalPositionRef.current) {
-                              bookingMenuOriginalPositionRef.current = null;
-                            }
+                            beginSalesRegistrationFromBooking(booking);
                           }}
                           onViewSaleDetail={scheduleDayViewMenuHandlers.onViewSaleDetail}
                           movingBooking={movingBooking}
@@ -4110,6 +4078,11 @@ export default function AppointmentsManagementPage() {
         onOpenItemPicker={(tab) => {
           setCloseSalesFlowOnPickerClose(false);
           setSalesItemPickerTab(tab);
+          setIsSalesItemPickerModalOpen(true);
+        }}
+        onRestartRegistration={() => {
+          setCloseSalesFlowOnPickerClose(true);
+          setSalesItemPickerTab('service');
           setIsSalesItemPickerModalOpen(true);
         }}
         onComplete={async () => {

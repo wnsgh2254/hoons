@@ -27,6 +27,8 @@ interface ModalProps {
   bodyClassName?: string;
   /** Whether clicking the backdrop closes the modal. Defaults to true. */
   closeOnBackdropClick?: boolean;
+  /** Whether to show the header close (X) button. Defaults to true. */
+  showCloseButton?: boolean;
 }
 
 export default function Modal({
@@ -42,6 +44,7 @@ export default function Modal({
   scrollable = false,
   bodyClassName,
   closeOnBackdropClick = true,
+  showCloseButton = true,
 }: ModalProps) {
   if (!isOpen) return null;
 
@@ -61,13 +64,17 @@ export default function Modal({
         {!hideHeader && (
           <div className="p-5.5 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-xl font-bold text-black">{title}</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-gray-400 hover:text-black transition-colors"
-            >
-              <span className="material-symbols-outlined text-xl">close</span>
-            </button>
+            {showCloseButton ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-gray-400 hover:text-black transition-colors"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            ) : (
+              <span className="w-6" aria-hidden />
+            )}
           </div>
         )}
 

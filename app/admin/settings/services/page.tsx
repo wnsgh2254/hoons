@@ -5,7 +5,7 @@ import { invalidateServicesCache } from '@/hooks/useServices';
 import { useInventory, invalidateInventoryCache } from '@/hooks/useInventory';
 import { usePrepaidTemplates } from '@/hooks/usePrepaidTemplates';
 import type { PrepaidPassTemplate } from '@/hooks/usePrepaidTemplates';
-import type { InventoryItem, InventoryBrand } from '@/hooks/useInventory';
+import type { InventoryItem, InventoryBrand, InventoryProductCategory } from '@/hooks/useInventory';
 import {
   AdminPageLayout,
   PageHeader,
@@ -20,6 +20,12 @@ import {
   FormAlert,
 } from '@/components/ui';
 import { Z } from '@/lib/constants';
+import {
+  resolveInitialProductBrand,
+  resolveInitialProductCategory,
+  resolveInventoryBrand,
+  resolveInventoryProductCategory,
+} from '@/lib/inventory-product-fields';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +52,7 @@ const PAGE_TABS = [
   { key: 'prepaid', label: '정액권' },
   { key: 'products', label: '제품' },
   { key: 'productCategories', label: '제품분류' },
+  { key: 'productInventoryCategories', label: '제품카테고리' },
 ];
 
 const MINUTE_OPTIONS = [0, 10, 20, 30, 40, 50].map((m) => ({
@@ -1479,6 +1486,7 @@ function ProductCategoryModal({
   onDelete,
   initial,
   title,
+  nameLabel = '분류명',
   zIndex,
 }: {
   isOpen: boolean;
@@ -1487,6 +1495,7 @@ function ProductCategoryModal({
   onDelete?: () => void;
   initial?: InventoryBrand;
   title: string;
+  nameLabel?: string;
   zIndex?: string;
 }) {
   const [name, setName] = useState(initial?.name || '');
@@ -1494,7 +1503,7 @@ function ProductCategoryModal({
 
   const handleSave = () => {
     if (!name.trim()) {
-      setError('분류명을 입력해주세요.');
+      setError(`${nameLabel}을(를) 입력해주세요.`);
       return;
     }
     onSave({ name });
@@ -1516,7 +1525,7 @@ function ProductCategoryModal({
     >
       <div className="space-y-4">
         {error && <FormAlert message={error} variant="error" />}
-        <Input label="분류명" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Input label={nameLabel} value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
     </Modal>
   );
@@ -1532,19 +1541,29 @@ function ProductModal({
   initial,
   title,
   brands,
+  categories,
   onAddBrand,
+  onAddCategory,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => void;
+  onSave: (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => void | Promise<void>;
   onDelete?: () => void;
   initial?: InventoryItem;
   title: string;
   brands: InventoryBrand[];
+  categories: InventoryProductCategory[];
   onAddBrand: (data: { name: string }) => void;
+  onAddCategory: (data: { name: string }) => void;
 }) {
+  const brandNames = brands.map((b) => b.name);
+  const categoryNames = categories.map((c) => c.name);
+
   const [sku, setSku] = useState(initial?.sku || '');
-  const [brand, setBrand] = useState(initial?.brand || '');
+  const [brand, setBrand] = useState(() => resolveInitialProductBrand(initial, brandNames));
+  const [productCategory, setProductCategory] = useState(() =>
+    resolveInitialProductCategory(initial, brandNames, categoryNames),
+  );
   const [name, setName] = useState(initial?.name || '');
   const [size, setSize] = useState(initial?.size || '');
   const [price, setPrice] = useState(initial?.price ?? 0);
@@ -1553,24 +1572,50 @@ function ProductModal({
   const [forInternal, setForInternal] = useState(initial?.for_internal ?? true);
   const [forRetail, setForRetail] = useState(initial?.for_retail ?? false);
   const [error, setError] = useState<string | null>(null);
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isAddingBrand, setIsAddingBrand] = useState(false);
+  const [isAddingProductCategory, setIsAddingProductCategory] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (!isOpen) return;
+    setSku(initial?.sku || '');
+    setBrand(resolveInitialProductBrand(initial, brandNames));
+    setProductCategory(resolveInitialProductCategory(initial, brandNames, categoryNames));
+    setName(initial?.name || '');
+    setSize(initial?.size || '');
+    setPrice(initial?.price ?? 0);
+    setCostPrice((initial as any)?.cost_price ?? 0);
+    setStock(initial?.stock ?? 0);
+    setForInternal(initial?.for_internal ?? true);
+    setForRetail(initial?.for_retail ?? false);
+    setError(null);
+  }, [isOpen, initial, brandNames.join('|'), categoryNames.join('|')]);
+
+  const handleSave = async () => {
     if (!name.trim()) { setError('제품명을 입력해주세요.'); return; }
     if (!brand) { setError('분류를 선택해주세요.'); return; }
-    onSave({
-      name,
-      sku: sku || null,
-      size: size || null,
-      category: brand,
-      price,
-      cost_price: costPrice,
-      stock,
-      brand,
-      icon: initial?.icon || null,
-      for_internal: forInternal,
-      for_retail: forRetail,
-    });
+    if (!productCategory) { setError('카테고리를 선택해주세요.'); return; }
+    setError(null);
+    setSaving(true);
+    try {
+      await onSave({
+        name,
+        sku: sku.trim() || null,
+        size: size || null,
+        category: productCategory,
+        price,
+        cost_price: costPrice,
+        stock,
+        brand,
+        icon: initial?.icon || null,
+        for_internal: forInternal,
+        for_retail: forRetail,
+      });
+    } catch (err: any) {
+      setError(err?.message || '제품 저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1580,11 +1625,15 @@ function ProductModal({
       title={title}
       zIndex={Z.MODAL_PRIMARY}
       scrollable
+      closeOnBackdropClick={false}
+      showCloseButton={false}
       footer={
         <>
-          <Button onClick={handleSave} className="flex-1">저장</Button>
-          {onDelete && <Button variant="danger" onClick={onDelete} className="flex-1">삭제</Button>}
-          <Button variant="outline" onClick={onClose} className="flex-1">취소</Button>
+          <Button onClick={handleSave} className="flex-1" disabled={saving} loading={saving}>
+            저장
+          </Button>
+          {onDelete && <Button variant="danger" onClick={onDelete} className="flex-1" disabled={saving}>삭제</Button>}
+          <Button variant="outline" onClick={onClose} className="flex-1" disabled={saving}>취소</Button>
         </>
       }
     >
@@ -1600,7 +1649,19 @@ function ProductModal({
               options={[{ value: '', label: '선택' }, ...brands.map((b) => ({ value: b.name, label: b.name }))]}
               wrapperClassName="flex-1"
             />
-            <Button variant="outline" size="sm" onClick={() => setIsAddingCategory(true)}>+</Button>
+            <Button variant="outline" size="sm" onClick={() => setIsAddingBrand(true)}>+</Button>
+          </div>
+        </div>
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">카테고리 <span className="text-red-500">*</span></p>
+          <div className="flex items-center gap-2">
+            <Select
+              value={productCategory}
+              onChange={(e) => setProductCategory(e.target.value)}
+              options={[{ value: '', label: '선택' }, ...categories.map((c) => ({ value: c.name, label: c.name }))]}
+              wrapperClassName="flex-1"
+            />
+            <Button variant="outline" size="sm" onClick={() => setIsAddingProductCategory(true)}>+</Button>
           </div>
         </div>
         <Input label="제품명" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -1633,12 +1694,26 @@ function ProductModal({
         </div>
       </div>
 
-      {isAddingCategory && (
+      {isAddingBrand && (
         <ProductCategoryModal
           isOpen
-          onClose={() => setIsAddingCategory(false)}
-          onSave={(data) => { onAddBrand(data); setIsAddingCategory(false); }}
+          onClose={() => setIsAddingBrand(false)}
+          onSave={(data) => { onAddBrand(data); setIsAddingBrand(false); }}
           title="분류 등록"
+          zIndex={Z.MODAL_PICKER}
+        />
+      )}
+      {isAddingProductCategory && (
+        <ProductCategoryModal
+          isOpen
+          onClose={() => setIsAddingProductCategory(false)}
+          onSave={(data) => {
+            onAddCategory(data);
+            setProductCategory(data.name);
+            setIsAddingProductCategory(false);
+          }}
+          title="카테고리 등록"
+          nameLabel="카테고리명"
           zIndex={Z.MODAL_PICKER}
         />
       )}
@@ -1651,11 +1726,13 @@ function ProductModal({
 function ProductsTab({
   items,
   brands,
+  categories,
   loading,
   refetch,
 }: {
   items: InventoryItem[];
   brands: InventoryBrand[];
+  categories: InventoryProductCategory[];
   loading: boolean;
   refetch: () => Promise<void>;
 }) {
@@ -1666,43 +1743,48 @@ function ProductsTab({
   const [isAdding, setIsAdding] = useState(false);
   const [editingProduct, setEditingProduct] = useState<InventoryItem | null>(null);
 
+  const brandNames = brands.map((b) => b.name);
+  const categoryNames = categories.map((c) => c.name);
+
   let filtered = [...items];
-  if (filterBrand) filtered = filtered.filter((p) => (p.brand || p.category) === filterBrand);
+  if (filterBrand) {
+    filtered = filtered.filter(
+      (p) => resolveInventoryBrand(p, brandNames) === filterBrand,
+    );
+  }
   if (appliedSearch) filtered = filtered.filter((p) => p.name.toLowerCase().includes(appliedSearch.toLowerCase()) || (p.sku || '').includes(appliedSearch));
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const handleAdd = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
-    try {
-      const res = await fetch('/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error('Failed to create product');
-      invalidateInventoryCache();
-      await refetch();
-      setIsAdding(false);
-    } catch (err) {
-      console.error('Error creating product:', err);
+    const res = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.error || '제품 등록에 실패했습니다.');
     }
+    invalidateInventoryCache();
+    await refetch();
+    setIsAdding(false);
   };
   const handleUpdate = async (data: { name: string; sku: string | null; size: string | null; category: string; price: number; cost_price: number; stock: number; brand: string | null; icon: string | null; for_internal: boolean; for_retail: boolean }) => {
     if (!editingProduct) return;
-    try {
-      const res = await fetch('/api/inventory', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingProduct.id, ...data }),
-      });
-      if (!res.ok) throw new Error('Failed to update product');
-      invalidateInventoryCache();
-      await refetch();
-      setEditingProduct(null);
-    } catch (err) {
-      console.error('Error updating product:', err);
+    const res = await fetch('/api/inventory', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editingProduct.id, ...data }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(body.error || '제품 수정에 실패했습니다.');
     }
+    invalidateInventoryCache();
+    await refetch();
+    setEditingProduct(null);
   };
   const handleDelete = async () => {
     if (!editingProduct) return;
@@ -1730,9 +1812,35 @@ function ProductsTab({
       console.error('Error creating brand:', err);
     }
   };
+  const handleAddCategory = async (data: { name: string }) => {
+    try {
+      const res = await fetch('/api/inventory-product-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to create product category');
+      invalidateInventoryCache();
+      await refetch();
+    } catch (err) {
+      console.error('Error creating product category:', err);
+    }
+  };
 
   const columns = [
-    { key: 'brand', header: '분류', align: 'center' as const, render: (item: InventoryItem) => item.brand || item.category || '-' },
+    {
+      key: 'brand',
+      header: '분류',
+      align: 'center' as const,
+      render: (item: InventoryItem) => resolveInventoryBrand(item, brandNames) || '-',
+    },
+    {
+      key: 'category',
+      header: '카테고리',
+      align: 'center' as const,
+      render: (item: InventoryItem) =>
+        resolveInventoryProductCategory(item, brandNames, categoryNames) || '-',
+    },
     { key: 'sku', header: '제품코드', align: 'center' as const, render: (item: InventoryItem) => item.sku || '-' },
     { key: 'name', header: '제품명', align: 'center' as const, render: (item: InventoryItem) => item.name },
     { key: 'size', header: '규격', align: 'center' as const, render: (item: InventoryItem) => item.size || '' },
@@ -1797,10 +1905,30 @@ function ProductsTab({
       </div>
 
       {isAdding && (
-        <ProductModal isOpen onClose={() => setIsAdding(false)} onSave={handleAdd} title="제품등록" brands={brands} onAddBrand={handleAddBrand} />
+        <ProductModal
+          isOpen
+          onClose={() => setIsAdding(false)}
+          onSave={handleAdd}
+          title="제품등록"
+          brands={brands}
+          categories={categories}
+          onAddBrand={handleAddBrand}
+          onAddCategory={handleAddCategory}
+        />
       )}
       {editingProduct && (
-        <ProductModal isOpen onClose={() => setEditingProduct(null)} onSave={handleUpdate} onDelete={handleDelete} initial={editingProduct} title="제품 수정" brands={brands} onAddBrand={handleAddBrand} />
+        <ProductModal
+          isOpen
+          onClose={() => setEditingProduct(null)}
+          onSave={handleUpdate}
+          onDelete={handleDelete}
+          initial={editingProduct}
+          title="제품 수정"
+          brands={brands}
+          categories={categories}
+          onAddBrand={handleAddBrand}
+          onAddCategory={handleAddCategory}
+        />
       )}
     </div>
   );
@@ -1924,11 +2052,147 @@ function ProductCategoriesTab({
   );
 }
 
+// ─── Tab 5: 제품카테고리 ───────────────────────────────────────────────────────
+
+function ProductInventoryCategoriesTab({
+  categories,
+  loading,
+  refetch,
+}: {
+  categories: InventoryProductCategory[];
+  loading: boolean;
+  refetch: () => Promise<void>;
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<InventoryProductCategory | null>(null);
+  const [orderedCategories, setOrderedCategories] = useState<InventoryProductCategory[]>(categories);
+
+  useEffect(() => {
+    setOrderedCategories(categories);
+  }, [categories]);
+
+  const handleAdd = async (data: { name: string }) => {
+    try {
+      const res = await fetch('/api/inventory-product-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to create product category');
+      invalidateInventoryCache();
+      await refetch();
+      setIsAdding(false);
+    } catch (err) {
+      console.error('Error creating product category:', err);
+    }
+  };
+  const handleUpdate = async (data: { name: string }) => {
+    if (!editingCategory) return;
+    try {
+      const res = await fetch(`/api/inventory-product-categories/${editingCategory.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to update product category');
+      invalidateInventoryCache();
+      await refetch();
+      setEditingCategory(null);
+    } catch (err) {
+      console.error('Error updating product category:', err);
+    }
+  };
+  const handleDelete = async () => {
+    if (!editingCategory) return;
+    if (!confirm(`카테고리 "${editingCategory.name}"을(를) 삭제할까요?`)) return;
+    try {
+      const res = await fetch(`/api/inventory-product-categories/${editingCategory.id}`, { method: 'DELETE' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || '카테고리 삭제에 실패했습니다.');
+      invalidateInventoryCache();
+      await refetch();
+      setEditingCategory(null);
+    } catch (err: any) {
+      alert(err.message || '카테고리 삭제에 실패했습니다.');
+    }
+  };
+
+  const columns = [
+    { key: 'name', header: '항목', align: 'center' as const, render: (item: InventoryProductCategory) => item.name },
+    { key: 'actions', header: '수정', align: 'center' as const, render: (item: InventoryProductCategory) => <Button variant="outline" size="sm" onClick={() => setEditingCategory(item)}>수정</Button> },
+  ];
+
+  if (loading) {
+    return <div className="py-11.5 text-center text-sm text-gray-500">로딩 중...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="px-2 pb-4 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-black">제품 카테고리</h3>
+          <div className="flex items-center gap-4">
+            <Button icon="add" size="sm" onClick={() => setIsAdding(true)}>카테고리 등록</Button>
+          </div>
+        </div>
+        <DataTable
+          columns={columns}
+          data={orderedCategories}
+          keyExtractor={(c) => c.id}
+          emptyMessage="등록된 제품 카테고리가 없습니다."
+          draggable
+          onReorder={async (reordered) => {
+            const order = reordered.map((c, i) => ({ id: c.id, sort_order: i + 1 }));
+            const prev = orderedCategories.map((c) => ({ ...c }));
+            setOrderedCategories(reordered);
+            try {
+              const res = await fetch('/api/inventory-product-categories', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order }),
+              });
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(body.error || '순서 저장에 실패했습니다.');
+              invalidateInventoryCache();
+              await refetch();
+            } catch (err: any) {
+              setOrderedCategories(prev);
+              alert(err.message || '순서 저장에 실패했습니다.');
+            }
+          }}
+        />
+      </div>
+      <p className="text-sm text-red-500">* 순서를 변경하려면 항목을 드래그 하세요.</p>
+
+      {isAdding && (
+        <ProductCategoryModal
+          isOpen
+          onClose={() => setIsAdding(false)}
+          onSave={handleAdd}
+          title="카테고리 등록"
+          nameLabel="카테고리명"
+        />
+      )}
+      {editingCategory && (
+        <ProductCategoryModal
+          isOpen
+          onClose={() => setEditingCategory(null)}
+          onSave={handleUpdate}
+          onDelete={handleDelete}
+          initial={editingCategory}
+          title="카테고리 수정"
+          nameLabel="카테고리명"
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function ServicesAndProductsPage() {
   const [activeTab, setActiveTab] = useState('services');
-  const { items, brands, loading: inventoryLoading, refetch: inventoryRefetch } = useInventory();
+  const { items, brands, categories, loading: inventoryLoading, refetch: inventoryRefetch } = useInventory();
 
   return (
     <AdminPageLayout>
@@ -1938,8 +2202,25 @@ export default function ServicesAndProductsPage() {
         {activeTab === 'services' && <ServicesTab />}
         {activeTab === 'designerServices' && <DesignerServicesTab />}
         {activeTab === 'prepaid' && <PrepaidTab />}
-        {activeTab === 'products' && <ProductsTab items={items} brands={brands} loading={inventoryLoading} refetch={inventoryRefetch} />}
-        {activeTab === 'productCategories' && <ProductCategoriesTab brands={brands} loading={inventoryLoading} refetch={inventoryRefetch} />}
+        {activeTab === 'products' && (
+          <ProductsTab
+            items={items}
+            brands={brands}
+            categories={categories}
+            loading={inventoryLoading}
+            refetch={inventoryRefetch}
+          />
+        )}
+        {activeTab === 'productCategories' && (
+          <ProductCategoriesTab brands={brands} loading={inventoryLoading} refetch={inventoryRefetch} />
+        )}
+        {activeTab === 'productInventoryCategories' && (
+          <ProductInventoryCategoriesTab
+            categories={categories}
+            loading={inventoryLoading}
+            refetch={inventoryRefetch}
+          />
+        )}
       </div>
     </AdminPageLayout>
   );

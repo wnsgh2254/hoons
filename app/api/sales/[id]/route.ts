@@ -6,6 +6,7 @@ import {
   assertSufficientPrepaidBalance,
 } from '@/lib/sales-reconciliation';
 import { archiveSaleDeletion } from '@/lib/sale-deletion-log';
+import { getSalePrepaidDeductionTotal } from '@/lib/sales-payment-utils';
 import { restoreBookingAfterSaleDelete } from '@/lib/sale-booking-link';
 import { resolveBookingDepositPaidForSale } from '@/lib/booking-deposit-paid';
 import {
@@ -115,6 +116,14 @@ export async function DELETE(
     try {
       const archived = await archiveSaleDeletion(supabase, saleId);
       linkedBookingId = archived.bookingId;
+
+      const prepaidToRestore = getSalePrepaidDeductionTotal(archived.sale.sales_items || []);
+      if (prepaidToRestore > 0 && archived.sale.customer_id != null) {
+        await adjustPrepaidBalance(supabase, {
+          customerId: Number(archived.sale.customer_id),
+          pointsDelta: prepaidToRestore,
+        });
+      }
     } catch (archiveError: any) {
       console.error('Error archiving sale before delete:', archiveError);
       return NextResponse.json(

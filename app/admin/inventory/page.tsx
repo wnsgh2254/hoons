@@ -4,6 +4,10 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 import type { InventoryItem } from '@/lib/types';
 import {
+  resolveInventoryBrand,
+  resolveInventoryProductCategory,
+} from '@/lib/inventory-product-fields';
+import {
   AdminPageLayout,
   PageHeader,
   SearchBar,
@@ -194,6 +198,7 @@ function InventoryContent() {
   const [status, setStatus] = useState('전체 상태');
   const [brand, setBrand] = useState<string>('전체');
   const [brandOptions, setBrandOptions] = useState<string[]>(['전체']);
+  const [productCategoryOptions, setProductCategoryOptions] = useState<string[]>(['전체 카테고리']);
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<InventoryItem[]>([]);
   const [stockDrafts, setStockDrafts] = useState<Record<number, number>>({});
@@ -333,6 +338,34 @@ function InventoryContent() {
     };
   }, [selectedShopId]);
 
+  useEffect(() => {
+    let isMounted = true;
+    const fetchProductCategories = async () => {
+      try {
+        const res = await fetch(
+          buildInventoryUrl('/api/inventory-product-categories', selectedShopId),
+        );
+        const data = await res.json();
+        if (isMounted) {
+          const names: string[] = Array.isArray(data.categories)
+            ? data.categories.map((c: { name: string }) => String(c.name))
+            : [];
+          setProductCategoryOptions(['전체 카테고리', ...names]);
+        }
+      } catch {
+        if (isMounted) setProductCategoryOptions(['전체 카테고리']);
+      }
+    };
+
+    fetchProductCategories();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedShopId]);
+
+  const brandNameList = brandOptions.filter((b) => b !== '전체');
+  const productCategoryNameList = productCategoryOptions.filter((c) => c !== '전체 카테고리');
+
   const getStatusBadgeVariant = (status: string): 'success' | 'warning' | 'error' | 'default' => {
     switch (status) {
       case 'In Stock':
@@ -379,7 +412,9 @@ function InventoryContent() {
   const filteredProducts = (() => {
     let list = products;
     if (category !== '전체 카테고리') {
-      list = list.filter((p) => p.category === category);
+      list = list.filter(
+        (p) => resolveInventoryProductCategory(p, brandNameList, productCategoryNameList) === category,
+      );
     }
     if (status !== '전체 상태') {
       list = list.filter((p) => p.status === status);
@@ -393,7 +428,7 @@ function InventoryContent() {
       );
     }
     if (brand !== '전체') {
-      list = list.filter((p) => (p.brand ?? '') === brand);
+      list = list.filter((p) => resolveInventoryBrand(p, brandNameList) === brand);
     }
     return list;
   })();
@@ -462,7 +497,9 @@ function InventoryContent() {
       key: 'brand',
       header: '브랜드',
       render: (product: InventoryItem) => (
-        <span className="text-gray-600">{product.brand ?? '—'}</span>
+        <span className="text-gray-600">
+          {resolveInventoryBrand(product, brandNameList) ?? '—'}
+        </span>
       ),
     },
     {
@@ -475,9 +512,14 @@ function InventoryContent() {
     {
       key: 'category',
       header: '카테고리',
-      render: (product: InventoryItem) => (
-        <Badge>{product.category}</Badge>
-      ),
+      render: (product: InventoryItem) => {
+        const label = resolveInventoryProductCategory(
+          product,
+          brandNameList,
+          productCategoryNameList,
+        );
+        return label ? <Badge>{label}</Badge> : <span className="text-gray-400">—</span>;
+      },
     },
     {
       key: 'price',
@@ -490,33 +532,11 @@ function InventoryContent() {
       key: 'stock',
       header: '재고 수량',
       render: (product: InventoryItem) => (
-        <div className="flex items-center gap-2 group">
-          <span
-            className={`font-bold ${getStockColor(
-              stockDrafts[product.id] ?? product.stock,
-              product.status
-            )}`}
-          >
-            {stockDrafts[product.id] ?? product.stock}
-          </span>
-          <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              onClick={() => adjustStock(product.id, 1)}
-              className="leading-none text-xs text-gray-500 hover:text-black"
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              onClick={() => adjustStock(product.id, -1)}
-              disabled={(stockDrafts[product.id] ?? product.stock) <= 0}
-              className="leading-none text-xs text-gray-500 hover:text-black disabled:opacity-40"
-            >
-              ▼
-            </button>
-          </div>
-        </div>
+        <span
+          className={`font-bold ${getStockColor(product.stock, product.status)}`}
+        >
+          {product.stock}
+        </span>
       ),
     },
     {
@@ -527,21 +547,6 @@ function InventoryContent() {
           <span className="size-1.5 rounded-full bg-current mr-1.5" />
           {product.status}
         </Badge>
-      ),
-    },
-    {
-      key: 'actions',
-      header: '작업',
-      align: 'right' as const,
-      render: (product: InventoryItem) => (
-        <div className="flex items-center justify-end gap-2">
-          <IconButton
-            icon="edit"
-            size="sm"
-            onClick={() => setEditingProduct(product)}
-            title="Edit"
-          />
-        </div>
       ),
     },
   ];
@@ -560,16 +565,6 @@ function InventoryContent() {
               className="min-w-[150px]"
             />
             {isOverview ? (
-            <>
-              <Button
-                variant="ghost"
-                icon="save"
-                onClick={handleSaveInventory}
-                disabled={!hasChanges}
-                loading={saving}
-              >
-                {saving ? '저장 중...' : '재고 저장'}
-              </Button>
               <Button
                 variant="primary"
                 icon="add"
@@ -577,7 +572,6 @@ function InventoryContent() {
               >
                 상품 추가
               </Button>
-            </>
             ) : null}
           </>
         }
@@ -627,13 +621,10 @@ function InventoryContent() {
                 <Select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  options={[
-                    { value: '전체 카테고리', label: '전체 카테고리' },
-                    { value: 'Hair Care', label: '헤어 케어' },
-                    { value: 'Coloring', label: '염색' },
-                    { value: 'Styling', label: '스타일링' },
-                    { value: 'Treatment', label: '트리트먼트' },
-                  ]}
+                  options={productCategoryOptions.map((opt) => ({
+                    value: opt,
+                    label: opt,
+                  }))}
                 />
                 <Select
                   value={status}
@@ -2779,12 +2770,41 @@ type PurchaseItemPickerModalProps = {
 // Comment: Product picker modal for purchases (제품 추가)
 function PurchaseItemPickerModal({ shopId, onClose, onConfirm }: PurchaseItemPickerModalProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([
+    { value: '전체 카테고리', label: '전체 카테고리' },
+  ]);
   const [draft, setDraft] = useState<
     Record<number, { unitPrice: number; quantity: number }>
   >({});
   const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('전체 카테고리');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const filteredItems =
+    !category || category === '전체 카테고리'
+      ? items
+      : items.filter((item) => item.category === category);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch(buildInventoryUrl('/api/inventory-product-categories', shopId));
+        const data = await res.json();
+        const list: { id: number; name: string }[] = Array.isArray(data.categories)
+          ? data.categories
+          : [];
+        setCategoryOptions([
+          { value: '전체 카테고리', label: '전체 카테고리' },
+          ...list.map((row) => ({ value: row.name, label: row.name })),
+        ]);
+      } catch {
+        setCategoryOptions([{ value: '전체 카테고리', label: '전체 카테고리' }]);
+      }
+    };
+
+    fetchCategories();
+  }, [shopId]);
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -2820,7 +2840,7 @@ function PurchaseItemPickerModal({ shopId, onClose, onConfirm }: PurchaseItemPic
   }, [search, shopId]);
 
   const handleConfirm = () => {
-    const selected = items
+    const selected = filteredItems
       .map((item) => {
         const row = draft[item.id] ?? { unitPrice: Number(item.price ?? 0), quantity: 0 };
         return {
@@ -2859,14 +2879,20 @@ function PurchaseItemPickerModal({ shopId, onClose, onConfirm }: PurchaseItemPic
     >
       {error && <FormAlert message={error} variant="error" className="mb-4" />}
       <div className="space-y-3 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="제품 코드 / 이름 / 바코드"
               className="min-w-[240px]"
+            />
+            <Select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              options={categoryOptions}
+              className="min-w-[140px]"
             />
           </div>
         </div>
@@ -2892,7 +2918,7 @@ function PurchaseItemPickerModal({ shopId, onClose, onConfirm }: PurchaseItemPic
                   </tr>
                 )}
                 {!loading &&
-                  items.map((item) => {
+                  filteredItems.map((item) => {
                     const row = draft[item.id] ?? {
                       unitPrice: Number(item.price ?? 0),
                       quantity: 0,
@@ -2944,7 +2970,7 @@ function PurchaseItemPickerModal({ shopId, onClose, onConfirm }: PurchaseItemPic
                       </tr>
                     );
                   })}
-                {!loading && items.length === 0 && (
+                {!loading && filteredItems.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-5.5 py-7.5 text-center text-gray-500">
                       등록된 재고가 없습니다.

@@ -72,7 +72,7 @@ export async function insertSalesDeletionLog(
 export async function archiveSaleDeletion(
   supabase: { from: (table: string) => any },
   saleId: number,
-): Promise<{ bookingId: number | null; depositPaid: number }> {
+): Promise<{ bookingId: number | null; depositPaid: number; sale: SaleRow }> {
   const { data: sale, error } = await supabase
     .from('sales')
     .select(
@@ -113,5 +113,9 @@ export async function archiveSaleDeletion(
     bookingDesignerName,
   );
 
-  return { bookingId, depositPaid: normalizeBookingDepositPaid(depositPaid) };
+  return {
+    bookingId,
+    depositPaid: normalizeBookingDepositPaid(depositPaid),
+    sale: sale as SaleRow,
+  };
 }
