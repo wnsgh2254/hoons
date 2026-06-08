@@ -7,7 +7,7 @@ import { smsServiceLabelEn } from '@/lib/public-booking-labels';
 import { supabase } from '@/lib/supabase';
 import { sendBookingConfirmation } from '@/lib/twilio';
 
-// Comment: Load booking and send confirmation SMS via Mobile Message (in-app; no Edge invoke).
+// Comment: Local / dev fallback — send confirmation SMS from Next.js via Mobile Message (.env.local).
 export async function sendBookingConfirmationSmsForBooking(bookingId: number): Promise<{
   ok: boolean;
   skipped?: boolean;
@@ -76,17 +76,28 @@ export async function sendBookingConfirmationSmsForBooking(bookingId: number): P
   return { ok: true, messageSid: result.messageSid };
 }
 
-/** @deprecated Name kept for call sites — sends via Mobile Message in Next.js, not Supabase Edge. */
+/** Invoke Supabase Edge `booking-confirmation-sms` (Mobile Message secrets live on Supabase). */
 export async function invokeBookingConfirmationEdge(bookingId: number) {
-  const result = await sendBookingConfirmationSmsForBooking(bookingId);
-  if (!result.ok && !result.skipped) {
-    throw new Error(result.error || 'booking-confirmation-sms failed');
+  const projectUrl = process.env.SUPABASE_URL?.trim() || 'https://akzipcsakzuqpknkrjnb.supabase.co';
+  const anonKey = process.env.SUPABASE_ANON_KEY?.trim();
+
+  if (!anonKey) {
+    throw new Error('Missing SUPABASE_ANON_KEY for Edge Function invoke.');
   }
-  return JSON.stringify({
-    ok: true,
-    booking_id: bookingId,
-    skipped: result.skipped ?? false,
-    reason: result.reason ?? null,
-    message_sid: result.messageSid ?? null,
+
+  const res = await fetch(`${projectUrl}/functions/v1/booking-confirmation-sms`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${anonKey}`,
+    },
+    body: JSON.stringify({ booking_id: bookingId }),
   });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`booking-confirmation-sms failed (${res.status}): ${text}`);
+  }
+
+  return text;
 }
