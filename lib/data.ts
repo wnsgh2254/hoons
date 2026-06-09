@@ -462,7 +462,8 @@ export async function deleteDesigner(id: number) {
     throw new Error(linkedSalesItemsError.message);
   }
 
-  const idsNeedingManager = (linkedSalesItems || [])
+  type LinkedSalesItemRow = { id: number; manager: string | null };
+  const idsNeedingManager = ((linkedSalesItems || []) as LinkedSalesItemRow[])
     .filter((item) => !String(item.manager || '').trim())
     .map((item) => item.id);
 
