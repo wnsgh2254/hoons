@@ -444,10 +444,54 @@ export async function updateDesigner(
   return data;
 }
 
-// Comment: Delete designer/staff — DB FK ON DELETE SET NULL clears bookings.designer_id (see migration).
+// Comment: Delete designer/staff — detach historical rows first; sales_items.manager keeps the name.
 export async function deleteDesigner(id: number) {
   if (!id || Number.isNaN(id)) {
     throw new Error('유효하지 않은 ID입니다.');
+  }
+
+  const designer = await getDesignerById(id);
+  const displayName = String(designer?.name || '').trim();
+
+  const { data: linkedSalesItems, error: linkedSalesItemsError } = await supabase
+    .from('sales_items')
+    .select('id, manager')
+    .eq('designer_id', id);
+
+  if (linkedSalesItemsError) {
+    throw new Error(linkedSalesItemsError.message);
+  }
+
+  const idsNeedingManager = (linkedSalesItems || [])
+    .filter((item) => !String(item.manager || '').trim())
+    .map((item) => item.id);
+
+  if (displayName && idsNeedingManager.length > 0) {
+    const { error: backfillError } = await supabase
+      .from('sales_items')
+      .update({ manager: displayName })
+      .in('id', idsNeedingManager);
+
+    if (backfillError) {
+      throw new Error(backfillError.message);
+    }
+  }
+
+  const detachTargets = [
+    { table: 'sales_items', label: '판매 내역' },
+    { table: 'bookings', label: '예약' },
+    { table: 'payments', label: '결제' },
+  ] as const;
+
+  for (const { table, label } of detachTargets) {
+    const { error: detachError } = await supabase
+      .from(table)
+      .update({ designer_id: null })
+      .eq('designer_id', id);
+
+    if (detachError) {
+      throw new Error(`${label} 연결 해제 실패: ${detachError.message}`);
+    }
   }
 
   const { error } = await supabase.from('designers').delete().eq('id', id);
