@@ -1,11 +1,27 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// Server-side Supabase client configuration (no NEXT_PUBLIC_ prefix)
+/**
+ * Server-only DB client.
+ * Uses SUPABASE_SERVICE_ROLE_KEY (bypasses RLS). Never expose service role to the browser.
+ * With RLS enabled and no anon policies, direct Supabase REST access is blocked for the public.
+ */
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '';
+const anonKey = process.env.SUPABASE_ANON_KEY || '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase environment variables (SUPABASE_URL / SUPABASE_ANON_KEY) are not set');
+const isServer = typeof window === 'undefined';
+const activeKey = isServer ? serviceRoleKey || anonKey : anonKey;
+
+if (!supabaseUrl || !activeKey) {
+  console.warn(
+    'Supabase env missing (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY)',
+  );
+}
+
+if (isServer && !serviceRoleKey) {
+  console.warn(
+    'SUPABASE_SERVICE_ROLE_KEY is not set. Set it before applying RLS lock migration.',
+  );
 }
 
 const FETCH_RETRIES = 3;
@@ -29,7 +45,6 @@ function isRetryableSupabaseNetworkError(err: unknown): boolean {
   );
 }
 
-/** Comment: Undici often times out at ~10s on cold or flaky links; brief retries avoid 500s on transient failures. */
 async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   let last: unknown;
   for (let attempt = 0; attempt < FETCH_RETRIES; attempt++) {
@@ -46,9 +61,8 @@ async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Pro
   throw last;
 }
 
-// Create a minimal mock supabase client if env vars are not set
-const createMockClient = () => {
-  return {
+const createMockClient = (): SupabaseClient =>
+  ({
     from: () => ({
       select: () => ({
         eq: () => Promise.resolve({ data: [], error: null }),
@@ -60,12 +74,12 @@ const createMockClient = () => {
         }),
       }),
     }),
-  } as any;
-};
+  }) as unknown as SupabaseClient;
 
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      global: { fetch: fetchWithRetry },
-    })
-  : createMockClient();
-
+export const supabase: SupabaseClient =
+  supabaseUrl && activeKey
+    ? createClient(supabaseUrl, activeKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { fetch: fetchWithRetry },
+      })
+    : createMockClient();

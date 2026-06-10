@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Script from 'next/script';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { sortDesignersForHomeDisplay } from '@/lib/designer-display-order';
 
 // Comment: Mock data for shops
 const SHOPS = [
@@ -80,23 +81,7 @@ const Home = () => {
           })
         );
 
-        const roleRank = (role: string | null | undefined) => {
-          const r = (role || '').toUpperCase();
-          if (r.includes('DIRECTOR')) return 0;
-          if (r.includes('MANAGER')) return 1;
-          if (r.includes('DESIGNER')) return 2;
-          return 3;
-        };
-
-        // Comment: Ensure designers are ordered by role then name
-        const orderedDesigners = apiDesigners.slice().sort((a, b) => {
-          const ra = roleRank(a.role);
-          const rb = roleRank(b.role);
-          if (ra !== rb) return ra - rb;
-          return (a.name || '').localeCompare(b.name || '');
-        });
-
-        setDesigners(orderedDesigners);
+        setDesigners(sortDesignersForHomeDisplay(apiDesigners));
         setDesignerShops(apiShops);
       } catch (error) {
         // Comment: Log error for debugging, but keep page rendering

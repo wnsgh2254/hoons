@@ -82,6 +82,66 @@ export function getSaleLineGrossAmount(item: {
   return roundToCents(unit * qty - discount);
 }
 
+export type SaleIssuedPrepaidCreditLine = {
+  passLabel: string;
+  points: number;
+};
+
+type SalePrepaidItemRow = {
+  item_type?: string | null;
+  item_name?: string | null;
+  quantity?: number | null;
+  amount?: number | null;
+  unit_price?: number | null;
+  discount?: number | null;
+  prepaid_credit_points?: number | null;
+};
+
+/** Infer credit issued for legacy rows without prepaid_credit_points. */
+export function inferPrepaidCreditPointsFromSaleItem(item: SalePrepaidItemRow): number {
+  const stored = Math.round(Number(item.prepaid_credit_points || 0));
+  if (stored > 0) return stored;
+
+  const fromName = String(item.item_name || '').match(/^(\d+(?:\.\d+)?)/);
+  if (fromName) {
+    const parsed = Math.round(Number(fromName[1]));
+    if (parsed > 0) return parsed;
+  }
+
+  return Math.round(getSaleLineGrossAmount(item));
+}
+
+/** Prepaid pass purchases on a sale (item_type = prepaid). */
+export function getSaleIssuedPrepaidCreditLines(
+  items: SalePrepaidItemRow[] | null | undefined,
+): SaleIssuedPrepaidCreditLine[] {
+  const lines: SaleIssuedPrepaidCreditLine[] = [];
+
+  for (const item of items || []) {
+    if (String(item.item_type || '') !== 'prepaid') continue;
+
+    const qty = Math.max(1, Math.round(Number(item.quantity || 1)));
+    const perCredit = inferPrepaidCreditPointsFromSaleItem(item);
+    const totalCredit = perCredit * qty;
+    if (totalCredit <= 0) continue;
+
+    lines.push({
+      passLabel: String(item.item_name || 'Prepaid').trim(),
+      points: totalCredit,
+    });
+  }
+
+  return lines;
+}
+
+export function getSaleIssuedPrepaidCreditTotal(
+  items: SalePrepaidItemRow[] | null | undefined,
+): number {
+  return roundToCents(
+    getSaleIssuedPrepaidCreditLines(items).reduce((sum, line) => sum + line.points, 0),
+  );
+}
+
 export function buildSaleHistoryPayments(
   sale: {
     cash_amount?: number | null;

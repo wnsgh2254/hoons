@@ -276,6 +276,10 @@ export async function POST(request: NextRequest) {
       sales_classification: item.sales_classification || null,
       point_deduction: item.point_deduction || 0,
       prepaid_deduction: item.prepaid_deduction || 0,
+      prepaid_credit_points:
+        item.type === 'prepaid'
+          ? Math.round(Number(item.prepaid_credit_points ?? item.prepaid_points ?? 0))
+          : 0,
     }));
 
     const { error: itemsError } = await supabase

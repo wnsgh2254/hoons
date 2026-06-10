@@ -6,7 +6,10 @@ import {
   assertSufficientPrepaidBalance,
 } from '@/lib/sales-reconciliation';
 import { archiveSaleDeletion } from '@/lib/sale-deletion-log';
-import { getSalePrepaidDeductionTotal } from '@/lib/sales-payment-utils';
+import {
+  getSaleIssuedPrepaidCreditLines,
+  getSalePrepaidDeductionTotal,
+} from '@/lib/sales-payment-utils';
 import { restoreBookingAfterSaleDelete } from '@/lib/sale-booking-link';
 import { resolveBookingDepositPaidForSale } from '@/lib/booking-deposit-paid';
 import {
@@ -117,12 +120,25 @@ export async function DELETE(
       const archived = await archiveSaleDeletion(supabase, saleId);
       linkedBookingId = archived.bookingId;
 
+      const customerId = archived.sale.customer_id != null ? Number(archived.sale.customer_id) : null;
+
       const prepaidToRestore = getSalePrepaidDeductionTotal(archived.sale.sales_items || []);
-      if (prepaidToRestore > 0 && archived.sale.customer_id != null) {
+      if (prepaidToRestore > 0 && customerId != null) {
         await adjustPrepaidBalance(supabase, {
-          customerId: Number(archived.sale.customer_id),
+          customerId,
           pointsDelta: prepaidToRestore,
         });
+      }
+
+      const issuedPrepaidLines = getSaleIssuedPrepaidCreditLines(archived.sale.sales_items || []);
+      if (issuedPrepaidLines.length > 0 && customerId != null) {
+        for (const line of issuedPrepaidLines) {
+          await adjustPrepaidBalance(supabase, {
+            customerId,
+            passLabel: line.passLabel,
+            pointsDelta: -line.points,
+          });
+        }
       }
     } catch (archiveError: any) {
       console.error('Error archiving sale before delete:', archiveError);
@@ -383,6 +399,10 @@ export async function PUT(
       sales_classification: item.sales_classification || null,
       point_deduction: item.point_deduction || 0,
       prepaid_deduction: item.prepaid_deduction || 0,
+      prepaid_credit_points:
+        item.type === 'prepaid'
+          ? Math.round(Number(item.prepaid_credit_points ?? item.prepaid_points ?? 0))
+          : 0,
     }));
 
     const { error: insertItemsError } = await supabase

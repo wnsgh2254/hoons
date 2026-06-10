@@ -4018,7 +4018,7 @@ export default function AppointmentsManagementPage() {
           if (viewingCustomer) {
             setSalesLinkedBookingId(null);
             setSalesLinkedDepositPaid(0);
-            setSalesDefaultDate(selectedDate);
+            setSalesDefaultDate(getSydneyToday());
             setSalesDefaultTime(null);
             setSalesDefaultManager(null);
             setSalesRegistrationCustomer({
