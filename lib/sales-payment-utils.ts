@@ -87,7 +87,7 @@ export type SaleIssuedPrepaidCreditLine = {
   points: number;
 };
 
-type SalePrepaidItemRow = {
+export type SalePrepaidItemRow = {
   item_type?: string | null;
   item_name?: string | null;
   quantity?: number | null;

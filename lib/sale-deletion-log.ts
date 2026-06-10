@@ -1,7 +1,10 @@
 import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import { resolvePaidDepositFromSaleRecord } from '@/lib/sale-paid-deposit';
 import { resolveBookingIdForSale } from '@/lib/sale-booking-link';
-import { getSalePrepaidDeductionTotal } from '@/lib/sales-payment-utils';
+import {
+  getSalePrepaidDeductionTotal,
+  type SalePrepaidItemRow,
+} from '@/lib/sales-payment-utils';
 
 type SaleRow = {
   id: number;
@@ -17,11 +20,13 @@ type SaleRow = {
   bank_transfer_amount?: number | null;
   prepaid_amount?: number | null;
   payment_method?: string | null;
-  sales_items?: Array<{
-    manager?: string | null;
-    designer_id?: number | null;
-    prepaid_deduction?: number | null;
-  }>;
+  sales_items?: Array<
+    SalePrepaidItemRow & {
+      manager?: string | null;
+      designer_id?: number | null;
+      prepaid_deduction?: number | null;
+    }
+  >;
 };
 
 function pickDesignerName(
