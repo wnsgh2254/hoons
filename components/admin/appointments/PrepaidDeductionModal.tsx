@@ -175,6 +175,10 @@ export default function PrepaidDeductionModal({
   );
 
   const handleComplete = () => {
+    if (loading) {
+      alert('정액권 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
+      return;
+    }
     const amount = getNumericValue();
     if (amount <= 0) {
       alert('차감 금액을 입력해 주세요.');
@@ -340,7 +344,7 @@ export default function PrepaidDeductionModal({
             />
 
             <div className="grid grid-cols-2 gap-2 md:flex md:flex-col md:gap-2 md:w-32">
-              <Button size="lg" className="w-full" onClick={handleComplete}>확인</Button>
+              <Button size="lg" className="w-full" onClick={handleComplete} disabled={loading}>확인</Button>
               <Button variant="ghost" size="lg" className="w-full" onClick={onClose}>취소</Button>
             </div>
           </div>

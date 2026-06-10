@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import DiscountModal from './DiscountModal';
 import PaymentInputModal from './PaymentInputModal';
 import SalesClassificationModal from './SalesClassificationModal';
@@ -166,6 +166,7 @@ export default function SalesRegistrationModal({
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [draftRestoredMessage, setDraftRestoredMessage] = useState<string | null>(null);
   const wasOpenRef = useRef(false);
+  const prepaidBalanceRequestRef = useRef(0);
 
   const normalizeShopId = (value: number | string | null | undefined): number | null => {
     if (value == null || value === '') return null;
@@ -180,16 +181,87 @@ export default function SalesRegistrationModal({
     }
   }, [customer?.id, customer?.name]);
 
-  // 정액권 잔액 확인 헬퍼 함수
-  const validatePrepaidBalance = (newDeductionAmount: number): boolean => {
-    if (!prepaidCustomerId) return false;
-    const fallbackBalance =
-      prepaidCustomerId === customer?.id
-        ? Number(customer?.prepaid_balance ?? customer?.points ?? 0)
-        : 0;
-    const customerPrepaidBalance = Math.max(availablePrepaidBalance, fallbackBalance);
-    return newDeductionAmount <= customerPrepaidBalance;
+  const getEffectivePrepaidBalance = useCallback(
+    (liveBalance?: number): number => {
+      const fetched = liveBalance ?? availablePrepaidBalance;
+      const fallbackBalance =
+        prepaidCustomerId != null && prepaidCustomerId === customer?.id
+          ? Number(customer?.prepaid_balance ?? customer?.points ?? 0)
+          : 0;
+      return Math.max(0, Math.max(fetched, fallbackBalance));
+    },
+    [availablePrepaidBalance, prepaidCustomerId, customer?.id, customer?.prepaid_balance, customer?.points],
+  );
+
+  const resolvePrepaidBalanceFromApi = (data: {
+    totalPoints?: number;
+    usableMembers?: Array<{ points?: number | string | null }>;
+    member?: { points?: number | string | null } | null;
+  }): number => {
+    if (typeof data.totalPoints === 'number' && Number.isFinite(data.totalPoints)) {
+      return Math.max(0, data.totalPoints);
+    }
+    const source = Array.isArray(data.usableMembers)
+      ? data.usableMembers
+      : data.member
+        ? [data.member]
+        : [];
+    return source.reduce((sum, row) => sum + Number(row.points || 0), 0);
   };
+
+  const refreshAvailablePrepaidBalance = useCallback(
+    async (customerId: number | null): Promise<number> => {
+      if (!customerId) {
+        setAvailablePrepaidBalance(0);
+        return 0;
+      }
+
+      const requestId = ++prepaidBalanceRequestRef.current;
+      try {
+        const res = await fetch(`/api/prepaid?customer_id=${customerId}`);
+        const data = await res.json();
+        const total = res.ok ? resolvePrepaidBalanceFromApi(data) : 0;
+        if (requestId !== prepaidBalanceRequestRef.current) {
+          return getEffectivePrepaidBalance(total);
+        }
+        setAvailablePrepaidBalance(total);
+        return getEffectivePrepaidBalance(total);
+      } catch {
+        if (requestId !== prepaidBalanceRequestRef.current) {
+          return getEffectivePrepaidBalance();
+        }
+        setAvailablePrepaidBalance(0);
+        return getEffectivePrepaidBalance(0);
+      }
+    },
+    [getEffectivePrepaidBalance],
+  );
+
+  // Comment: Load prepaid balance when the sales modal opens — row clicks validate before the deduction modal opens.
+  useEffect(() => {
+    if (!isOpen) {
+      prepaidBalanceRequestRef.current += 1;
+      setAvailablePrepaidBalance(0);
+      return;
+    }
+    if (prepaidCustomerId) {
+      void refreshAvailablePrepaidBalance(prepaidCustomerId);
+    }
+  }, [isOpen, prepaidCustomerId, refreshAvailablePrepaidBalance]);
+
+  const ensurePrepaidBalanceCovers = useCallback(
+    async (deductionAmount: number): Promise<boolean> => {
+      if (deductionAmount <= 0) return true;
+      if (!prepaidCustomerId) return false;
+
+      let balance = getEffectivePrepaidBalance();
+      if (balance < deductionAmount) {
+        balance = await refreshAvailablePrepaidBalance(prepaidCustomerId);
+      }
+      return deductionAmount <= balance;
+    },
+    [prepaidCustomerId, getEffectivePrepaidBalance, refreshAvailablePrepaidBalance],
+  );
 
   // 받을 금액 계산 헬퍼 함수 (gross total before deposit)
   const calculateAmountToReceive = (grossTotal: number, prepaidDeduction: number): number => {
@@ -205,8 +277,14 @@ export default function SalesRegistrationModal({
     return { ...item, amount: Math.max(0, roundToCents(raw)) };
   };
 
+  // Comment: Prepaid purchases (정액권 판매) must never receive prepaid balance deductions.
+  const maxPrepaidDeductibleForItem = (item: SalesItem): number => {
+    if (item.type === 'prepaid') return 0;
+    return Math.max(0, roundToCents(item.unitPrice * item.quantity - item.discount));
+  };
+
   // Apply prepaid deduction once against the total (not multiplied by item count).
-  // If targetItemId is provided, apply only to that row. Otherwise distribute across all rows.
+  // If targetItemId is provided, apply only to that row. Otherwise distribute across service/product rows.
   const applyTotalPrepaidDeduction = (
     items: SalesItem[],
     requestedTotalDeduction: number,
@@ -222,16 +300,18 @@ export default function SalesRegistrationModal({
     if (targetItemId) {
       return base.map((item) => {
         if (item.id !== targetItemId) return normalizeItemAmount(item);
-        const maxForItem = Math.max(0, (item.unitPrice * item.quantity) - item.discount);
-        const applied = Math.min(normalizedRequested, maxForItem);
+        const applied = Math.min(normalizedRequested, maxPrepaidDeductibleForItem(item));
         return normalizeItemAmount({ ...item, prepaidDeduction: applied });
       });
     }
 
-    // Global: distribute deduction from top to bottom, capped by each item's payable amount
+    // Global: distribute from top to bottom across service/product only
     let remaining = normalizedRequested;
     const distributed = base.map((item) => {
-      const maxForItem = Math.max(0, (item.unitPrice * item.quantity) - item.discount);
+      const maxForItem = maxPrepaidDeductibleForItem(item);
+      if (maxForItem <= 0) {
+        return normalizeItemAmount({ ...item, prepaidDeduction: 0 });
+      }
       const applied = Math.min(remaining, maxForItem);
       remaining -= applied;
       return normalizeItemAmount({ ...item, prepaidDeduction: applied });
@@ -240,10 +320,10 @@ export default function SalesRegistrationModal({
   };
 
   // Toggle full-line prepaid deduction for one service/product row (prepaid purchase rows excluded).
-  const toggleItemPrepaidDeduction = (item: SalesItem) => {
+  const toggleItemPrepaidDeduction = async (item: SalesItem) => {
     if (item.type === 'prepaid') return;
 
-    const maxForItem = Math.max(0, roundToCents(item.unitPrice * item.quantity - item.discount));
+    const maxForItem = maxPrepaidDeductibleForItem(item);
     const nextDeduction = item.prepaidDeduction > 0 ? 0 : maxForItem;
 
     if (maxForItem <= 0 && nextDeduction <= 0) return;
@@ -253,7 +333,8 @@ export default function SalesRegistrationModal({
         (sum, row) => (row.id === item.id ? sum : sum + row.prepaidDeduction),
         0,
       );
-      if (!validatePrepaidBalance(otherTotal + nextDeduction)) {
+      const hasBalance = await ensurePrepaidBalanceCovers(otherTotal + nextDeduction);
+      if (!hasBalance) {
         showPrepaidBalanceError();
         return;
       }
@@ -648,7 +729,7 @@ export default function SalesRegistrationModal({
       (sum, item) => sum + item.prepaidDeduction,
       0,
     );
-    if (totalPrepaidDeduction > 0 && !validatePrepaidBalance(totalPrepaidDeduction)) {
+    if (totalPrepaidDeduction > 0 && !(await ensurePrepaidBalanceCovers(totalPrepaidDeduction))) {
       showPrepaidBalanceError();
       return;
     }
@@ -1044,7 +1125,7 @@ export default function SalesRegistrationModal({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleItemPrepaidDeduction(item);
+                                void toggleItemPrepaidDeduction(item);
                               }}
                               className={`min-w-[4.5rem] text-left px-1 py-0.5 rounded transition-colors ${
                                 item.prepaidDeduction > 0
@@ -1488,7 +1569,7 @@ export default function SalesRegistrationModal({
         onPrepaidCustomerChange={(owner) => {
           setPrepaidCustomerId(owner.id);
           setPrepaidCustomerName(owner.name);
-          setAvailablePrepaidBalance(0);
+          void refreshAvailablePrepaidBalance(owner.id);
         }}
         initialAmount={amountToReceive}
         selectedItemId={null}
@@ -1496,10 +1577,10 @@ export default function SalesRegistrationModal({
         onClose={() => {
           setIsGlobalPrepaidDeductionModalOpen(false);
         }}
-        onComplete={(amount) => {
+        onComplete={async (amount) => {
           if (!customer) return;
 
-          if (!validatePrepaidBalance(amount)) {
+          if (!(await ensurePrepaidBalanceCovers(amount))) {
             showPrepaidBalanceError();
             return;
           }
