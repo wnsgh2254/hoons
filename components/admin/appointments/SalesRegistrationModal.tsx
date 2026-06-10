@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import DiscountModal from './DiscountModal';
 import PaymentInputModal from './PaymentInputModal';
 import SalesClassificationModal from './SalesClassificationModal';
@@ -165,6 +165,13 @@ export default function SalesRegistrationModal({
   const [isSaving, setIsSaving] = useState(false);
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [draftRestoredMessage, setDraftRestoredMessage] = useState<string | null>(null);
+  const wasOpenRef = useRef(false);
+
+  const normalizeShopId = (value: number | string | null | undefined): number | null => {
+    if (value == null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
 
   useEffect(() => {
     if (customer?.id) {
@@ -230,6 +237,35 @@ export default function SalesRegistrationModal({
       return normalizeItemAmount({ ...item, prepaidDeduction: applied });
     });
     return distributed;
+  };
+
+  // Toggle full-line prepaid deduction for one service/product row (prepaid purchase rows excluded).
+  const toggleItemPrepaidDeduction = (item: SalesItem) => {
+    if (item.type === 'prepaid') return;
+
+    const maxForItem = Math.max(0, roundToCents(item.unitPrice * item.quantity - item.discount));
+    const nextDeduction = item.prepaidDeduction > 0 ? 0 : maxForItem;
+
+    if (maxForItem <= 0 && nextDeduction <= 0) return;
+
+    if (nextDeduction > 0) {
+      const otherTotal = salesItems.reduce(
+        (sum, row) => (row.id === item.id ? sum : sum + row.prepaidDeduction),
+        0,
+      );
+      if (!validatePrepaidBalance(otherTotal + nextDeduction)) {
+        showPrepaidBalanceError();
+        return;
+      }
+    }
+
+    const updatedItems = salesItems.map((row) => {
+      if (row.id !== item.id) return normalizeItemAmount(row);
+      return normalizeItemAmount({ ...row, prepaidDeduction: nextDeduction });
+    });
+    updatePrepaidDeductionState(updatedItems);
+    const newTotal = updatedItems.reduce((sum, row) => sum + row.prepaidDeduction, 0);
+    setSelectedDeduction(newTotal > 0 ? 'prepaid' : null);
   };
 
   // 정액권 차감 적용 후 상태 업데이트 헬퍼 함수
@@ -341,9 +377,13 @@ export default function SalesRegistrationModal({
     fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
   }, [isOpen]);
 
+  // Comment: Sync shop from parent only when the modal opens — avoid overwriting user selection mid-flow.
   useEffect(() => {
-    setSelectedShopId(shopId || null);
-  }, [shopId]);
+    if (isOpen && !wasOpenRef.current) {
+      setSelectedShopId(normalizeShopId(shopId));
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen, shopId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -598,6 +638,12 @@ export default function SalesRegistrationModal({
       return;
     }
 
+    const shopIdToSave = normalizeShopId(selectedShopId);
+    if (!shopIdToSave) {
+      alert('지점을 선택해 주세요.');
+      return;
+    }
+
     const totalPrepaidDeduction = salesItems.reduce(
       (sum, item) => sum + item.prepaidDeduction,
       0,
@@ -626,7 +672,7 @@ export default function SalesRegistrationModal({
         },
         body: JSON.stringify({
           customer_id: customer.id,
-          shop_id: selectedShopId || null,
+          shop_id: shopIdToSave,
           booking_id: bookingId ?? undefined,
           items: salesItems.map(item => ({
             type: item.type,
@@ -762,7 +808,7 @@ export default function SalesRegistrationModal({
     setCashTendered(null);
     setPrepaidDeductionAmount(0);
     setActiveTab('service');
-    setSelectedShopId(shopId || null);
+    setSelectedShopId(normalizeShopId(shopId));
   };
 
   const handleClearDraft = () => {
@@ -886,6 +932,7 @@ export default function SalesRegistrationModal({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">수량</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">할인</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">금액</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">정액권 차감</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">담당자</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">영업 구분</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">삭제</th>
@@ -894,7 +941,7 @@ export default function SalesRegistrationModal({
                 <tbody>
                   {salesItems.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-7.5 text-center text-sm text-gray-500">
+                      <td colSpan={9} className="py-7.5 text-center text-sm text-gray-500">
                         내역이 없습니다
                       </td>
                     </tr>
@@ -989,7 +1036,29 @@ export default function SalesRegistrationModal({
                             : ''}
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-900">{formatAudAmount(item.amount)}</td>
-                        <td 
+                        <td className="py-3 px-4 text-sm text-gray-900">
+                          {item.type === 'prepaid' ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleItemPrepaidDeduction(item);
+                              }}
+                              className={`min-w-[4.5rem] text-left px-1 py-0.5 rounded transition-colors ${
+                                item.prepaidDeduction > 0
+                                  ? 'text-emerald-700 font-medium hover:bg-emerald-50'
+                                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                              }`}
+                            >
+                              {item.prepaidDeduction > 0
+                                ? formatAudAmount(item.prepaidDeduction)
+                                : '-'}
+                            </button>
+                          )}
+                        </td>
+                        <td
                           className="py-3 px-4 text-sm text-gray-900 cursor-pointer hover:bg-gray-50 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1029,7 +1098,7 @@ export default function SalesRegistrationModal({
               </table>
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              ※ 위의 각 항목 셀을 클릭하여 수정할 수 있습니다.
+              ※ 각 항목 셀을 클릭해 수정할 수 있습니다. 서비스·제품의 「정액권 차감」을 클릭하면 해당 금액만큼 정액권으로 결제 처리됩니다.
             </p>
           </div>
 
@@ -1260,9 +1329,13 @@ export default function SalesRegistrationModal({
               {shops.length > 0 && (
                 <Select
                   label="지점"
-                  options={shops.map((s: any) => ({ value: s.id, label: s.name }))}
-                  value={selectedShopId ?? ''}
-                  onChange={(e) => setSelectedShopId(Number(e.target.value))}
+                  placeholder="지점 선택"
+                  options={shops.map((s: any) => ({
+                    value: String(s.id),
+                    label: s.name,
+                  }))}
+                  value={selectedShopId != null ? String(selectedShopId) : ''}
+                  onChange={(e) => setSelectedShopId(normalizeShopId(e.target.value))}
                 />
               )}
             </div>

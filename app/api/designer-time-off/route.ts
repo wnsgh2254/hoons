@@ -130,16 +130,16 @@ export async function POST(request: NextRequest) {
         .eq('designer_id', row.designer_id)
         .eq('start_date', row.start_date)
         .eq('end_date', row.end_date)
-        .eq('reason', row.reason)
-        .limit(1)
-        .maybeSingle();
+        .eq('reason', row.reason);
 
       duplicateQuery =
         row.shop_id == null
           ? duplicateQuery.is('shop_id', null)
           : duplicateQuery.eq('shop_id', row.shop_id);
 
-      const { data: existingSame, error: existingErr } = await duplicateQuery;
+      const { data: existingSame, error: existingErr } = await duplicateQuery
+        .limit(1)
+        .maybeSingle();
       if (existingErr) {
         console.error('Error checking duplicate time off:', existingErr);
         return NextResponse.json(

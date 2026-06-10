@@ -294,7 +294,10 @@ export default function SalesItemPickerModal({
   );
 
   const handleConfirm = () => {
-    const serviceAndProductItems = cartDisplayItems;
+    const serviceAndProductItems = cartDisplayItems.map((item) => ({
+      ...item,
+      manager: selectedManager,
+    }));
 
     if (activeTab === 'prepaid' && selectedPrepaid && customPrice !== '') {
       if (accumulatedAmount === '') {
@@ -315,13 +318,12 @@ export default function SalesItemPickerModal({
         prepaid_credit_points: credit,
         prepaid_expires_at: buildPrepaidExpiresAtIso(isUnlimited, validityPeriod, validityUnit),
       };
-      onSelect(prepaidItem);
+      const allItems: PickerSelectedItem[] = [...serviceAndProductItems, prepaidItem];
+      onSelect(allItems.length === 1 ? allItems[0] : allItems);
     } else if (serviceAndProductItems.length > 0) {
-      const itemsWithManager = serviceAndProductItems.map((item) => ({
-        ...item,
-        manager: selectedManager,
-      }));
-      onSelect(itemsWithManager);
+      onSelect(
+        serviceAndProductItems.length === 1 ? serviceAndProductItems[0] : serviceAndProductItems,
+      );
     } else {
       onClose();
     }
