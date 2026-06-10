@@ -13,6 +13,23 @@ type PurchaseDetailItemRow = {
   line_amount: number | string | null;
 };
 
+type PurchaseDetailHeaderRow = {
+  type: 'purchase' | 'return';
+  purchase_date: string;
+  memo: string | null;
+  total_amount: number | string | null;
+  created_at: string;
+  suppliers?: { name?: string | null } | { name?: string | null }[] | null;
+};
+
+function supplierNameFromJoin(
+  suppliers: PurchaseDetailHeaderRow['suppliers'],
+): string | null {
+  if (!suppliers) return null;
+  if (Array.isArray(suppliers)) return suppliers[0]?.name ?? null;
+  return suppliers.name ?? null;
+}
+
 // Comment: Load single purchase header + items
 export async function GET(
   request: NextRequest,
@@ -59,6 +76,8 @@ export async function GET(
       );
     }
 
+    const purchaseHeader = header as PurchaseDetailHeaderRow;
+
     const mappedItems =
       (items as PurchaseDetailItemRow[] | null)?.map((row) => ({
         id: row.id,
@@ -72,12 +91,12 @@ export async function GET(
     return NextResponse.json(
       {
         header: {
-          type: header.type,
-          supplier_name: header.suppliers?.name ?? null,
-          purchase_date: header.purchase_date,
-          created_at: header.created_at,
-          memo: header.memo ?? null,
-          total_amount: Number(header.total_amount ?? 0),
+          type: purchaseHeader.type,
+          supplier_name: supplierNameFromJoin(purchaseHeader.suppliers),
+          purchase_date: purchaseHeader.purchase_date,
+          created_at: purchaseHeader.created_at,
+          memo: purchaseHeader.memo ?? null,
+          total_amount: Number(purchaseHeader.total_amount ?? 0),
         },
         items: mappedItems,
       },
