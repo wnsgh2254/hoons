@@ -1005,9 +1005,9 @@ export default function SalesRegistrationModal({
       </div>
           {/* Sales Item Selection Buttons */}
           <div className="mb-5.5">
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-700">판매 항목 선택</span>
-              <div className="flex gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <span className="text-sm font-medium text-gray-700 shrink-0">판매 항목 선택</span>
+              <div className="flex flex-wrap gap-2">
                 {(['service', 'product', 'prepaid'] as const).map((tab) => (
                   <button
                     key={tab}
@@ -1033,7 +1033,7 @@ export default function SalesRegistrationModal({
 
           {/* Sales Item Table */}
           <div className="mb-5.5" onClick={() => setEditingQuantityItemId(null)}>
-            <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+            <div className="border border-gray-200 rounded-lg overflow-x-auto bg-white">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -1213,9 +1213,9 @@ export default function SalesRegistrationModal({
           </div>
 
           {/* Payment Section */}
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
             {/* Left: Payment Summary */}
-            <div className="space-y-3">
+            <div className="space-y-3 min-w-0">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-700">판매 금액</span>
                 <span className="text-sm font-medium text-gray-900">{formatAudAmount(salesAmount)}</span>
@@ -1356,11 +1356,11 @@ export default function SalesRegistrationModal({
             </div>
 
             {/* Middle: Deduction and Payment */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               {/* Deduction Options */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-2">차감</label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex">
                   {(['discount', 'prepaid'] as const).map((option) => (
                     <button
                       key={option}
@@ -1393,7 +1393,7 @@ export default function SalesRegistrationModal({
               {/* Payment Method */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-2">결제</label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {(['cash', 'card', 'bank_transfer'] as const).map((method) => (
                     <button
                       key={method}
@@ -1402,7 +1402,7 @@ export default function SalesRegistrationModal({
                         setPaymentMethod(method);
                         setIsPaymentInputModalOpen(true);
                       }}
-                      className={`flex-1 px-3 py-2 text-sm border rounded-lg transition-colors ${
+                      className={`min-w-0 px-2 py-2.5 text-xs sm:text-sm border rounded-lg transition-colors whitespace-nowrap ${
                         paymentMethod === method && paymentAmounts[method] !== 0
                           ? 'border-black bg-black text-white'
                           : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -1451,20 +1451,20 @@ export default function SalesRegistrationModal({
             </div>
 
             {/* Right: Memo and Action Buttons */}
-            <div className="flex flex-col justify-between">
+            <div className="flex flex-col gap-4 min-w-0">
               {/* Memo */}
-              <div className="mb-4">
+              <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-2">메모</label>
                 <textarea
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
-                  rows={4}
+                  rows={3}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent resize-none"
                   placeholder="메모를 입력하세요"
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 pt-2 border-t border-gray-100 lg:border-t-0 lg:pt-0">
                 {draftSavedMessage && (
                   <p className="text-xs text-emerald-600 text-center">{draftSavedMessage}</p>
                 )}
