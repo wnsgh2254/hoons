@@ -1806,10 +1806,16 @@ type InternalUsageRegisterModalProps = {
 // Comment: Modal for registering internal usage based on inventory items
 function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageRegisterModalProps) {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([
+    { value: '전체', label: '전체' },
+  ]);
   const [staffOptions, setStaffOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productSearch, setProductSearch] = useState('');
+  const [category, setCategory] = useState('전체');
+  const [includeRetail, setIncludeRetail] = useState(false);
   const [selectedRows, setSelectedRows] = useState<
     Array<{
       rowId: string;
@@ -1823,12 +1829,53 @@ function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageR
     }>
   >([]);
 
+  const filteredItems = items.filter((item) => {
+    if (productSearch.trim()) {
+      const q = productSearch.trim().toLowerCase();
+      const displayCode = String(item.sku ?? item.id).toLowerCase();
+      const matchesSearch =
+        (item.name?.toLowerCase().includes(q) ?? false) ||
+        displayCode.includes(q) ||
+        (item.sku?.toLowerCase().includes(q) ?? false);
+      if (!matchesSearch) return false;
+    }
+    if (category && category !== '전체' && item.category !== category) {
+      return false;
+    }
+    if (!includeRetail && item.for_retail === true && item.for_internal !== true) {
+      return false;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch(buildInventoryUrl('/api/inventory-product-categories', shopId));
+        const data = await res.json();
+        const list: { id: number; name: string }[] = Array.isArray(data.categories)
+          ? data.categories
+          : [];
+        setCategoryOptions([
+          { value: '전체', label: '전체' },
+          ...list.map((row) => ({ value: row.name, label: row.name })),
+        ]);
+      } catch {
+        setCategoryOptions([{ value: '전체', label: '전체' }]);
+      }
+    };
+
+    fetchCategories();
+  }, [shopId]);
+
   useEffect(() => {
     const fetchInventory = async () => {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(buildInventoryUrl('/api/inventory', shopId));
+        const params = new URLSearchParams();
+        if (productSearch.trim()) params.append('search', productSearch.trim());
+        const res = await fetch(buildInventoryUrl('/api/inventory', shopId, params));
         const data = await res.json();
         setItems(Array.isArray(data.items) ? data.items : []);
       } catch (e: any) {
@@ -1839,7 +1886,9 @@ function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageR
     };
 
     fetchInventory();
+  }, [shopId, productSearch]);
 
+  useEffect(() => {
     const fetchStaff = async () => {
       try {
         const res = await fetch(`/api/staff?shop_id=${shopId}`);
@@ -1965,7 +2014,9 @@ function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageR
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-700">분류</span>
           <Select
-            options={[{ value: '전체', label: '전체' }]}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            options={categoryOptions}
             className="min-w-[100px]"
           />
         </div>
@@ -1974,17 +2025,24 @@ function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageR
           <Input
             type="text"
             placeholder="제품코드 또는 제품명"
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
             className="min-w-[200px]"
           />
         </div>
         <label className="ml-4 inline-flex cursor-pointer items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" className="rounded-lg border border-gray-200" />
+          <input
+            type="checkbox"
+            checked={includeRetail}
+            onChange={(e) => setIncludeRetail(e.target.checked)}
+            className="rounded-lg border border-gray-200"
+          />
           판매용 제품 포함
         </label>
       </div>
       <DataTable
         columns={registerColumns}
-        data={items}
+        data={filteredItems}
         keyExtractor={(item) => item.id}
         loading={loading}
         emptyMessage="등록된 재고가 없습니다."

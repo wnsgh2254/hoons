@@ -10,7 +10,7 @@ interface ManagerPickerModalProps {
   isOpen: boolean;
   currentManager: string;
   onClose: () => void;
-  onConfirm: (manager: string) => void;
+  onConfirm: (selection: { manager: string; designerId: number | null }) => void;
 }
 
 export default function ManagerPickerModal({
@@ -30,7 +30,11 @@ export default function ManagerPickerModal({
   }, [isOpen, currentManager]);
 
   const handleConfirm = () => {
-    onConfirm(selectedManager);
+    const matched = staff.find((s) => s.name === selectedManager);
+    onConfirm({
+      manager: selectedManager,
+      designerId: matched?.id ?? null,
+    });
     onClose();
   };
 

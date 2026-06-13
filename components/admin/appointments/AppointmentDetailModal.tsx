@@ -11,6 +11,7 @@ interface AppointmentDetailModalProps {
   relatedBookings?: BookingWithRelations[];
   onClose: () => void;
   onEdit: (booking: any) => void;
+  onRegisterSale?: (booking: BookingWithRelations) => void;
   bookingTimeToLabel: (time: string) => string;
 }
 
@@ -19,6 +20,7 @@ export default function AppointmentDetailModal({
   relatedBookings,
   onClose,
   onEdit,
+  onRegisterSale,
   bookingTimeToLabel,
 }: AppointmentDetailModalProps) {
   if (!booking) return null;
@@ -112,6 +114,18 @@ export default function AppointmentDetailModal({
           >
             닫기
           </button>
+          {onRegisterSale && (
+            <button
+              type="button"
+              onClick={() => {
+                onRegisterSale(booking);
+                onClose();
+              }}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-black hover:bg-gray-800"
+            >
+              판매 등록
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -120,6 +134,7 @@ export default function AppointmentDetailModal({
                 onClose();
               }
             }}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 border border-gray-200 hover:bg-gray-50"
           >
             수정
           </button>

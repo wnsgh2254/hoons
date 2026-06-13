@@ -3652,6 +3652,7 @@ export default function AppointmentsManagementPage() {
             booking={viewingBookingDetail}
             relatedBookings={relatedBookingsForDetail}
             onClose={() => setViewingBookingDetail(null)}
+            onRegisterSale={(booking) => beginSalesRegistrationFromBooking(booking)}
             onEdit={(booking: BookingWithRelations) => {
               setIsNewBookingOpen(false);
               setRegisteredCustomer(null);

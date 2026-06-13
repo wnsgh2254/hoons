@@ -12,6 +12,17 @@ type InventoryRow = {
   stock?: number | string | null;
 };
 
+// Comment: Match product name, sku, or inventory id shown as fallback product code in UI.
+function buildInventorySearchFilter(search: string) {
+  const trimmed = search.trim();
+  const term = `%${trimmed}%`;
+  const clauses = [`name.ilike.${term}`, `sku.ilike.${term}`];
+  if (/^\d+$/.test(trimmed)) {
+    clauses.push(`id.eq.${trimmed}`);
+  }
+  return clauses.join(',');
+}
+
 // Comment: Fetch inventory items from Supabase with optional filtering
 export async function GET(request: NextRequest) {
   try {
@@ -33,8 +44,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search && search.trim().length > 0) {
-      const term = `%${search.trim()}%`;
-      query = query.or(`name.ilike.${term},sku.ilike.${term}`);
+      query = query.or(buildInventorySearchFilter(search));
     }
 
     const { data, error } = await query;

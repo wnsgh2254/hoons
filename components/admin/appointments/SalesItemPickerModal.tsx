@@ -64,6 +64,7 @@ export type PickerSelectedItem = {
   price: number;
   type: SalesItemType;
   manager?: string;
+  designerId?: number | null;
   /** Comment: Prepaid credit (적립 금액) — persisted to prepaid_passes on sale POST */
   prepaid_credit_points?: number;
   prepaid_expires_at?: string | null;
@@ -108,6 +109,7 @@ type SelectedItem = {
   price: number;
   type: SalesItemType;
   manager?: string;
+  designerId?: number | null;
 };
 
 export default function SalesItemPickerModal({
@@ -124,6 +126,8 @@ export default function SalesItemPickerModal({
   const [selectedPaymentType, setSelectedPaymentType] = useState<'card' | 'cash'>('card');
   const { staff: managers } = useStaff({ onlyActive: true, enabled: isOpen });
   const [selectedManager, setSelectedManager] = useState<string>('');
+  const selectedDesignerId =
+    managers.find((manager) => manager.name === selectedManager)?.id ?? null;
   const { services, loading } = useServices({ enabled: isOpen && activeTab === 'service' });
   const { items: inventoryItems, brands: inventoryBrands, loading: inventoryLoading } = useInventory({
     enabled: isOpen && activeTab === 'product',
@@ -227,6 +231,7 @@ export default function SalesItemPickerModal({
         price: item.price,
         type: activeTab,
         manager: selectedManager,
+        designerId: selectedDesignerId,
       };
       const isAlreadySelected = selectedItems.some(
         (selected) => selected.id === item.id && selected.type === activeTab,
@@ -297,6 +302,7 @@ export default function SalesItemPickerModal({
     const serviceAndProductItems = cartDisplayItems.map((item) => ({
       ...item,
       manager: selectedManager,
+      designerId: selectedDesignerId,
     }));
 
     if (activeTab === 'prepaid' && selectedPrepaid && customPrice !== '') {
@@ -315,6 +321,7 @@ export default function SalesItemPickerModal({
         price: Number(customPrice) || 0,
         type: 'prepaid',
         manager: selectedManager,
+        designerId: selectedDesignerId,
         prepaid_credit_points: credit,
         prepaid_expires_at: buildPrepaidExpiresAtIso(isUnlimited, validityPeriod, validityUnit),
       };

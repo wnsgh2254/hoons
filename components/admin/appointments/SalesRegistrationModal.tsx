@@ -27,7 +27,8 @@ import { formatAudAmount, roundToCents } from '@/lib/utils';
 import {
   clearSalesDraft,
   getSalesDraftKey,
-  loadSalesDraft,
+  getSalesDraftFallbackKey,
+  loadSalesDraftForCustomer,
   saveSalesDraft,
   type SalesRegistrationDraft,
 } from '@/lib/sales-registration-draft';
@@ -56,6 +57,7 @@ type SalesItem = {
   discountValue?: number | string; // % 값 또는 금액 값
   amount: number;
   manager: string;
+  designerId?: number | null;
   salesClassification: string;
   prepaidDeduction: number;
   /** Comment: Prepaid product — credit issued to prepaid_passes on sale POST */
@@ -166,6 +168,8 @@ export default function SalesRegistrationModal({
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [draftRestoredMessage, setDraftRestoredMessage] = useState<string | null>(null);
   const wasOpenRef = useRef(false);
+  const initializedForOpenRef = useRef(false);
+  const skipBookingDepositApplyRef = useRef(false);
   const prepaidBalanceRequestRef = useRef(0);
 
   const normalizeShopId = (value: number | string | null | undefined): number | null => {
@@ -392,9 +396,12 @@ export default function SalesRegistrationModal({
     items: SalesItem[],
     paymentAmountsToUse?: typeof paymentAmounts,
     prepaidDeductionOverride?: number,
+    depositCreditOverride?: number,
   ) => {
     const prepaidToUse =
       prepaidDeductionOverride !== undefined ? prepaidDeductionOverride : prepaidDeductionAmount;
+    const depositToUse =
+      depositCreditOverride !== undefined ? depositCreditOverride : depositCredit;
     const amounts = paymentAmountsToUse || paymentAmounts;
     // 양수 결제 금액만 합산 (음수는 받을 금액에서 빼기용이므로 별도 처리)
     const positivePaymentAmount = Math.max(0, amounts.cash) + Math.max(0, amounts.card) + Math.max(0, amounts.bank_transfer);
@@ -404,7 +411,7 @@ export default function SalesRegistrationModal({
     const newSalesAmount = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const newDiscountAmount = items.reduce((sum, item) => sum + item.discount, 0);
     const grossTotal = newSalesAmount - newDiscountAmount;
-    const netDue = netDueAfterDeposit(grossTotal, depositCredit);
+    const netDue = netDueAfterDeposit(grossTotal, depositToUse);
 
     setSalesAmount(roundToCents(newSalesAmount));
     setDiscountAmount(roundToCents(newDiscountAmount));
@@ -420,6 +427,7 @@ export default function SalesRegistrationModal({
     price: number;
     type: 'service' | 'product' | 'prepaid';
     manager?: string;
+    designerId?: number | null;
     prepaid_credit_points?: number;
     prepaid_expires_at?: string | null;
   }) => {
@@ -434,6 +442,7 @@ export default function SalesRegistrationModal({
       discountValue: undefined,
       amount: item.price,
       manager: item.manager || '',
+      designerId: item.designerId ?? null,
       salesClassification: '',
       prepaidDeduction: 0,
       prepaidCreditPoints:
@@ -467,7 +476,13 @@ export default function SalesRegistrationModal({
   }, [isOpen, shopId]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      initializedForOpenRef.current = false;
+      return;
+    }
+    if (initializedForOpenRef.current) return;
+    initializedForOpenRef.current = true;
+
       // 서브 모달 상태 초기화 (공통)
       setIsDiscountModalOpen(false);
       setSelectedItemForDiscount(null);
@@ -552,8 +567,8 @@ export default function SalesRegistrationModal({
         const totalPaid = restoredAmounts.cash + restoredAmounts.card + restoredAmounts.bank_transfer;
         setAmountToReceive(netDue - totalPaid - newPrepaidDeduction);
       } else if (customer) {
-        const draftKey = getSalesDraftKey(customer.id, bookingId);
-        const savedDraft = loadSalesDraft(draftKey);
+        const savedDraftResult = loadSalesDraftForCustomer(customer.id, bookingId);
+        const savedDraft = savedDraftResult?.draft ?? null;
 
         if (savedDraft && savedDraft.salesItems.length > 0) {
           setDraftRestoredMessage('임시 저장된 판매 내용을 불러왔습니다.');
@@ -565,6 +580,7 @@ export default function SalesRegistrationModal({
           setPaymentAmounts(savedDraft.paymentAmounts);
           setCashTendered(savedDraft.cashTendered);
           setPrepaidDeductionAmount(savedDraft.prepaidDeductionAmount);
+          skipBookingDepositApplyRef.current = true;
           setDepositCredit(savedDraft.depositCredit);
           setActiveTab(savedDraft.activeTab);
           setSelectedDeduction(savedDraft.prepaidDeductionAmount > 0 ? 'prepaid' : null);
@@ -574,6 +590,7 @@ export default function SalesRegistrationModal({
             savedDraft.salesItems,
             savedDraft.paymentAmounts,
             savedDraft.prepaidDeductionAmount,
+            savedDraft.depositCredit,
           );
         } else {
           setDraftRestoredMessage(null);
@@ -599,12 +616,15 @@ export default function SalesRegistrationModal({
           setActiveTab('service');
         }
       }
-    }
   }, [isOpen, initialData, editSaleId, bookingDepositPaid, defaultSalesDate, defaultSalesTime, customer, bookingId, shopId]);
 
   // Keep booking deposit visible even if parent props flicker while the modal stays open.
   useEffect(() => {
     if (!isOpen || editSaleId) return;
+    if (skipBookingDepositApplyRef.current) {
+      skipBookingDepositApplyRef.current = false;
+      return;
+    }
     const fromBooking = normalizeBookingDepositPaid(bookingDepositPaid);
     if (fromBooking > 0) {
       setDepositCredit((prev) => (prev > 0 ? prev : fromBooking));
@@ -765,6 +785,7 @@ export default function SalesRegistrationModal({
             discount_value: item.discountValue,
             amount: item.amount,
             manager: item.manager,
+            designer_id: item.designerId ?? null,
             sales_classification: item.salesClassification,
             prepaid_deduction: item.prepaidDeduction,
             ...(item.type === 'prepaid'
@@ -912,7 +933,7 @@ export default function SalesRegistrationModal({
   const handleSaveDraft = () => {
     if (!customer || editSaleId) return;
     const draftKey = getSalesDraftKey(customer.id, bookingId);
-    saveSalesDraft(draftKey, {
+    const draftPayload = {
       salesItems: salesItems as SalesRegistrationDraft['salesItems'],
       memo,
       salesDate,
@@ -924,7 +945,15 @@ export default function SalesRegistrationModal({
       cashTendered,
       activeTab,
       savedAt: new Date().toISOString(),
-    });
+    };
+    const saved = saveSalesDraft(draftKey, draftPayload);
+    if (!saved) {
+      alert('임시 저장에 실패했습니다. 브라우저 저장 공간을 확인해 주세요.');
+      return;
+    }
+    if (bookingId) {
+      saveSalesDraft(getSalesDraftFallbackKey(customer.id), draftPayload);
+    }
     setDraftSavedMessage('임시 저장되었습니다.');
     setTimeout(() => setDraftSavedMessage(null), 2500);
   };
@@ -1541,13 +1570,14 @@ export default function SalesRegistrationModal({
           setIsManagerPickerModalOpen(false);
           setSelectedItemForManager(null);
         }}
-        onConfirm={(manager) => {
+        onConfirm={(selection) => {
           if (selectedItemForManager) {
             const updatedItems = salesItems.map((item) => {
               if (item.id === selectedItemForManager.id) {
                 return {
                   ...item,
-                  manager: manager,
+                  manager: selection.manager,
+                  designerId: selection.designerId,
                 };
               }
               return item;

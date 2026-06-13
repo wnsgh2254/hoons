@@ -101,8 +101,15 @@ export async function GET(request: NextRequest) {
     await attachBookingDepositPaidToSales(supabase, salesData);
 
     const designersMap = new Map<number, { id: number; name: string; english_name?: string | null }>();
+    const designerByManager = new Map<string, { id: number; name: string; english_name?: string | null }>();
     (designers || []).forEach((designer: any) => {
       designersMap.set(designer.id, designer);
+      if (designer.name) {
+        designerByManager.set(normalizeName(designer.name), designer);
+      }
+      if (designer.english_name) {
+        designerByManager.set(normalizeName(designer.english_name), designer);
+      }
     });
 
     const targetDesigner = designerId ? designersMap.get(Number(designerId)) || null : null;
@@ -110,16 +117,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ staffSales: [] }, { status: 200 });
     }
 
+    // Comment: Resolve at most one designer per manager string to avoid duplicate rows and inflated totals.
     const matchDesignerByManager = (manager: string | null | undefined) => {
       const normalizedManager = normalizeName(manager);
       if (!normalizedManager) return [];
 
-      const availableDesigners = targetDesigner ? [targetDesigner] : Array.from(designersMap.values());
-      return availableDesigners.filter((designer) =>
-        [designer.name, designer.english_name].some(
+      if (targetDesigner) {
+        const matchesTarget = [targetDesigner.name, targetDesigner.english_name].some(
           (candidate) => normalizeName(candidate) === normalizedManager,
-        ),
-      );
+        );
+        return matchesTarget ? [targetDesigner] : [];
+      }
+
+      const matched = designerByManager.get(normalizedManager);
+      return matched ? [matched] : [];
     };
 
     const resolveDesignersForItem = (item: any) => {
@@ -280,9 +291,13 @@ export async function GET(request: NextRequest) {
         staffData.total.service.amount + staffData.total.product.amount;
     });
 
+    const staffSales = Array.from(staffSalesMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, 'ko'),
+    );
+
     return NextResponse.json(
       {
-        staffSales: Array.from(staffSalesMap.values()),
+        staffSales,
       },
       { status: 200 },
     );

@@ -10,6 +10,7 @@ export type SalesRegistrationDraft = {
     discountValue?: number | string;
     amount: number;
     manager: string;
+    designerId?: number | null;
     salesClassification: string;
     prepaidDeduction: number;
     prepaidCreditPoints?: number;
@@ -35,6 +36,11 @@ export function getSalesDraftKey(customerId: number, bookingId: number | null | 
   return `haeyoom-sales-draft-${customerId}-${bookingId ?? 'none'}`;
 }
 
+/** Comment: Customer-level fallback key so drafts saved from booking flow are found from drawer/mobile entry. */
+export function getSalesDraftFallbackKey(customerId: number) {
+  return getSalesDraftKey(customerId, null);
+}
+
 export function loadSalesDraft(key: string): SalesRegistrationDraft | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -46,9 +52,48 @@ export function loadSalesDraft(key: string): SalesRegistrationDraft | null {
   }
 }
 
-export function saveSalesDraft(key: string, draft: SalesRegistrationDraft) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(key, JSON.stringify(draft));
+export function loadSalesDraftForCustomer(
+  customerId: number,
+  bookingId: number | null | undefined,
+): { draft: SalesRegistrationDraft; key: string } | null {
+  const keysToTry = Array.from(
+    new Set([
+      getSalesDraftKey(customerId, bookingId),
+      getSalesDraftFallbackKey(customerId),
+    ]),
+  );
+
+  for (const key of keysToTry) {
+    const draft = loadSalesDraft(key);
+    if (draft && draft.salesItems.length > 0) {
+      return { draft, key };
+    }
+  }
+
+  // Comment: Drawer/mobile entry uses bookingId=null — also pick up drafts saved from a booking flow.
+  if (typeof window !== 'undefined') {
+    const prefix = `haeyoom-sales-draft-${customerId}-`;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith(prefix) || keysToTry.includes(key)) continue;
+      const draft = loadSalesDraft(key);
+      if (draft && draft.salesItems.length > 0) {
+        return { draft, key };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function saveSalesDraft(key: string, draft: SalesRegistrationDraft): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    localStorage.setItem(key, JSON.stringify(draft));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function clearSalesDraft(key: string) {
@@ -60,6 +105,5 @@ export function hasSalesRegistrationDraft(
   customerId: number,
   bookingId: number | null | undefined,
 ): boolean {
-  const draft = loadSalesDraft(getSalesDraftKey(customerId, bookingId));
-  return !!(draft && draft.salesItems.length > 0);
+  return !!loadSalesDraftForCustomer(customerId, bookingId);
 }
