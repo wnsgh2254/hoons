@@ -92,9 +92,12 @@ export interface InventoryItem {
   sku: string | null;
   category: string;
   price: number;
+  cost_price?: number;
   stock: number;
   status: 'In Stock' | 'Low Stock' | 'Out of Stock';
   icon: string | null;
+  for_internal?: boolean;
+  for_retail?: boolean;
   created_at: string;
 }
 
