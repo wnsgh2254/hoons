@@ -90,12 +90,19 @@ export async function attachBookingDepositPaidToSales(
     ];
 
     if (bookingIds.length) {
-      const { data: bookings, error } = await supabase
-        .from('bookings')
-        .select('id, deposit_paid')
-        .in('id', bookingIds);
+      const BOOKING_ID_CHUNK = 150;
+      for (let i = 0; i < bookingIds.length; i += BOOKING_ID_CHUNK) {
+        const chunk = bookingIds.slice(i, i + BOOKING_ID_CHUNK);
+        const { data: bookings, error } = await supabase
+          .from('bookings')
+          .select('id, deposit_paid')
+          .in('id', chunk);
 
-      if (!error && bookings) {
+        if (error) {
+          console.error('Error fetching booking deposit_paid batch:', error);
+          continue;
+        }
+
         for (const row of bookings as Array<{ id: number; deposit_paid?: unknown }>) {
           depositByBookingId.set(
             Number(row.id),

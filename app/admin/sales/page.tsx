@@ -1108,6 +1108,127 @@ function RevenueSummaryTable({ revenueData }: { revenueData?: any }) {
   );
 }
 
+// Comment: Shared staff sales row block (판매 / 회원권 차감 / 디파짓 / 합계)
+function StaffSalesRowBlock({
+  staff,
+  nameLabel,
+}: {
+  staff: any;
+  nameLabel: string;
+}) {
+  const depositServiceAmount = staff.deposit?.service?.amount ?? 0;
+  const salesServiceNet = staff.sales.service.amount - depositServiceAmount;
+  const salesSubtotalNet = staff.sales.subtotal - depositServiceAmount;
+  const salesTotalNet = staff.sales.total - depositServiceAmount;
+  const grandTotal =
+    staff.total.subtotal + (staff.sales.membership?.amount ?? 0);
+
+  return (
+    <>
+      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+        <td className="px-4 py-2 font-medium" rowSpan={4}>
+          {nameLabel}
+        </td>
+        <td className="px-4 py-2 font-medium">판매</td>
+        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.quantity}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesServiceNet)}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.quantity}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.product.amount)}</td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesSubtotalNet)}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.quantity}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.membership.amount)}</td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesTotalNet)}</td>
+      </tr>
+      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+        <td className="px-4 py-2 font-medium !border-l !border-gray-200">회원권 차감</td>
+        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.quantity}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.service.amount)}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.product?.quantity ?? 0}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.product?.amount ?? 0)}</td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
+        <td className="px-4 py-2 text-center"></td>
+        <td className="px-4 py-2 text-center"></td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
+      </tr>
+      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
+        <td className="px-4 py-2 font-medium !border-l !border-gray-200">디파짓</td>
+        <td className="px-4 py-2 text-center tabular-nums"></td>
+        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
+        <td className="px-4 py-2 text-center tabular-nums"></td>
+        <td className="px-4 py-2 text-center tabular-nums"></td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
+        <td className="px-4 py-2 text-center tabular-nums"></td>
+        <td className="px-4 py-2 text-center tabular-nums"></td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
+      </tr>
+      <tr className="bg-yellow-50 border-b-2 border-yellow-200">
+        <td className="px-4 py-2 font-bold !border-l !border-gray-200">합계</td>
+        <td className="px-4 py-2 text-center"></td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.service.amount)}</td>
+        <td className="px-4 py-2 text-center"></td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.product.amount)}</td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.subtotal)}</td>
+        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.quantity}</td>
+        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.sales.membership.amount)}</td>
+        <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(grandTotal)}</td>
+      </tr>
+    </>
+  );
+}
+
+function aggregateStaffSales(staffList: any[]) {
+  const aggregated = {
+    sales: {
+      service: { quantity: 0, amount: 0 },
+      product: { quantity: 0, amount: 0 },
+      membership: { quantity: 0, amount: 0 },
+      subtotal: 0,
+      total: 0,
+    },
+    membershipDeduction: {
+      service: { quantity: 0, amount: 0 },
+      product: { quantity: 0, amount: 0 },
+      subtotal: 0,
+    },
+    total: {
+      service: { amount: 0 },
+      product: { amount: 0 },
+      subtotal: 0,
+    },
+    deposit: {
+      service: { amount: 0 },
+    },
+  };
+
+  staffList.forEach((staff) => {
+    aggregated.sales.service.quantity += staff.sales.service.quantity;
+    aggregated.sales.service.amount += staff.sales.service.amount;
+    aggregated.sales.product.quantity += staff.sales.product.quantity;
+    aggregated.sales.product.amount += staff.sales.product.amount;
+    aggregated.sales.membership.quantity += staff.sales.membership.quantity;
+    aggregated.sales.membership.amount += staff.sales.membership.amount;
+    aggregated.membershipDeduction.service.quantity += staff.membershipDeduction.service.quantity;
+    aggregated.membershipDeduction.service.amount += staff.membershipDeduction.service.amount;
+    aggregated.membershipDeduction.product.quantity += staff.membershipDeduction.product?.quantity ?? 0;
+    aggregated.membershipDeduction.product.amount += staff.membershipDeduction.product?.amount ?? 0;
+    aggregated.total.service.amount += staff.total.service.amount;
+    aggregated.total.product.amount += staff.total.product.amount;
+    aggregated.deposit.service.amount += staff.deposit?.service?.amount ?? 0;
+  });
+
+  aggregated.sales.subtotal =
+    aggregated.sales.service.amount + aggregated.sales.product.amount;
+  aggregated.sales.total =
+    aggregated.sales.subtotal + aggregated.sales.membership.amount;
+  aggregated.membershipDeduction.subtotal =
+    aggregated.membershipDeduction.service.amount +
+    aggregated.membershipDeduction.product.amount;
+  aggregated.total.subtotal =
+    aggregated.total.service.amount + aggregated.total.product.amount;
+
+  return aggregated;
+}
+
 // Comment: By Staff Sales Tab Component
 function ByStaffSalesTab({
   dateMode,
@@ -1265,64 +1386,21 @@ function ByStaffSalesTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {staffSalesData.map((staff) => {
-                    const depositServiceAmount = staff.deposit?.service?.amount ?? 0;
-                    const salesServiceNet = staff.sales.service.amount - depositServiceAmount;
-                    const salesSubtotalNet = staff.sales.subtotal - depositServiceAmount;
-                    const salesTotalNet = staff.sales.total - depositServiceAmount;
-
-                    return (
-                    <React.Fragment key={staff.designerId}>
-                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-4 py-2 font-medium" rowSpan={4}>
-                          {staff.name}
-                        </td>
-                        <td className="px-4 py-2 font-medium">판매</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.service.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(salesServiceNet)}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.product.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.product.amount)}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesSubtotalNet)}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.sales.membership.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.sales.membership.amount)}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(salesTotalNet)}</td>
-                      </tr>
-                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-4 py-2 font-medium !border-l !border-gray-200">회원권 차감</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.service.quantity}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.service.amount)}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{staff.membershipDeduction.product?.quantity ?? 0}</td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(staff.membershipDeduction.product?.amount ?? 0)}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.membershipDeduction.subtotal)}</td>
-                      </tr>
-                      <tr className="border-b border-gray-100 hover:bg-gray-50/50">
-                        <td className="px-4 py-2 font-medium !border-l !border-gray-200">디파짓</td>
-                        <td className="px-4 py-2 text-center tabular-nums"></td>
-                        <td className="px-4 py-2 text-center tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
-                        <td className="px-4 py-2 text-center tabular-nums"></td>
-                        <td className="px-4 py-2 text-center tabular-nums"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
-                        <td className="px-4 py-2 text-center tabular-nums"></td>
-                        <td className="px-4 py-2 text-center tabular-nums"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(depositServiceAmount)}</td>
-                      </tr>
-                      <tr className="bg-yellow-50 border-b-2 border-yellow-200">
-                        <td className="px-4 py-2 font-bold !border-l !border-gray-200">합계</td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.service.amount)}</td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.product.amount)}</td>
-                        <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(staff.total.subtotal)}</td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center"></td>
-                        <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(staff.total.subtotal)}</td>
-                      </tr>
+                  {staffSalesData.map((staff) => (
+                    <StaffSalesRowBlock
+                      key={staff.designerId}
+                      staff={staff}
+                      nameLabel={staff.name}
+                    />
+                  ))}
+                  {dateMode === 'period' && staffSalesData.length > 0 && (
+                    <React.Fragment key="staff-sales-period-total">
+                      <StaffSalesRowBlock
+                        staff={aggregateStaffSales(staffSalesData)}
+                        nameLabel="전체"
+                      />
                     </React.Fragment>
-                    );
-                  })}
+                  )}
                 </tbody>
               </table>
             </div>
