@@ -43,7 +43,7 @@ export default function TimeColumn({ isWeekViewMode }: TimeColumnProps) {
                   <span className="absolute -top-1 right-1 bg-white px-0.5 text-[10px]">{label}</span>
                 )}
                 {!isFullHour && (
-                  <span className="absolute top-1/2 -translate-y-1/2 right-1 text-[8px] text-gray-400">30</span>
+                  <span className="absolute -top-1 right-1 bg-white px-0.5 text-[8px] text-gray-400">30</span>
                 )}
               </div>
             );
@@ -84,7 +84,7 @@ export default function TimeColumn({ isWeekViewMode }: TimeColumnProps) {
                 <span className="absolute -top-1 right-1 bg-white px-0.5 text-[10px]">{label}</span>
               )}
               {!isFullHour && (
-                <span className="absolute top-1/2 -translate-y-1/2 right-1 text-[8px] text-gray-400">30</span>
+                <span className="absolute -top-1 right-1 bg-white px-0.5 text-[8px] text-gray-400">30</span>
               )}
             </div>
           );
