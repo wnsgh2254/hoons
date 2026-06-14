@@ -9,6 +9,61 @@ import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
+const SALES_PAGE_SIZE = 1000;
+
+const SALES_SELECT = `
+  id,
+  shop_id,
+  sales_date,
+  booking_id,
+  paid_deposit,
+  bookings:booking_id ( deposit_paid ),
+  sales_items (
+    item_type,
+    quantity,
+    amount,
+    designer_id,
+    manager,
+    prepaid_deduction
+  )
+`;
+
+async function fetchSalesInDateRange(
+  startDate: string,
+  endDate: string,
+  shopId: string | null,
+) {
+  const allSales: any[] = [];
+  let offset = 0;
+
+  while (true) {
+    let query = supabase
+      .from('sales')
+      .select(SALES_SELECT)
+      .gte('sales_date', startDate)
+      .lte('sales_date', endDate)
+      .order('sales_date', { ascending: true })
+      .order('id', { ascending: true });
+
+    if (shopId) {
+      query = query.eq('shop_id', Number(shopId));
+    }
+
+    const { data, error } = await query.range(offset, offset + SALES_PAGE_SIZE - 1);
+    if (error) {
+      throw error;
+    }
+
+    const batch = data || [];
+    allSales.push(...batch);
+    if (batch.length < SALES_PAGE_SIZE) {
+      break;
+    }
+    offset += SALES_PAGE_SIZE;
+  }
+
+  return allSales;
+}
 
 type StaffSalesData = {
   designerId: number;
@@ -50,34 +105,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let salesQuery = supabase
-      .from('sales')
-      .select(`
-        id,
-        shop_id,
-        sales_date,
-        booking_id,
-        paid_deposit,
-        bookings:booking_id ( deposit_paid ),
-        sales_items (
-          item_type,
-          quantity,
-          amount,
-          designer_id,
-          manager,
-          prepaid_deduction
-        )
-      `)
-      .gte('sales_date', startDate)
-      .lte('sales_date', endDate);
-
-    if (shopId) {
-      salesQuery = salesQuery.eq('shop_id', Number(shopId));
-    }
-
-    const [{ data: sales, error: salesError }, { data: designers, error: designersError }] =
+    const [{ sales, salesError }, { data: designers, error: designersError }] =
       await Promise.all([
-        salesQuery,
+        fetchSalesInDateRange(startDate, endDate, shopId).then(
+          (rows) => ({ sales: rows, salesError: null }),
+          (error) => ({ sales: [] as any[], salesError: error }),
+        ),
         supabase.from('designers').select('id, name, english_name').order('name', { ascending: true }),
       ]);
 
@@ -97,7 +130,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const salesData = sales || [];
+    const salesData = sales;
     await attachBookingDepositPaidToSales(supabase, salesData);
 
     const designersMap = new Map<number, { id: number; name: string; english_name?: string | null }>();
