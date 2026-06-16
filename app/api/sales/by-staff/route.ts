@@ -10,23 +10,50 @@ import { roundToCents } from '@/lib/utils';
 const toNum = (value: unknown) => Number(value || 0);
 const normalizeName = (value: string | null | undefined) => value?.trim().toLowerCase() || '';
 const SALES_PAGE_SIZE = 1000;
+const SALE_ID_CHUNK = 200;
 
-const SALES_SELECT = `
+const SALES_HEADER_SELECT = `
   id,
   shop_id,
   sales_date,
   booking_id,
-  paid_deposit,
-  bookings:booking_id ( deposit_paid ),
-  sales_items (
-    item_type,
-    quantity,
-    amount,
-    designer_id,
-    manager,
-    prepaid_deduction
-  )
+  paid_deposit
 `;
+
+const SALES_ITEMS_SELECT = `
+  sale_id,
+  item_type,
+  quantity,
+  amount,
+  designer_id,
+  manager,
+  prepaid_deduction
+`;
+
+async function fetchSalesItemsBySaleIds(saleIds: number[]) {
+  const itemsBySaleId = new Map<number, any[]>();
+
+  for (let i = 0; i < saleIds.length; i += SALE_ID_CHUNK) {
+    const chunk = saleIds.slice(i, i + SALE_ID_CHUNK);
+    const { data, error } = await supabase
+      .from('sales_items')
+      .select(SALES_ITEMS_SELECT)
+      .in('sale_id', chunk);
+
+    if (error) {
+      throw error;
+    }
+
+    for (const item of data || []) {
+      const saleId = Number(item.sale_id);
+      const list = itemsBySaleId.get(saleId) || [];
+      list.push(item);
+      itemsBySaleId.set(saleId, list);
+    }
+  }
+
+  return itemsBySaleId;
+}
 
 async function fetchSalesInDateRange(
   startDate: string,
@@ -39,7 +66,7 @@ async function fetchSalesInDateRange(
   while (true) {
     let query = supabase
       .from('sales')
-      .select(SALES_SELECT)
+      .select(SALES_HEADER_SELECT)
       .gte('sales_date', startDate)
       .lte('sales_date', endDate)
       .order('sales_date', { ascending: true })
@@ -60,6 +87,17 @@ async function fetchSalesInDateRange(
       break;
     }
     offset += SALES_PAGE_SIZE;
+  }
+
+  if (allSales.length === 0) {
+    return allSales;
+  }
+
+  const saleIds = allSales.map((sale) => Number(sale.id));
+  const itemsBySaleId = await fetchSalesItemsBySaleIds(saleIds);
+
+  for (const sale of allSales) {
+    sale.sales_items = itemsBySaleId.get(Number(sale.id)) || [];
   }
 
   return allSales;
@@ -135,6 +173,22 @@ export async function GET(request: NextRequest) {
 
     const designersMap = new Map<number, { id: number; name: string; english_name?: string | null }>();
     const designerByManager = new Map<string, { id: number; name: string; english_name?: string | null }>();
+    // Comment: Virtual designers are created for retired staff (no longer in designers table) who still have historical sales.
+    const virtualDesignerByManager = new Map<string, { id: number; name: string; english_name?: string | null }>();
+    let nextVirtualDesignerId = -1;
+    let unassignedDesigner: { id: number; name: string; english_name?: string | null } | null = null;
+
+    const getUnassignedDesigner = () => {
+      if (!unassignedDesigner) {
+        unassignedDesigner = {
+          id: nextVirtualDesignerId--,
+          name: '미배정',
+          english_name: null,
+        };
+        designersMap.set(unassignedDesigner.id, unassignedDesigner);
+      }
+      return unassignedDesigner;
+    };
     (designers || []).forEach((designer: any) => {
       designersMap.set(designer.id, designer);
       if (designer.name) {
@@ -163,16 +217,39 @@ export async function GET(request: NextRequest) {
       }
 
       const matched = designerByManager.get(normalizedManager);
-      return matched ? [matched] : [];
+      if (matched) return [matched];
+
+      // Comment: Fallback for retired staff — create a virtual designer per distinct manager name
+      let virtual = virtualDesignerByManager.get(normalizedManager);
+      if (!virtual) {
+        virtual = {
+          id: nextVirtualDesignerId--,
+          name: manager?.trim() || '(퇴사 직원)',
+          english_name: null,
+        };
+        virtualDesignerByManager.set(normalizedManager, virtual);
+        designersMap.set(virtual.id, virtual);
+      }
+      return [virtual];
     };
 
     const resolveDesignersForItem = (item: any) => {
       if (item.designer_id != null) {
         const d = designersMap.get(Number(item.designer_id));
-        if (!d) return [];
+        if (!d) {
+          if (targetDesigner) return [];
+          return [getUnassignedDesigner()];
+        }
         if (targetDesigner && Number(targetDesigner.id) !== Number(d.id)) return [];
         return [d];
       }
+
+      const normalizedManager = normalizeName(item.manager);
+      if (!normalizedManager) {
+        if (targetDesigner) return [];
+        return [getUnassignedDesigner()];
+      }
+
       return matchDesignerByManager(item.manager);
     };
 
