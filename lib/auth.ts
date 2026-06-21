@@ -10,15 +10,15 @@ export interface User {
 // Comment: Hardcoded user credentials (in production, these should be in a database)
 const USERS: Record<string, { password: string; role: UserRole }> = {
   haeyoom_director: {
-    password: 'director123',
+    password: 'gPdba12!',
     role: 'director',
   },
   haeyoom_manager: {
-    password: 'manager123',
+    password: 'manager123!',
     role: 'manager',
   },
   haeyoom_stylist: {
-    password: 'stylist123',
+    password: 'stylist123!',
     role: 'designer',
   },
 };
