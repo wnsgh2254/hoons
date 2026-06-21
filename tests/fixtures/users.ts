@@ -2,17 +2,17 @@
 export const TEST_USERS = {
   director: {
     username: 'haeyoom_director',
-    password: 'director123',
+    password: 'gPdba12!',
     role: 'director',
   },
   manager: {
     username: 'haeyoom_manager',
-    password: 'manager123',
+    password: 'manager123!',
     role: 'manager',
   },
   designer: {
     username: 'haeyoom_stylist',
-    password: 'stylist123',
+    password: 'stylist123!',
     role: 'designer',
   },
   invalid: {
