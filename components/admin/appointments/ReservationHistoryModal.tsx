@@ -6,6 +6,8 @@ import ReservationHistoryTable from './ReservationHistoryTable';
 import Modal from '@/components/ui/Modal';
 import { Z } from '@/lib/constants';
 import type { BookingWithRelations } from '@/lib/types';
+import { matchesReservationStatusFilter } from '@/lib/reservation-history-status';
+import { isCreatedAtInSydneyDateRange } from '@/lib/sydney-datetime-range';
 
 interface ReservationHistoryModalProps {
   isOpen: boolean;
@@ -43,7 +45,7 @@ export default function ReservationHistoryModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [shouldSearch, setShouldSearch] = useState(false);
+  const [searchTrigger, setSearchTrigger] = useState(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,7 +57,7 @@ export default function ReservationHistoryModal({
     setDesignerFilter('all');
     setSearchKeyword('');
     setSelectedIds(new Set());
-    setShouldSearch(false);
+    setSearchTrigger(0);
   }, [isOpen, defaultStartDate, defaultEndDate]);
 
   useEffect(() => {
@@ -69,7 +71,8 @@ export default function ReservationHistoryModal({
         const params = new URLSearchParams({
           start_date: startDate,
           end_date: endDate,
-          limit: '200',
+          date_type: dateType,
+          limit: '1000',
         });
         const res = await fetch(`/api/appointment?${params.toString()}`);
         const json = await res.json();
@@ -77,7 +80,6 @@ export default function ReservationHistoryModal({
           throw new Error(json.error || '예약 내역을 불러오지 못했습니다.');
         }
         setBookings(json.bookings || []);
-        setShouldSearch(false);
       } catch (e: any) {
         console.error('Error loading reservation history', e);
         setError(e?.message ?? '예약 내역을 불러오지 못했습니다.');
@@ -87,11 +89,7 @@ export default function ReservationHistoryModal({
     };
 
     void fetchHistory();
-  }, [isOpen, startDate, endDate, refreshTrigger]);
-
-  useEffect(() => {
-    if (shouldSearch) setShouldSearch(false);
-  }, [shouldSearch]);
+  }, [isOpen, startDate, endDate, dateType, refreshTrigger, searchTrigger]);
 
   const designers = useMemo(() => {
     const map = new Map<number, string>();
@@ -105,9 +103,7 @@ export default function ReservationHistoryModal({
 
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
-      const status = (b.status || '').toUpperCase();
-
-      if (statusFilter !== 'all' && status !== statusFilter) return false;
+      if (!matchesReservationStatusFilter(b.status, statusFilter)) return false;
 
       if (dateType === 'booking') {
         const bookingDate = b.booking_date;
@@ -116,14 +112,11 @@ export default function ReservationHistoryModal({
         } else {
           if (!bookingDate || bookingDate < startDate || bookingDate > endDate) return false;
         }
+      } else if (b.created_at) {
+        const rangeEnd = dateMode === 'single' ? startDate : endDate;
+        if (!isCreatedAtInSydneyDateRange(b.created_at, startDate, rangeEnd)) return false;
       } else {
-        if (!b.created_at) return false;
-        const createdDate = b.created_at.split(' ')[0];
-        if (dateMode === 'single') {
-          if (createdDate !== startDate) return false;
-        } else {
-          if (createdDate < startDate || createdDate > endDate) return false;
-        }
+        return false;
       }
 
       if (designerFilter !== 'all') {
@@ -146,7 +139,7 @@ export default function ReservationHistoryModal({
     });
   }, [bookings, statusFilter, designerFilter, searchKeyword, dateType, dateMode, startDate, endDate]);
 
-  const handleSearch = () => setShouldSearch(true);
+  const handleSearch = () => setSearchTrigger((value) => value + 1);
 
   const handleSelectAll = (selected: boolean) => {
     setSelectedIds(selected ? new Set(filteredBookings.map((b) => b.id)) : new Set());

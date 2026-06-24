@@ -9,6 +9,10 @@ import {
 } from '@/lib/sales-deposit-summary';
 import { attachBookingDepositPaidToSales } from '@/lib/booking-deposit-paid';
 import {
+  fetchForfeitedDepositsInBookingDateRange,
+  sumForfeitedDepositAmount,
+} from '@/lib/forfeited-deposit-sales';
+import {
   applySaleToPaymentDetails,
   emptyPaymentDetails,
   recalculatePaymentDetailColumnTotals,
@@ -212,6 +216,19 @@ export async function GET(request: NextRequest) {
     salesData.forEach((sale: any) => {
       applySaleToPaymentDetails(paymentDetails, sale);
     });
+
+    const forfeitedDeposits = await fetchForfeitedDepositsInBookingDateRange(
+      supabase,
+      startDate,
+      endDate,
+      shopId,
+    );
+    const forfeitedDepositTotal = sumForfeitedDepositAmount(forfeitedDeposits);
+    if (forfeitedDepositTotal > 0) {
+      paymentDetails.deposit.service += roundToCents(forfeitedDepositTotal);
+      paymentDetails.deposit.total += roundToCents(forfeitedDepositTotal);
+    }
+
     recalculatePaymentDetailColumnTotals(paymentDetails);
 
     const depositSummary = emptyDepositSummary();

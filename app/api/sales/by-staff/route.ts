@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { attachBookingDepositPaidToSales } from '@/lib/booking-deposit-paid';
 import {
+  fetchForfeitedDepositsInBookingDateRange,
+  type ForfeitedDepositRow,
+} from '@/lib/forfeited-deposit-sales';
+import {
   capPaidDepositToService,
   resolvePaidDepositFromSaleRecord,
 } from '@/lib/sale-paid-deposit';
@@ -17,7 +21,8 @@ const SALES_HEADER_SELECT = `
   shop_id,
   sales_date,
   booking_id,
-  paid_deposit
+  paid_deposit,
+  bookings:booking_id ( deposit_paid, designer_id )
 `;
 
 const SALES_ITEMS_SELECT = `
@@ -291,11 +296,29 @@ export async function GET(request: NextRequest) {
       depositCredit: number,
       designerServiceAmounts: Map<number, number>,
     ) => {
-      const totalMatched = Array.from(designerServiceAmounts.values()).reduce((sum, amt) => sum + amt, 0);
-      if (totalMatched <= 0 || depositCredit <= 0) return;
+      if (depositCredit <= 0) return;
+
+      let amounts = designerServiceAmounts;
+      let totalMatched = Array.from(amounts.values()).reduce((sum, amt) => sum + amt, 0);
+
+      if (totalMatched <= 0) {
+        const bookingDesignerId = Array.isArray(sale.bookings)
+          ? sale.bookings[0]?.designer_id
+          : sale.bookings?.designer_id;
+        const numericDesignerId = Number(bookingDesignerId);
+        if (Number.isFinite(numericDesignerId) && numericDesignerId > 0) {
+          const designer = designersMap.get(numericDesignerId);
+          if (designer && (!targetDesigner || targetDesigner.id === designer.id)) {
+            amounts = new Map([[designer.id, depositCredit]]);
+            totalMatched = depositCredit;
+          }
+        }
+      }
+
+      if (totalMatched <= 0) return;
 
       let remaining = roundToCents(depositCredit);
-      const entries = Array.from(designerServiceAmounts.entries()).filter(([designerId]) =>
+      const entries = Array.from(amounts.entries()).filter(([designerId]) =>
         designersMap.has(designerId),
       );
 
@@ -313,6 +336,24 @@ export async function GET(request: NextRequest) {
         const staffData = ensureStaffData(designer);
         staffData.deposit.service.amount += share;
       });
+    };
+
+    const applyForfeitedDepositToStaff = (row: ForfeitedDepositRow) => {
+      if (row.amount <= 0) return;
+
+      let designer: { id: number; name: string } | null = null;
+      if (row.designerId != null) {
+        designer = designersMap.get(row.designerId) || null;
+      }
+      if (!designer) {
+        if (targetDesigner) return;
+        designer = getUnassignedDesigner();
+      } else if (targetDesigner && targetDesigner.id !== designer.id) {
+        return;
+      }
+
+      const staffData = ensureStaffData(designer);
+      staffData.deposit.service.amount += roundToCents(row.amount);
     };
 
     salesData.forEach((sale: any) => {
@@ -382,6 +423,14 @@ export async function GET(request: NextRequest) {
 
       allocateDepositToDesigners(sale, depositCredit, designerServiceAmounts);
     });
+
+    const forfeitedDeposits = await fetchForfeitedDepositsInBookingDateRange(
+      supabase,
+      startDate,
+      endDate,
+      shopId,
+    );
+    forfeitedDeposits.forEach(applyForfeitedDepositToStaff);
 
     staffSalesMap.forEach((staffData) => {
       staffData.sales.subtotal =

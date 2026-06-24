@@ -1,4 +1,4 @@
-import { resolvePaidDepositFromSaleRecord } from '@/lib/sale-paid-deposit';
+import { resolvePaidDepositFromSaleRecord, capPaidDepositToService } from '@/lib/sale-paid-deposit';
 import { roundToCents } from '@/lib/utils';
 
 const toNum = (value: unknown) => Number(value || 0);
@@ -147,7 +147,7 @@ export function applySaleToPaymentDetails(
     .filter((item) => isMembershipItem(item.item_type))
     .reduce((sum, item) => sum + toNum(item.amount), 0);
 
-  const depositCredit = Math.min(
+  const depositCredit = capPaidDepositToService(
     resolvePaidDepositFromSaleRecord(sale),
     serviceAmountTotal,
   );

@@ -4,6 +4,7 @@ import { isCancelledBookingStatus } from '@/lib/booking-status';
 import { fetchMonthBookingDayCounts } from '@/lib/month-booking-day-counts';
 import { supabase } from '@/lib/supabase';
 import { invokeBookingConfirmationEdge } from '@/lib/booking-confirmation-edge';
+import { getSydneyDayUtcRange } from '@/lib/sydney-datetime-range';
 
 export async function POST(request: NextRequest) {
   try {
@@ -126,6 +127,7 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+    const dateType = searchParams.get('date_type') === 'created' ? 'created' : 'booking';
     // Comment: minimal=true returns per-day booking counts for the calendar (paginated server-side)
     const minimal = searchParams.get('minimal') === 'true';
 
@@ -185,9 +187,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (startDate && endDate) {
-      query = query.gte('booking_date', startDate).lte('booking_date', endDate);
+      if (dateType === 'created') {
+        const { gteIso, ltIso } = getSydneyDayUtcRange(startDate, endDate);
+        query = query.gte('created_at', gteIso).lt('created_at', ltIso);
+      } else {
+        query = query.gte('booking_date', startDate).lte('booking_date', endDate);
+      }
     } else if (date) {
-      query = query.eq('booking_date', date);
+      if (dateType === 'created') {
+        const { gteIso, ltIso } = getSydneyDayUtcRange(date, date);
+        query = query.gte('created_at', gteIso).lt('created_at', ltIso);
+      } else {
+        query = query.eq('booking_date', date);
+      }
     }
 
     // Comment: Single-day + designer overlap checks must see every row — default pagination could omit noon slots.
