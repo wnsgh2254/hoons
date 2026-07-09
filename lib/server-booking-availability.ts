@@ -14,29 +14,14 @@ import {
 } from '@/lib/designer-venue-time-off';
 import { salonCalendarWeekdayIndex } from '@/lib/salon-calendar';
 import { assertMultiVenueDefaultShopAllowsBooking } from '@/lib/multi-venue-default-shop';
-
-/** Comment: Merge overlapping [start,end) minute intervals from midnight */
-function mergeMinuteIntervals(intervals: { start: number; end: number }[]): { start: number; end: number }[] {
-  if (intervals.length === 0) return [];
-  const sorted = [...intervals].sort((a, b) => a.start - b.start);
-  const out: { start: number; end: number }[] = [];
-  let cur = { ...sorted[0]! };
-  for (let i = 1; i < sorted.length; i++) {
-    const n = sorted[i]!;
-    if (n.start <= cur.end) {
-      cur.end = Math.max(cur.end, n.end);
-    } else {
-      out.push(cur);
-      cur = { ...n };
-    }
-  }
-  out.push(cur);
-  return out;
-}
+import {
+  loadShopBusinessHourIntervalsForDate,
+  mergeMinuteIntervals,
+} from '@/lib/shop-business-hours';
 
 /**
  * Comment: Working hours at this shop for this calendar date — from designer_schedules (same source as admin).
- * Returns null when there is no row for this shop (e.g. special-work-only without a local schedule); caller keeps shop-hour-only behaviour.
+ * Returns null when there is no row for this shop.
  */
 export async function loadDesignerWorkingIntervalsForShopDate(
   supabase: SupabaseClient,
@@ -53,6 +38,37 @@ export async function loadDesignerWorkingIntervalsForShopDate(
   }
   if (raw.length === 0) return null;
   return mergeMinuteIntervals(raw);
+}
+
+/**
+ * Comment: Designer schedule first; when missing (e.g. special-work day on an off weekday), fall back to shop business_hours.
+ */
+export async function resolveWorkingIntervalsForShopDate(
+  supabase: SupabaseClient,
+  params: { designerId: number; shopId: number; date: string },
+): Promise<{ start: number; end: number }[] | null> {
+  const designerIntervals = await loadDesignerWorkingIntervalsForShopDate(supabase, params);
+  if (designerIntervals && designerIntervals.length > 0) {
+    return designerIntervals;
+  }
+
+  const businessIntervals = await loadShopBusinessHourIntervalsForDate(supabase, {
+    shopId: params.shopId,
+    date: params.date,
+  });
+  return businessIntervals.length > 0 ? businessIntervals : null;
+}
+
+/** Comment: True when [start, start+duration) lies fully inside resolved working/business-hour windows */
+export function isBookingWithinWorkingIntervals(
+  slotStartMin: number,
+  durationMinutes: number,
+  workingIntervals: { start: number; end: number }[] | null | undefined,
+): boolean {
+  if (!workingIntervals || workingIntervals.length === 0) return true;
+  if (durationMinutes <= 0) return true;
+  const slotEndMin = slotStartMin + durationMinutes;
+  return workingIntervals.some((w) => slotStartMin >= w.start && slotEndMin <= w.end);
 }
 
 // Comment: DB stores mixed case (e.g. cancelled, CANCELLED) — match Supabase live data
@@ -86,7 +102,7 @@ export async function loadDesignerAvailabilityForPublicBooking(
 ): Promise<DesignerAvailabilityIntervals> {
   const { designerId, shopId, date } = params;
 
-  const workingIntervals = await loadDesignerWorkingIntervalsForShopDate(supabase, {
+  const workingIntervals = await resolveWorkingIntervalsForShopDate(supabase, {
     designerId,
     shopId,
     date,
@@ -178,6 +194,42 @@ export async function resolveBookingDurationMinutes(
     if (dm != null && Number(dm) > 0) return Math.round(Number(dm));
   }
   return 60;
+}
+
+/** Comment: Server-side guard for admin booking create/edit — working hours only (not overlap) */
+export async function assertBookingFitsWorkingHours(
+  supabase: SupabaseClient,
+  params: {
+    designerId: number | null;
+    shopId: number;
+    date: string;
+    timeLabel: string;
+    durationMinutes: number;
+  },
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!params.designerId) {
+    return { ok: true };
+  }
+
+  const slotMin = timeLabelToMinutes(params.timeLabel);
+  if (slotMin == null) {
+    return { ok: false, message: '시간 형식이 올바르지 않습니다.' };
+  }
+
+  const workingIntervals = await resolveWorkingIntervalsForShopDate(supabase, {
+    designerId: params.designerId,
+    shopId: params.shopId,
+    date: params.date,
+  });
+
+  if (!isBookingWithinWorkingIntervals(slotMin, params.durationMinutes, workingIntervals)) {
+    return {
+      ok: false,
+      message: '예약 종료 시간이 영업/근무 시간을 넘을 수 없습니다.',
+    };
+  }
+
+  return { ok: true };
 }
 
 /** Comment: Server-side guard before creating a public booking (payment routes) */

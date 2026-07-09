@@ -36,8 +36,8 @@ export type DesignerAvailabilityIntervals = {
   bookingIntervals: { start: number; end: number }[];
   /**
    * When set and non-empty: slot [start, start+duration) must lie fully inside at least one interval.
-   * Mirrors designer_schedules for this shop+weekday (admin working hours).
-   * Omitted or null: no designer-specific window (same as legacy shop-hours-only behaviour).
+   * From designer_schedules for this shop+weekday, or shop business_hours when schedule is missing (e.g. special-work day).
+   * Omitted or null: no window enforcement.
    */
   workingIntervals?: { start: number; end: number }[] | null;
 };

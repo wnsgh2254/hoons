@@ -5,6 +5,10 @@ import { fetchMonthBookingDayCounts } from '@/lib/month-booking-day-counts';
 import { supabase } from '@/lib/supabase';
 import { invokeBookingConfirmationEdge } from '@/lib/booking-confirmation-edge';
 import { getSydneyDayUtcRange } from '@/lib/sydney-datetime-range';
+import {
+  assertBookingFitsWorkingHours,
+  resolveBookingDurationMinutes,
+} from '@/lib/server-booking-availability';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +35,23 @@ export async function POST(request: NextRequest) {
 
     if (!shopId || !day || !timeLabel) {
       return NextResponse.json({ error: '필수 필드가 누락되었습니다.' }, { status: 400 });
+    }
+
+    if (designerId != null && typeof fullDate === 'string' && fullDate.trim()) {
+      const durationMinutes = await resolveBookingDurationMinutes(supabase, {
+        durationMinutes: typeof customServiceDuration === 'number' ? customServiceDuration : null,
+        serviceId: serviceId != null ? Number(serviceId) : null,
+      });
+      const hoursCheck = await assertBookingFitsWorkingHours(supabase, {
+        designerId: Number(designerId),
+        shopId: Number(shopId),
+        date: fullDate.trim(),
+        timeLabel,
+        durationMinutes,
+      });
+      if (!hoursCheck.ok) {
+        return NextResponse.json({ error: hoursCheck.message }, { status: 400 });
+      }
     }
 
     let customerId: number | null = null;

@@ -259,7 +259,7 @@ function computeWorkingIntervals(snapshot: Snapshot, date: string, designerId: n
     (row) => Number(row.designer_id) === Number(designerId) && Number(row.weekday) === weekday,
   );
 
-  return mergeIntervals(
+  const designerIntervals = mergeIntervals(
     snapshot.schedules
       .filter((row) => Number(row.designer_id) === Number(designerId))
       .filter((row) => Number(row.weekday) === weekday)
@@ -277,6 +277,22 @@ function computeWorkingIntervals(snapshot: Snapshot, date: string, designerId: n
         if (resolvedShopId !== Number(shopId)) return null;
         if (!row.start_time || !row.end_time) return null;
 
+        const start = dbTimeStringToMinutes(row.start_time);
+        const end = dbTimeStringToMinutes(row.end_time);
+        if (end <= start) return null;
+        return { start, end };
+      })
+      .filter((value): value is { start: number; end: number } => value != null),
+  );
+
+  if (designerIntervals.length > 0) return designerIntervals;
+
+  const weekdayLabel = DAYS_KO[salonCalendarWeekdayIndex(date)];
+  return mergeIntervals(
+    snapshot.businessHours
+      .filter((row) => Number(row.shop_id) === Number(shopId))
+      .filter((row) => Array.isArray(row.days) && row.days.includes(weekdayLabel))
+      .map((row) => {
         const start = dbTimeStringToMinutes(row.start_time);
         const end = dbTimeStringToMinutes(row.end_time);
         if (end <= start) return null;
