@@ -6,6 +6,8 @@ const CONFIRMATION_SMS_EXCLUDED_SERVICE_SEGMENT = /^website\s+exclusive\s*-\s*20
 function isExcludedConfirmationSmsServiceSegment(segment: string): boolean {
   const t = segment.trim();
   if (!t) return true;
+  // Comment: Hide any service line that includes "Promotion" (case-insensitive).
+  if (/promotion/i.test(t)) return true;
   return CONFIRMATION_SMS_EXCLUDED_SERVICE_SEGMENT.test(t);
 }
 
@@ -31,6 +33,13 @@ export function stripPromoFromConfirmationSmsServiceLabel(label: string): string
   return 'Hair service';
 }
 
+/** Drop a catalog name when it is promo-only so SMS can fall through to custom/other labels. */
+export function nullIfExcludedSmsServiceName(name: string | null | undefined): string | null {
+  const t = String(name ?? '').trim();
+  if (!t || isExcludedConfirmationSmsServiceSegment(t)) return null;
+  return t;
+}
+
 /** Format AU salon number for SMS (e.g. +61432… or 0432… -> 0432 328 002). */
 export function formatAuPhoneForSmsDisplay(raw: string | null | undefined): string | null {
   const s = String(raw ?? '').trim();
@@ -52,14 +61,18 @@ export function formatAuPhoneForSmsDisplay(raw: string | null | undefined): stri
 /**
  * Booking confirmation SMS body — keep in sync with Supabase Edge `booking-confirmation-sms`.
  *
- * Haeyoom Meadowbank
+ * Haeyoom Haymarket
  *
  * Appointment:
- * 11/06 (Thu) 7:00pm
- * Service: Hair service
+ * 15/07 (Wed) 6:00pm
  *
- * To Change or Cancel:
- * Call or Text to 0432 328 002
+ * Service:
+ * Men's Haircut
+ *
+ * Change/Cancel:
+ * Call or Text 0422 482 020
+ *
+ * Please do not reply.
  */
 export function buildBookingConfirmationSmsBody(params: {
   headerLine: string;
@@ -72,15 +85,17 @@ export function buildBookingConfirmationSmsBody(params: {
   const contactPhone: string | null =
     formattedContact ?? (rawVenuePhone.length > 0 ? rawVenuePhone : null);
   const contactInstruction = contactPhone
-    ? `Call or Text to ${contactPhone}`
+    ? `Call or Text ${contactPhone}`
     : 'Call or Text your Haeyoom location';
 
   return (
     `${params.headerLine}\n\n` +
-    `Appointment: \n` +
-    `${params.appointmentLine} \n` +
-    `Service: ${params.serviceName}\n\n` +
-    `To Change or Cancel: \n` +
-    `${contactInstruction}`
+    `Appointment:\n` +
+    `${params.appointmentLine}\n\n` +
+    `Service:\n` +
+    `${params.serviceName}\n\n` +
+    `Change/Cancel:\n` +
+    `${contactInstruction}\n\n` +
+    `Please do not reply.`
   );
 }

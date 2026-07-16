@@ -5,6 +5,8 @@ import {
 import {
   buildBookingConfirmationSmsBody,
   stripPromoFromConfirmationSmsServiceLabel,
+  stripPromoFromCustomServiceNameForConfirmationSms,
+  nullIfExcludedSmsServiceName,
 } from '@/lib/booking-confirmation-sms';
 import { sendMobileMessageSMS } from '@/lib/mobile-message';
 import { haeyoomSmsHeader, smsServiceLabelEn, smsVenueLocationForReminder } from '@/lib/public-booking-labels';
@@ -58,10 +60,13 @@ export async function sendBookingReminder(
   venue?: SendBookingReminderVenue,
 ): Promise<{ success: boolean; messageSid?: string; error?: string }> {
   const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
-  const serviceLabel = smsServiceLabelEn(
-    venue?.catalogEnglishName,
-    venue?.catalogServiceName,
-    venue?.customServiceName,
+  const customForSms = stripPromoFromCustomServiceNameForConfirmationSms(venue?.customServiceName);
+  const serviceLabel = stripPromoFromConfirmationSmsServiceLabel(
+    smsServiceLabelEn(
+      nullIfExcludedSmsServiceName(venue?.catalogEnglishName),
+      nullIfExcludedSmsServiceName(venue?.catalogServiceName),
+      customForSms,
+    ),
   );
   const message = buildBookingReminderSmsBody({
     appointmentLine,

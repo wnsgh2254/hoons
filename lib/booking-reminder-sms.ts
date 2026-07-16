@@ -52,6 +52,7 @@ export function buildBookingReminderSmsBody(params: {
     `Change or Cancel:\n` +
     `Call or Text\n` +
     `${contactPhone}\n\n` +
-    `Location: ${loc}`
+    `Location: ${loc}\n\n` +
+    `Please do not reply.`
   );
 }

@@ -50,6 +50,15 @@ function buildInventoryUrl(path: string, shopId: number, params?: URLSearchParam
   return `${path}?${nextParams.toString()}`;
 }
 
+// Comment: Local calendar date as YYYY-MM-DD (for date inputs / filters)
+function todayDateString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // Comment: Format date/time to YYYY-MM-DD HH:mm for display
 function formatDateTime(dateStr: string | null | undefined): string {
   if (dateStr == null || dateStr === '') return '';
@@ -737,7 +746,7 @@ function InventorySubView({ view }: InventorySubViewProps) {
 
 // Comment: Internal usage list view (내부 소모 내역)
 function InternalUsageView({ shopId }: { shopId: number }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayDateString();
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
   const [type, setType] = useState('전체');
@@ -946,8 +955,9 @@ function InternalUsageView({ shopId }: { shopId: number }) {
 
 // Comment: Purchases main view (매입 / 반품 목록)
 function PurchasesView({ shopId }: { shopId: number }) {
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-20');
+  const todayStr = todayDateString();
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
   const [supplier, setSupplier] = useState('');
   const [type, setType] = useState<'all' | 'purchase' | 'return'>('all');
   const [rows, setRows] = useState<
@@ -1454,8 +1464,9 @@ function SupplierEditModal({ shopId, supplier, onClose, onSaved }: SupplierEditM
 
 // Comment: Stock adjustment history view (재고 조정 내역)
 function AdjustmentHistoryView({ shopId }: { shopId: number }) {
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-20');
+  const todayStr = todayDateString();
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
   const [productSearch, setProductSearch] = useState('');
   const [rows, setRows] = useState<
     {
@@ -1573,8 +1584,9 @@ type MovementRow = {
 
 // Comment: Inventory movement history view (재고 변동 이력)
 function InventoryMovementHistoryView({ shopId }: { shopId: number }) {
-  const [startDate, setStartDate] = useState('2026-01-01');
-  const [endDate, setEndDate] = useState('2026-01-20');
+  const todayStr = todayDateString();
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
   const [productCode, setProductCode] = useState('');
   const [category, setCategory] = useState('전체');
   const [selected, setSelected] = useState<MovementRow | null>(null);
@@ -1905,7 +1917,7 @@ function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageR
     fetchStaff();
   }, [shopId]);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayDateString();
 
   const handleAddRow = (item: InventoryItem) => {
     setSelectedRows((prev) => [
@@ -2175,7 +2187,7 @@ function InternalUsageEntryModal({
   const [quantity, setQuantity] = useState(defaultQuantity.toString());
   const [staff, setStaff] = useState('');
   const [memo, setMemo] = useState('');
-  const [date, setDate] = useState('2026-01-20');
+  const [date, setDate] = useState(todayDateString());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -2564,7 +2576,7 @@ type PurchaseEditModalProps = {
 function PurchaseEditModal({ mode, shopId, onClose }: PurchaseEditModalProps) {
   const [supplier, setSupplier] = useState('');
   const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
-  const [date, setDate] = useState('2026-01-20');
+  const [date, setDate] = useState(todayDateString());
   const [memo, setMemo] = useState('');
   const [items, setItems] = useState<
     { inventoryItemId: number; code: string; name: string; unitPrice: number; quantity: number }[]

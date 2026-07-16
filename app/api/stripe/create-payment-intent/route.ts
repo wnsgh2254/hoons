@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { getCustomerIdByNameAndPhone, isValidAuMobilePhone } from "@/lib/data";
+import { getCustomerIdByNameAndPhone, isValidAuMobilePhone, createPublicBooking } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -117,6 +117,34 @@ export async function POST(request: NextRequest) {
       customerId = await getCustomerIdByNameAndPhone(customerName, customerPhone);
     }
 
+    // Comment: Hold the slot for the duration of checkout — without this, a second checkout
+    // (or an admin booking) created before the Payment Element completes could pass the
+    // same slotCheck above and end up double-booked once both are confirmed.
+    let pendingBookingId: number | null = null;
+    try {
+      const pendingBooking = await createPublicBooking({
+        shopId: Number(shopId),
+        designerId: designerId != null ? Number(designerId) : null,
+        serviceId: serviceId != null ? Number(serviceId) : null,
+        day: Number(day),
+        timeLabel: String(timeLabel),
+        totalAmount: typeof totalAmount === "number" ? totalAmount : null,
+        depositAmount: null,
+        fullDate: dateStr,
+        customerId,
+        customServiceName: serviceName || null,
+        customServiceDuration: durationMinutes,
+        status: "pending",
+      });
+      pendingBookingId = Number(pendingBooking.id);
+    } catch (holdErr) {
+      console.error("Error holding booking slot before payment intent:", holdErr);
+      return NextResponse.json(
+        { error: "Failed to reserve the selected time slot. Please try again." },
+        { status: 500 },
+      );
+    }
+
     const amountInCents =
       typeof depositAmount === "number"
         ? Math.round(depositAmount * 100)
@@ -130,7 +158,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Comment: Card + Google Pay (Wallets). Exclude Zip, Klarna. Requires: 1) Dashboard → Payment methods → Wallets ON, 2) Register domain at dashboard.stripe.com/settings/payment_method_domains
-    const paymentIntent = await stripe.paymentIntents.create({
+    let paymentIntent: Stripe.PaymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCents,
       currency: "aud",
       automatic_payment_methods: { enabled: true },
@@ -139,6 +169,7 @@ export async function POST(request: NextRequest) {
         card: { request_three_d_secure: "automatic" },
       },
       metadata: {
+        booking_id: String(pendingBookingId),
         deposit_amount: amountInCents.toString(),
         shop_id: String(shopId),
         designer_id: designerId != null ? String(designerId) : "",
@@ -158,9 +189,15 @@ export async function POST(request: NextRequest) {
           ? { customer_name: String(customerName).trim(), customer_phone: String(customerPhone).trim() }
           : {}),
       },
-    });
+      });
+    } catch (stripeErr) {
+      // Comment: Release the held slot immediately instead of waiting out the pending TTL.
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", pendingBookingId);
+      throw stripeErr;
+    }
 
     if (!paymentIntent.client_secret) {
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", pendingBookingId);
       return NextResponse.json(
         { error: "Failed to create payment intent." },
         { status: 500 },
@@ -170,6 +207,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         client_secret: paymentIntent.client_secret,
+        bookingId: pendingBookingId,
       },
       { status: 200 },
     );

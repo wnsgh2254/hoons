@@ -2,6 +2,7 @@ import { isValidAuMobilePhone } from '@/lib/data';
 import {
   stripPromoFromConfirmationSmsServiceLabel,
   stripPromoFromCustomServiceNameForConfirmationSms,
+  nullIfExcludedSmsServiceName,
 } from '@/lib/booking-confirmation-sms';
 import { smsServiceLabelEn } from '@/lib/public-booking-labels';
 import { supabase } from '@/lib/supabase';
@@ -56,7 +57,11 @@ export async function sendBookingConfirmationSmsForBooking(bookingId: number): P
     (booking as { custom_service_name?: string | null }).custom_service_name,
   );
   const serviceName = stripPromoFromConfirmationSmsServiceLabel(
-    smsServiceLabelEn(svc?.english_name, svc?.name, customForSms),
+    smsServiceLabelEn(
+      nullIfExcludedSmsServiceName(svc?.english_name),
+      nullIfExcludedSmsServiceName(svc?.name),
+      customForSms,
+    ),
   );
 
   const result = await sendBookingConfirmation({
