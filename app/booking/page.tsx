@@ -185,29 +185,6 @@ export default function BookingPage() {
 
   const paymentIntentFetchedRef = useRef(false); // Comment: Only fetch payment intent once per deposit visit (or on retry)
   const lastFetchedCheckoutRetryRef = useRef<number>(0);
-  const pendingBookingIdRef = useRef<number | null>(null); // Comment: Held-slot booking id from create-payment-intent/create-checkout-session
-  const isSubmittingRef = useRef(false); // Comment: Mirrors isSubmitting for use inside the unload listener closure
-
-  // Comment: Best-effort release of the held slot — fire-and-forget, never blocks the caller
-  const releasePendingBookingHold = (useBeacon = false) => {
-    const bookingId = pendingBookingIdRef.current;
-    if (bookingId == null) return;
-    pendingBookingIdRef.current = null;
-    const payload = JSON.stringify({ bookingId });
-    if (useBeacon && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-      navigator.sendBeacon(
-        '/api/stripe/release-booking-hold',
-        new Blob([payload], { type: 'application/json' }),
-      );
-      return;
-    }
-    void fetch('/api/stripe/release-booking-hold', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-      keepalive: true,
-    }).catch(() => {});
-  };
   const normalizedCustomerPhone = useMemo(
     () => customerPhone.replace(/\D/g, ''),
     [customerPhone]
@@ -217,39 +194,6 @@ export default function BookingPage() {
     [normalizedCustomerPhone]
   );
 
-  useEffect(() => {
-    isSubmittingRef.current = isSubmitting;
-  }, [isSubmitting]);
-
-  // Comment: Tab closed / browser back mid-checkout — release the held slot immediately.
-  // Skipped while isSubmitting: on success, confirmPayment does a full-page redirect to
-  // returnUrl, which also fires pagehide, and we must not cancel a booking that just got paid.
-  useEffect(() => {
-    const handleUnload = () => {
-      if (isSubmittingRef.current) return;
-      releasePendingBookingHold(true);
-    };
-    window.addEventListener('pagehide', handleUnload);
-    window.addEventListener('beforeunload', handleUnload);
-    return () => {
-      window.removeEventListener('pagehide', handleUnload);
-      window.removeEventListener('beforeunload', handleUnload);
-    };
-  }, []);
-
-  // Comment: Release a slot held by a previous checkout attempt (Stripe hosted-checkout
-  // fallback returns here via cancel_url with held_booking_id when the customer clicks back).
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const heldId = Number(params.get('held_booking_id'));
-    if (Number.isFinite(heldId) && heldId > 0) {
-      void fetch('/api/stripe/release-booking-hold', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: heldId }),
-      }).catch(() => {});
-    }
-  }, []);
 
   // Comment: Refs to enable smooth scrolling to each step section
   const dateSectionRef = useRef<HTMLElement | null>(null);
@@ -986,9 +930,6 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (step !== 'deposit') {
-      // Comment: User navigated away from the deposit step (e.g. clicked Back) without paying —
-      // release the held slot immediately rather than waiting out the pending TTL.
-      releasePendingBookingHold();
       setCheckoutClientSecret(null);
       setCheckoutError(null);
       setShowPaymentForm(false);
@@ -1024,9 +965,6 @@ export default function BookingPage() {
       : '';
     const depositAmt = combinedTotal * 0.2;
 
-    // Comment: A retry (checkoutRetry bump) means the previous attempt's held slot is stale.
-    releasePendingBookingHold();
-
     setCheckoutError(null);
     setCheckoutLoading(true);
     setCheckoutClientSecret(null);
@@ -1060,7 +998,6 @@ export default function BookingPage() {
           return;
         }
         if (data.client_secret) {
-          pendingBookingIdRef.current = typeof data.bookingId === 'number' ? data.bookingId : null;
           setCheckoutClientSecret(data.client_secret);
         } else {
           setCheckoutError('Payment form could not be created.');

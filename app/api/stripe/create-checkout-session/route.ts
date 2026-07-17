@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
-import { buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone, createPublicBooking } from "@/lib/data";
+import { buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
   assertPublicBookingSlotAvailable,
@@ -142,34 +142,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Comment: Hold the slot for the duration of checkout — without this, a second checkout
-    // (or an admin booking) created before the Stripe payment completes could pass the
-    // same slotCheck above and end up double-booked once both are confirmed.
-    let pendingBookingId: number | null = null;
-    try {
-      const pendingBooking = await createPublicBooking({
-        shopId: Number(shopId),
-        designerId: designerId != null ? Number(designerId) : null,
-        serviceId: serviceId != null ? Number(serviceId) : null,
-        day: Number(day),
-        timeLabel: String(timeLabel),
-        totalAmount: typeof totalAmount === "number" ? totalAmount : null,
-        depositAmount: null,
-        fullDate: dateStr,
-        customerId,
-        customServiceName: serviceName || null,
-        customServiceDuration: durationMinutes,
-        status: "pending",
-      });
-      pendingBookingId = Number(pendingBooking.id);
-    } catch (holdErr) {
-      console.error("Error holding booking slot before Stripe checkout:", holdErr);
-      return NextResponse.json(
-        { error: "Failed to reserve the selected time slot. Please try again." },
-        { status: 500 },
-      );
-    }
-
     const origin =
       request.headers.get("origin") ||
       process.env.NEXT_PUBLIC_SITE_URL ||
@@ -188,7 +160,6 @@ export async function POST(request: NextRequest) {
 
     const cancelUrl = new URL("/booking", origin);
     cancelUrl.searchParams.set("canceled", "1");
-    cancelUrl.searchParams.set("held_booking_id", String(pendingBookingId));
 
     const amountInCents =
       typeof depositAmount === "number"
@@ -222,7 +193,6 @@ export async function POST(request: NextRequest) {
       ],
       payment_intent_data: {
         metadata: {
-          booking_id: String(pendingBookingId),
           deposit_amount: amountInCents.toString(),
           shop_id: String(shopId),
           designer_id: designerId != null ? String(designerId) : "",
@@ -255,25 +225,15 @@ export async function POST(request: NextRequest) {
       sessionParams.cancel_url = cancelUrl.toString();
     }
 
-    let session: Stripe.Checkout.Session;
-    try {
-      session = await stripe.checkout.sessions.create(sessionParams);
-    } catch (stripeErr) {
-      // Comment: Release the held slot immediately instead of waiting out the pending TTL.
-      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", pendingBookingId);
-      throw stripeErr;
-    }
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     if (useEmbedded && session.client_secret) {
       return NextResponse.json(
-        { client_secret: session.client_secret, bookingId: pendingBookingId },
+        { client_secret: session.client_secret },
         { status: 200 },
       );
     }
-    return NextResponse.json(
-      { url: session.url ?? null, bookingId: pendingBookingId },
-      { status: 200 },
-    );
+    return NextResponse.json({ url: session.url ?? null }, { status: 200 });
   } catch (error: any) {
     console.error("Error creating Stripe checkout session:", error);
     return NextResponse.json(
