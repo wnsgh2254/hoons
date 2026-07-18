@@ -10,6 +10,10 @@ export function mapSaleRecordToDetailData(sale: any, customerNameFallback = ''):
   return {
     id: sale.id,
     customer_id: sale.customer_id ?? 0,
+    prepaid_customer_id:
+      sale.prepaid_customer_id != null && !Number.isNaN(Number(sale.prepaid_customer_id))
+        ? Number(sale.prepaid_customer_id)
+        : null,
     shop_id: sale.shop_id ?? null,
     booking_id: sale.booking_id ?? null,
     booking_deposit_paid: resolvePaidDepositFromSaleRecord(sale),
@@ -38,6 +42,7 @@ export function mapSaleRecordToDetailData(sale: any, customerNameFallback = ''):
       manager: i.manager || null,
       sales_classification: i.sales_classification || null,
       prepaid_deduction: Number(i.prepaid_deduction) || 0,
+      prepaid_credit_points: Math.round(Number(i.prepaid_credit_points || 0)),
     })),
     created_by: sale.created_by,
     created_at: sale.created_at,

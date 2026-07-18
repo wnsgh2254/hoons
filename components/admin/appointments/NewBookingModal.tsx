@@ -22,12 +22,32 @@ import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import { normalizeBookingDepositPaid } from '@/lib/booking-deposit-paid';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
 
+/** Normalize service labels for equality (not substring) matching. */
+function normalizeServiceLabel(n: string): string {
+  return n
+    .replace(/\s*\(card\)\s*/gi, '')
+    .replace(/\s*\(cash\)\s*/gi, '')
+    .replace(/\s*\+\s*/g, '+')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function sameServiceIdSet(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort((x, y) => x - y);
+  const sortedB = [...b].sort((x, y) => x - y);
+  return sortedA.every((id, i) => id === sortedB[i]);
+}
+
+/**
+ * Map an existing booking's service_id / custom_service_name onto modal checkboxes.
+ * Exact label match only — substring matching wrongly maps "펌" → "커트+다운펌".
+ */
 function resolveEditModalServiceIds(
   booking: BookingWithRelations,
   categoryServices: { id: number; name: string }[],
 ): number[] {
-  const normalize = (n: string) =>
-    n.replace(/\s*\(card\)\s*/gi, '').replace(/\s*\(cash\)\s*/gi, '').trim().toLowerCase();
   const ids: number[] = [];
   const seen = new Set<number>();
   const tryAdd = (serviceId: number | null | undefined) => {
@@ -42,13 +62,9 @@ function resolveEditModalServiceIds(
   if (raw) {
     const parts = raw.split(/\s*(?:\/|,)\s*/).map((p) => p.trim()).filter(Boolean);
     for (const part of parts) {
-      const pLow = part.toLowerCase();
-      const found = categoryServices.find(
-        (s) =>
-          normalize(s.name) === pLow ||
-          normalize(s.name).includes(pLow) ||
-          pLow.includes(normalize(s.name)),
-      );
+      const target = normalizeServiceLabel(part);
+      if (!target) continue;
+      const found = categoryServices.find((s) => normalizeServiceLabel(s.name) === target);
       if (found) tryAdd(found.id);
     }
   }
@@ -264,6 +280,8 @@ export default function NewBookingModal({
   const effectiveLoadingOptions =
     newBookingLoadingOptions || selfLoadingBaseOptions || selfLoadingDesigners;
   const editPrefillDoneForIdRef = useRef<number | null>(null);
+  // Snapshot of service checkboxes resolved at edit-open — used to avoid overwriting unchanged services.
+  const initialEditServiceIdsRef = useRef<number[]>([]);
   // Services: parent passes booking_modal_services via newBookingServices; otherwise self-load same API
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(() => {
@@ -381,6 +399,7 @@ export default function NewBookingModal({
     ]);
     // Comment: Clear service checkboxes until newBookingServices effect resolves IDs from custom_service_name / service_id
     setSlotServiceSelections([[]]);
+    initialEditServiceIdsRef.current = [];
 
     const note = (b as { memo?: string | null; note?: string | null }).memo ?? (b as { note?: string | null }).note ?? '';
     setMemo(note || '');
@@ -406,6 +425,7 @@ export default function NewBookingModal({
     const b = editingBookingRef.current;
     if (!b?.id) return;
     const svcIds = resolveEditModalServiceIds(b, services);
+    initialEditServiceIdsRef.current = svcIds;
     setSlotServiceSelections((prev) => {
       if ((prev[0] || []).length > 0) return prev;
       return svcIds.length > 0 ? [svcIds] : prev;
@@ -605,6 +625,7 @@ export default function NewBookingModal({
     setCustomerStats({});
     setSlotServiceSelections([[]]);
     editPrefillDoneForIdRef.current = null;
+    initialEditServiceIdsRef.current = [];
   };
 
   const handleCancel = () => {
@@ -769,12 +790,15 @@ export default function NewBookingModal({
             return Number.isFinite(n) && n > 0 ? n : null;
           })(),
         };
-        // Comment: Only overwrite service fields when admin explicitly picks new services
-        if (selectedServiceIds.length > 0) {
+        // Comment: Only overwrite service fields when admin changes the service selection.
+        // Leaving checkboxes as resolved (or empty) keeps the original custom_service_name (e.g. 펌).
+        const servicesChanged = !sameServiceIdSet(
+          selectedServiceIds,
+          initialEditServiceIdsRef.current,
+        );
+        if (servicesChanged && selectedServiceIds.length > 0) {
           patchBody.service_id = null;
           if (serviceSummary) patchBody.custom_service_name = serviceSummary;
-        } else if (serviceSummary) {
-          patchBody.custom_service_name = serviceSummary;
         }
         const resPatch = await fetch(`/api/appointment/${editingBooking.id}`, {
           method: 'PATCH',

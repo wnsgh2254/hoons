@@ -170,11 +170,14 @@ export interface SalesDetailItem {
   manager: string | null;
   sales_classification: string | null;
   prepaid_deduction: number;
+  prepaid_credit_points?: number;
 }
 
 export interface SalesDetailData {
   id: number;
   customer_id: number;
+  /** Customer whose prepaid balance was deducted (may differ from customer_id). */
+  prepaid_customer_id?: number | null;
   shop_id?: number | null;
   booking_id?: number | null;
   /** Actual deposit paid on linked booking (bookings.deposit_paid) — same value as D badge */

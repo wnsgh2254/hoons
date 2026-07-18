@@ -65,6 +65,40 @@ export function getSalePrepaidDeductionTotal(
   );
 }
 
+/**
+ * Resolve whose prepaid balance was/will be used.
+ * Prefer explicit prepaid_customer_id; fall back to the sale customer.
+ */
+export function resolvePrepaidOwnerCustomerId(
+  prepaidCustomerId: unknown,
+  saleCustomerId: unknown,
+): number | null {
+  if (
+    prepaidCustomerId != null &&
+    prepaidCustomerId !== '' &&
+    !Number.isNaN(Number(prepaidCustomerId))
+  ) {
+    return Number(prepaidCustomerId);
+  }
+  if (
+    saleCustomerId != null &&
+    saleCustomerId !== '' &&
+    !Number.isNaN(Number(saleCustomerId))
+  ) {
+    return Number(saleCustomerId);
+  }
+  return null;
+}
+
+/** Persist owner only when a prepaid deduction exists. */
+export function prepaidCustomerIdForStorage(
+  ownerCustomerId: number | null,
+  deductionTotal: number,
+): number | null {
+  if (ownerCustomerId == null || roundToCents(deductionTotal) <= 0) return null;
+  return ownerCustomerId;
+}
+
 /** Gross line amount before prepaid (unit × qty − discount). */
 export function getSaleLineGrossAmount(item: {
   amount?: number | null;

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   getSaleIssuedPrepaidCreditLines,
   inferPrepaidCreditPointsFromSaleItem,
+  prepaidCustomerIdForStorage,
+  resolvePrepaidOwnerCustomerId,
 } from '@/lib/sales-payment-utils';
 
 describe('sales prepaid reversal', () => {
@@ -40,5 +42,18 @@ describe('sales prepaid reversal', () => {
     ]);
 
     expect(lines).toEqual([{ passLabel: '1000볼', points: 1000 }]);
+  });
+
+  it('resolves prepaid owner from explicit id or sale customer', () => {
+    expect(resolvePrepaidOwnerCustomerId(42, 10)).toBe(42);
+    expect(resolvePrepaidOwnerCustomerId(null, 10)).toBe(10);
+    expect(resolvePrepaidOwnerCustomerId('', 10)).toBe(10);
+    expect(resolvePrepaidOwnerCustomerId(undefined, undefined)).toBeNull();
+  });
+
+  it('stores prepaid_customer_id only when deduction exists', () => {
+    expect(prepaidCustomerIdForStorage(42, 100)).toBe(42);
+    expect(prepaidCustomerIdForStorage(42, 0)).toBeNull();
+    expect(prepaidCustomerIdForStorage(null, 100)).toBeNull();
   });
 });

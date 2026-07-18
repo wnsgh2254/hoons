@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createPrepaidPass } from '@/lib/data';
 import { roundToCents } from '@/lib/utils';
 
 const normalizeName = (value: string | null | undefined) => String(value || '').trim().toLowerCase();
@@ -128,6 +129,11 @@ export async function adjustPrepaidBalance(
     if (pointsDelta < 0) {
       throw new Error('사용 가능한 정액권이 없습니다.');
     }
+    // Restore with no active pass: recreate so refunded balance is not lost silently.
+    await createPrepaidPass({
+      customerId: params.customerId,
+      points: pointsDelta,
+    });
     return;
   }
 
@@ -138,7 +144,13 @@ export async function adjustPrepaidBalance(
 
   if (pointsDelta > 0) {
     const target = targetRows[0];
-    if (!target) return;
+    if (!target) {
+      await createPrepaidPass({
+        customerId: params.customerId,
+        points: pointsDelta,
+      });
+      return;
+    }
     const nextPoints = Math.max(0, Number(target.points || 0) + pointsDelta);
     const { error: updateError } = await supabase
       .from('prepaid_passes')

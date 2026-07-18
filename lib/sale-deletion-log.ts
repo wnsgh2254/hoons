@@ -10,6 +10,7 @@ type SaleRow = {
   id: number;
   booking_id?: number | null;
   customer_id?: number | null;
+  prepaid_customer_id?: number | null;
   customer_name?: string | null;
   shop_id?: number | null;
   sales_date?: string | null;

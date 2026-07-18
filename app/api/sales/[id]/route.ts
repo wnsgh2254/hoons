@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { issuePrepaidPassFromSale } from '@/lib/data';
 import {
   adjustInventoryStockForSaleItem,
   adjustPrepaidBalance,
@@ -9,6 +10,10 @@ import { archiveSaleDeletion } from '@/lib/sale-deletion-log';
 import {
   getSaleIssuedPrepaidCreditLines,
   getSalePrepaidDeductionTotal,
+  normalizePaymentAmounts,
+  prepaidCustomerIdForStorage,
+  resolvePrepaidOwnerCustomerId,
+  resolveSalePaymentMethod,
 } from '@/lib/sales-payment-utils';
 import { restoreBookingAfterSaleDelete } from '@/lib/sale-booking-link';
 import { resolveBookingDepositPaidForSale } from '@/lib/booking-deposit-paid';
@@ -17,10 +22,7 @@ import {
   sumServiceGrossFromSaleItems,
 } from '@/lib/sale-paid-deposit';
 import { cashTenderedForStorage } from '@/lib/sales-cash-payment';
-import {
-  normalizePaymentAmounts,
-  resolveSalePaymentMethod,
-} from '@/lib/sales-payment-utils';
+import { roundToCents } from '@/lib/utils';
 
 export async function GET(
   request: NextRequest,
@@ -116,30 +118,23 @@ export async function DELETE(
     }
 
     let linkedBookingId: number | null = null;
+    let prepaidToRestore = 0;
+    let prepaidOwnerId: number | null = null;
+    let issuedPrepaidLines: Array<{ passLabel: string; points: number }> = [];
+    let saleCustomerId: number | null = null;
+
     try {
       const archived = await archiveSaleDeletion(supabase, saleId);
       linkedBookingId = archived.bookingId;
 
-      const customerId = archived.sale.customer_id != null ? Number(archived.sale.customer_id) : null;
-
-      const prepaidToRestore = getSalePrepaidDeductionTotal(archived.sale.sales_items || []);
-      if (prepaidToRestore > 0 && customerId != null) {
-        await adjustPrepaidBalance(supabase, {
-          customerId,
-          pointsDelta: prepaidToRestore,
-        });
-      }
-
-      const issuedPrepaidLines = getSaleIssuedPrepaidCreditLines(archived.sale.sales_items || []);
-      if (issuedPrepaidLines.length > 0 && customerId != null) {
-        for (const line of issuedPrepaidLines) {
-          await adjustPrepaidBalance(supabase, {
-            customerId,
-            passLabel: line.passLabel,
-            pointsDelta: -line.points,
-          });
-        }
-      }
+      saleCustomerId =
+        archived.sale.customer_id != null ? Number(archived.sale.customer_id) : null;
+      prepaidOwnerId = resolvePrepaidOwnerCustomerId(
+        (archived.sale as { prepaid_customer_id?: number | null }).prepaid_customer_id,
+        archived.sale.customer_id,
+      );
+      prepaidToRestore = getSalePrepaidDeductionTotal(archived.sale.sales_items || []);
+      issuedPrepaidLines = getSaleIssuedPrepaidCreditLines(archived.sale.sales_items || []);
     } catch (archiveError: any) {
       console.error('Error archiving sale before delete:', archiveError);
       return NextResponse.json(
@@ -148,7 +143,7 @@ export async function DELETE(
       );
     }
 
-    // Delete sales_items first (child rows)
+    // Delete sale rows before balance restore so a failed restore cannot double-refund on retry.
     const { error: itemsError } = await supabase
       .from('sales_items')
       .delete()
@@ -162,7 +157,6 @@ export async function DELETE(
       );
     }
 
-    // Then delete the sales header
     const { error: headerError } = await supabase
       .from('sales')
       .delete()
@@ -173,6 +167,37 @@ export async function DELETE(
       return NextResponse.json(
         { error: '판매 삭제에 실패했습니다.' },
         { status: 500 }
+      );
+    }
+
+    try {
+      if (prepaidToRestore > 0 && prepaidOwnerId != null) {
+        await adjustPrepaidBalance(supabase, {
+          customerId: prepaidOwnerId,
+          pointsDelta: prepaidToRestore,
+        });
+      }
+
+      if (issuedPrepaidLines.length > 0 && saleCustomerId != null) {
+        for (const line of issuedPrepaidLines) {
+          await adjustPrepaidBalance(supabase, {
+            customerId: saleCustomerId,
+            passLabel: line.passLabel,
+            pointsDelta: -line.points,
+          });
+        }
+      }
+    } catch (prepaidRestoreError: any) {
+      console.error('Sale deleted but prepaid balance restore failed:', prepaidRestoreError);
+      return NextResponse.json(
+        {
+          error:
+            prepaidRestoreError?.message ||
+            '판매는 삭제되었으나 정액권 잔액 복구에 실패했습니다. 잔액을 수동으로 확인해 주세요.',
+          sale_deleted: true,
+          restored_booking_id: linkedBookingId,
+        },
+        { status: 500 },
       );
     }
 
@@ -233,7 +258,7 @@ export async function PUT(
 
     const { data: existingSale, error: existingSaleError } = await supabase
       .from('sales')
-      .select('shop_id, booking_id')
+      .select('shop_id, booking_id, customer_id, prepaid_customer_id')
       .eq('id', Number(id))
       .maybeSingle();
 
@@ -261,20 +286,29 @@ export async function PUT(
       );
     }
 
-    // Pre-calculate prepaid deduction delta for edit mode
     const { data: oldItems } = await supabase
       .from('sales_items')
-      .select('item_type, item_name, quantity, prepaid_deduction')
+      .select(
+        'item_type, item_name, quantity, prepaid_deduction, prepaid_credit_points, amount, unit_price, discount',
+      )
       .eq('sale_id', Number(id));
-    const oldPrepaidDeductionTotal = (oldItems || []).reduce(
-      (sum: number, row: any) => sum + Number(row.prepaid_deduction || 0),
-      0,
+
+    const oldPrepaidDeductionTotal = getSalePrepaidDeductionTotal(oldItems || []);
+    const newPrepaidDeductionTotal = getSalePrepaidDeductionTotal(
+      (items || []).map((row: any) => ({ prepaid_deduction: row.prepaid_deduction })),
     );
-    const newPrepaidDeductionTotal = (items || []).reduce(
-      (sum: number, row: any) => sum + Number(row.prepaid_deduction || 0),
-      0,
+    const oldPrepaidOwnerId = resolvePrepaidOwnerCustomerId(
+      existingSale.prepaid_customer_id,
+      existingSale.customer_id,
     );
-    const prepaidDelta = newPrepaidDeductionTotal - oldPrepaidDeductionTotal;
+    const newPrepaidOwnerId = resolvePrepaidOwnerCustomerId(prepaid_customer_id, customer_id);
+    const storedPrepaidCustomerId = prepaidCustomerIdForStorage(
+      newPrepaidOwnerId,
+      newPrepaidDeductionTotal,
+    );
+
+    const oldIssuedPrepaidLines = getSaleIssuedPrepaidCreditLines(oldItems || []);
+
     const oldProductQuantityMap = new Map<string, number>();
     const newProductQuantityMap = new Map<string, number>();
     const addQuantity = (map: Map<string, number>, itemName: string, quantity: number) => {
@@ -303,22 +337,30 @@ export async function PUT(
       newPrepaidDeductionTotal,
       payment_method,
     );
-    const prepaidCustomerId =
-      prepaid_customer_id != null &&
-      prepaid_customer_id !== '' &&
-      !Number.isNaN(Number(prepaid_customer_id))
-        ? Number(prepaid_customer_id)
-        : Number(customer_id);
 
-    if (prepaidDelta > 0) {
-      try {
-        await assertSufficientPrepaidBalance(supabase, prepaidCustomerId, prepaidDelta);
-      } catch (prepaidValidationError: any) {
-        return NextResponse.json(
-          { error: prepaidValidationError?.message || '정액권 잔액을 확인할 수 없습니다.' },
-          { status: 400 },
+    // Validate additional prepaid deduction needed after restoring the old amount when same owner.
+    try {
+      if (
+        oldPrepaidOwnerId != null &&
+        newPrepaidOwnerId != null &&
+        oldPrepaidOwnerId === newPrepaidOwnerId
+      ) {
+        const prepaidDelta = roundToCents(newPrepaidDeductionTotal - oldPrepaidDeductionTotal);
+        if (prepaidDelta > 0) {
+          await assertSufficientPrepaidBalance(supabase, newPrepaidOwnerId, prepaidDelta);
+        }
+      } else if (newPrepaidDeductionTotal > 0 && newPrepaidOwnerId != null) {
+        await assertSufficientPrepaidBalance(
+          supabase,
+          newPrepaidOwnerId,
+          newPrepaidDeductionTotal,
         );
       }
+    } catch (prepaidValidationError: any) {
+      return NextResponse.json(
+        { error: prepaidValidationError?.message || '정액권 잔액을 확인할 수 없습니다.' },
+        { status: 400 },
+      );
     }
 
     const linkedBookingIdForDeposit =
@@ -356,6 +398,7 @@ export async function PUT(
         bank_transfer_amount: normalizedPayments.bank_transfer,
         point_accumulation: point_accumulation || 0,
         memo: memo || null,
+        prepaid_customer_id: storedPrepaidCustomerId,
       })
       .eq('id', Number(id))
       .select()
@@ -438,11 +481,93 @@ export async function PUT(
       });
     }
 
-    if (prepaidDelta !== 0) {
-      await adjustPrepaidBalance(supabase, {
-        customerId: prepaidCustomerId,
-        pointsDelta: -prepaidDelta,
-      });
+    try {
+      // Prepaid deduction: restore old owner, then apply new deduction to new owner.
+      if (
+        oldPrepaidOwnerId != null &&
+        newPrepaidOwnerId != null &&
+        oldPrepaidOwnerId === newPrepaidOwnerId
+      ) {
+        const prepaidDelta = roundToCents(newPrepaidDeductionTotal - oldPrepaidDeductionTotal);
+        if (prepaidDelta !== 0) {
+          await adjustPrepaidBalance(supabase, {
+            customerId: newPrepaidOwnerId,
+            pointsDelta: -prepaidDelta,
+          });
+        }
+      } else {
+        if (oldPrepaidDeductionTotal > 0 && oldPrepaidOwnerId != null) {
+          await adjustPrepaidBalance(supabase, {
+            customerId: oldPrepaidOwnerId,
+            pointsDelta: oldPrepaidDeductionTotal,
+          });
+        }
+        if (newPrepaidDeductionTotal > 0 && newPrepaidOwnerId != null) {
+          await adjustPrepaidBalance(supabase, {
+            customerId: newPrepaidOwnerId,
+            pointsDelta: -newPrepaidDeductionTotal,
+          });
+        }
+      }
+
+      // Prepaid pass sales (credits): only adjust when issued amounts or sale customer change.
+      const oldCreditCustomerId =
+        existingSale.customer_id != null ? Number(existingSale.customer_id) : Number(customer_id);
+      const newCreditCustomerId = Number(customer_id);
+      const newIssuedByRaw = (items as any[])
+        .filter((rawItem) => String(rawItem.type || '') === 'prepaid')
+        .map((rawItem) => {
+          const qty = Math.max(1, Math.round(Number(rawItem.quantity || 1)));
+          const perCredit = Math.round(
+            Number(rawItem.prepaid_credit_points ?? rawItem.prepaid_points ?? 0),
+          );
+          return {
+            passLabel: String(rawItem.name || 'Prepaid').trim(),
+            points: perCredit * qty,
+            expiresAt:
+              rawItem.prepaid_expires_at != null && String(rawItem.prepaid_expires_at).trim() !== ''
+                ? String(rawItem.prepaid_expires_at).trim()
+                : null,
+            raw: rawItem,
+          };
+        })
+        .filter((line) => line.points > 0);
+
+      const creditsChanged =
+        oldCreditCustomerId !== newCreditCustomerId ||
+        oldIssuedPrepaidLines.length !== newIssuedByRaw.length ||
+        oldIssuedPrepaidLines.some((oldLine, idx) => {
+          const next = newIssuedByRaw[idx];
+          return !next || oldLine.passLabel !== next.passLabel || oldLine.points !== next.points;
+        });
+
+      if (creditsChanged) {
+        for (const line of oldIssuedPrepaidLines) {
+          await adjustPrepaidBalance(supabase, {
+            customerId: oldCreditCustomerId,
+            passLabel: line.passLabel,
+            pointsDelta: -line.points,
+          });
+        }
+        for (const line of newIssuedByRaw) {
+          await issuePrepaidPassFromSale({
+            customerId: newCreditCustomerId,
+            passLabel: line.passLabel,
+            creditPoints: line.points,
+            expiresAt: line.expiresAt,
+          });
+        }
+      }
+    } catch (prepaidReconcileError: any) {
+      console.error('Error reconciling prepaid balances on sale edit:', prepaidReconcileError);
+      return NextResponse.json(
+        {
+          error:
+            prepaidReconcileError?.message ||
+            '판매는 수정되었으나 정액권 잔액 조정에 실패했습니다. 잔액을 확인해 주세요.',
+        },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json(

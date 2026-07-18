@@ -179,11 +179,13 @@ export default function SalesRegistrationModal({
   };
 
   useEffect(() => {
+    // Edit mode restores prepaid owner from the sale record — do not overwrite with sale customer.
+    if (editSaleId) return;
     if (customer?.id) {
       setPrepaidCustomerId(customer.id);
       setPrepaidCustomerName(customer.name || '');
     }
-  }, [customer?.id, customer?.name]);
+  }, [customer?.id, customer?.name, editSaleId]);
 
   const getEffectivePrepaidBalance = useCallback(
     (liveBalance?: number): number => {
@@ -509,6 +511,10 @@ export default function SalesRegistrationModal({
           manager: item.manager || '',
           salesClassification: item.sales_classification || '',
           prepaidDeduction: item.prepaid_deduction || 0,
+          prepaidCreditPoints:
+            item.item_type === 'prepaid'
+              ? Math.round(Number(item.prepaid_credit_points || 0))
+              : undefined,
         }));
         setSalesItems(mappedItems);
         setMemo(initialData.memo || '');
@@ -520,6 +526,17 @@ export default function SalesRegistrationModal({
         const newDiscountAmount = mappedItems.reduce((sum, item) => sum + item.discount, 0);
         const newPrepaidDeduction = mappedItems.reduce((sum, item) => sum + item.prepaidDeduction, 0);
         const gross = newSalesAmount - newDiscountAmount;
+        setPrepaidCustomerId(
+          initialData.prepaid_customer_id != null
+            ? Number(initialData.prepaid_customer_id)
+            : customer?.id ?? null,
+        );
+        if (
+          initialData.prepaid_customer_id == null ||
+          Number(initialData.prepaid_customer_id) === customer?.id
+        ) {
+          setPrepaidCustomerName(customer?.name || '');
+        }
 
         // Fallback: legacy sales saved with payment_method but no per-method amount.
         // Treat them as fully paid via that method so edit view mirrors the original payment.
@@ -805,9 +822,9 @@ export default function SalesRegistrationModal({
           sales_date: salesDate,
           sales_time: salesTime,
           prepaid_customer_id:
-            prepaidCustomerId && prepaidCustomerId !== customer.id
-              ? prepaidCustomerId
-              : undefined,
+            prepaidDeductionAmount > 0
+              ? prepaidCustomerId ?? customer.id
+              : null,
           paid_deposit: depositCredit,
           cash_tendered: cashTendered,
         }),

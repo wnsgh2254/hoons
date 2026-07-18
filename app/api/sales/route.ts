@@ -14,6 +14,8 @@ import {
 import { cashTenderedForStorage } from '@/lib/sales-cash-payment';
 import {
   normalizePaymentAmounts,
+  prepaidCustomerIdForStorage,
+  resolvePrepaidOwnerCustomerId,
   resolveSalePaymentMethod,
 } from '@/lib/sales-payment-utils';
 
@@ -197,11 +199,11 @@ export async function POST(request: NextRequest) {
       payment_method,
     );
     const prepaidCustomerId =
-      prepaid_customer_id != null &&
-      prepaid_customer_id !== '' &&
-      !Number.isNaN(Number(prepaid_customer_id))
-        ? Number(prepaid_customer_id)
-        : Number(customer_id);
+      resolvePrepaidOwnerCustomerId(prepaid_customer_id, customer_id) ?? Number(customer_id);
+    const storedPrepaidCustomerId = prepaidCustomerIdForStorage(
+      prepaidCustomerId,
+      totalPrepaidDeductionFromRequest,
+    );
 
     if (totalPrepaidDeductionFromRequest > 0) {
       try {
@@ -249,6 +251,7 @@ export async function POST(request: NextRequest) {
         bank_transfer_amount: normalizedPayments.bank_transfer,
         point_accumulation: point_accumulation || 0,
         memo: memo || null,
+        prepaid_customer_id: storedPrepaidCustomerId,
       })
       .select()
       .single();
