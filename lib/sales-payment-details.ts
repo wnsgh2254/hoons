@@ -219,3 +219,103 @@ export function recalculatePaymentDetailColumnTotals(
     total: roundToCents(totals.total),
   };
 }
+
+function addScaledBucket(
+  target: PaymentDetailBucket,
+  source: PaymentDetailBucket,
+  serviceShare: number,
+  productShare: number,
+  membershipShare: number,
+): void {
+  const service = roundToCents(source.service * serviceShare);
+  const product = roundToCents(source.product * productShare);
+  const membership = roundToCents(source.membership * membershipShare);
+  target.service += service;
+  target.product += product;
+  target.membership += membership;
+  target.total += roundToCents(service + product + membership);
+}
+
+export type DesignerTypeAmounts = {
+  service: number;
+  product: number;
+  membership: number;
+};
+
+/**
+ * Attribute a sale's payment-method breakdown to designers by their share of
+ * service / product / membership line amounts. Prepaid is assigned from each
+ * item's designer (not proportional). Deposit should be applied separately.
+ */
+export function allocateSalePaymentDetailsToDesigners(
+  sale: Parameters<typeof applySaleToPaymentDetails>[1],
+  designerAmounts: Map<number, DesignerTypeAmounts>,
+  options?: {
+    /** When set, prepaid_pass is taken from per-designer prepaid deductions instead of proportional split. */
+    designerPrepaid?: Map<number, DesignerTypeAmounts>;
+  },
+): Map<number, PaymentDetailsBreakdown> {
+  const saleDetails = emptyPaymentDetails();
+  applySaleToPaymentDetails(saleDetails, sale);
+
+  const totals: DesignerTypeAmounts = { service: 0, product: 0, membership: 0 };
+  designerAmounts.forEach((amounts) => {
+    totals.service += amounts.service;
+    totals.product += amounts.product;
+    totals.membership += amounts.membership;
+  });
+
+  const result = new Map<number, PaymentDetailsBreakdown>();
+  const methodKeys = ['cash', 'card', 'bank_transfer'] as const;
+
+  designerAmounts.forEach((amounts, designerId) => {
+    const details = emptyPaymentDetails();
+    const serviceShare = totals.service > 0 ? amounts.service / totals.service : 0;
+    const productShare = totals.product > 0 ? amounts.product / totals.product : 0;
+    const membershipShare =
+      totals.membership > 0 ? amounts.membership / totals.membership : 0;
+
+    methodKeys.forEach((key) => {
+      addScaledBucket(
+        details[key],
+        saleDetails[key],
+        serviceShare,
+        productShare,
+        membershipShare,
+      );
+    });
+
+    const prepaid = options?.designerPrepaid?.get(designerId);
+    if (prepaid) {
+      details.prepaid_pass.service += roundToCents(prepaid.service);
+      details.prepaid_pass.product += roundToCents(prepaid.product);
+      details.prepaid_pass.membership += roundToCents(prepaid.membership);
+      details.prepaid_pass.total += roundToCents(
+        prepaid.service + prepaid.product + prepaid.membership,
+      );
+    }
+
+    result.set(designerId, details);
+  });
+
+  return result;
+}
+
+export function mergePaymentDetails(
+  target: PaymentDetailsBreakdown,
+  source: PaymentDetailsBreakdown,
+): void {
+  const keys = [
+    'cash',
+    'card',
+    'bank_transfer',
+    'prepaid_pass',
+    'deposit',
+  ] as const;
+  keys.forEach((key) => {
+    target[key].service += source[key].service;
+    target[key].product += source[key].product;
+    target[key].membership += source[key].membership;
+    target[key].total += source[key].total;
+  });
+}

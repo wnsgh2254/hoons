@@ -1176,6 +1176,94 @@ function StaffSalesRowBlock({
   );
 }
 
+function emptyStaffPaymentDetails() {
+  return {
+    cash: { service: 0, product: 0, membership: 0, total: 0 },
+    card: { service: 0, product: 0, membership: 0, total: 0 },
+    bank_transfer: { service: 0, product: 0, membership: 0, total: 0 },
+    prepaid_pass: { service: 0, product: 0, membership: 0, total: 0 },
+    deposit: { service: 0, product: 0, membership: 0, total: 0 },
+    columnTotals: { service: 0, product: 0, membership: 0, total: 0 },
+  };
+}
+
+function mergeStaffPaymentDetails(target: any, source: any) {
+  if (!source) return;
+  (['cash', 'card', 'bank_transfer', 'prepaid_pass', 'deposit', 'columnTotals'] as const).forEach(
+    (key) => {
+      const src = source[key];
+      if (!src) return;
+      target[key].service += Number(src.service || 0);
+      target[key].product += Number(src.product || 0);
+      target[key].membership += Number(src.membership || 0);
+      target[key].total += Number(src.total || 0);
+    },
+  );
+}
+
+// Comment: Payment-method breakdown per staff (same layout as 전체 매출)
+function StaffPaymentDetailsRowBlock({
+  staff,
+  nameLabel,
+}: {
+  staff: any;
+  nameLabel: string;
+}) {
+  const pd = staff.paymentDetails || emptyStaffPaymentDetails();
+  const rows: Array<{ label: string; bucket: any; bold?: boolean }> = [
+    { label: '현금', bucket: pd.cash },
+    { label: '카드', bucket: pd.card },
+    { label: '계좌 이체', bucket: pd.bank_transfer },
+    { label: '정액권', bucket: pd.prepaid_pass },
+    { label: '디파짓', bucket: pd.deposit },
+    { label: '합계', bucket: pd.columnTotals, bold: true },
+  ];
+
+  return (
+    <>
+      {rows.map((row, index) => (
+        <tr
+          key={`${nameLabel}-${row.label}`}
+          className={
+            row.bold
+              ? 'bg-gray-50 border-t-2 border-gray-300'
+              : 'border-b border-gray-100 hover:bg-gray-50/50'
+          }
+        >
+          {index === 0 ? (
+            <td className="px-4 py-2 font-medium" rowSpan={rows.length}>
+              {nameLabel}
+            </td>
+          ) : null}
+          <td
+            className={`px-4 py-2 ${row.bold ? 'font-bold' : 'font-medium'} ${
+              index > 0 ? '!border-l !border-gray-200' : ''
+            }`}
+          >
+            {row.label}
+          </td>
+          <td className={`px-4 py-2 text-center tabular-nums ${row.bold ? 'font-semibold' : ''}`}>
+            {formatAudNumber(row.bucket?.service ?? 0)}
+          </td>
+          <td className={`px-4 py-2 text-center tabular-nums ${row.bold ? 'font-semibold' : ''}`}>
+            {formatAudNumber(row.bucket?.product ?? 0)}
+          </td>
+          <td className={`px-4 py-2 text-center tabular-nums ${row.bold ? 'font-semibold' : ''}`}>
+            {formatAudNumber(row.bucket?.membership ?? 0)}
+          </td>
+          <td
+            className={`px-4 py-2 text-center tabular-nums ${
+              row.bold ? 'font-bold' : 'font-semibold'
+            }`}
+          >
+            {formatAudNumber(row.bucket?.total ?? 0)}
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
 function aggregateStaffSales(staffList: any[]) {
   const aggregated = {
     sales: {
@@ -1198,6 +1286,7 @@ function aggregateStaffSales(staffList: any[]) {
     deposit: {
       service: { amount: 0 },
     },
+    paymentDetails: emptyStaffPaymentDetails(),
   };
 
   staffList.forEach((staff) => {
@@ -1214,6 +1303,7 @@ function aggregateStaffSales(staffList: any[]) {
     aggregated.total.service.amount += staff.total.service.amount;
     aggregated.total.product.amount += staff.total.product.amount;
     aggregated.deposit.service.amount += staff.deposit?.service?.amount ?? 0;
+    mergeStaffPaymentDetails(aggregated.paymentDetails, staff.paymentDetails);
   });
 
   aggregated.sales.subtotal =
@@ -1400,6 +1490,51 @@ function ByStaffSalesTab({
                         nameLabel="전체"
                       />
                     </React.Fragment>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm [&_td]:whitespace-nowrap [&_td]:border-l [&_td]:border-gray-200 [&_th]:whitespace-nowrap [&_th]:border-l [&_th]:border-gray-200 [&_td:first-child]:border-l-0 [&_th:first-child]:border-l-0">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[100px]">
+                      직원
+                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wider w-[120px]">
+                      결제 방법
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      서비스
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      제품
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider">
+                      정액권
+                    </th>
+                    <th className="px-4 py-2 text-center text-xs font-bold text-gray-800 uppercase tracking-wider w-[120px]">
+                      합계
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffSalesData.map((staff) => (
+                    <StaffPaymentDetailsRowBlock
+                      key={`pay-${staff.designerId}`}
+                      staff={staff}
+                      nameLabel={staff.name}
+                    />
+                  ))}
+                  {dateMode === 'period' && staffSalesData.length > 0 && (
+                    <StaffPaymentDetailsRowBlock
+                      key="staff-payment-period-total"
+                      staff={aggregateStaffSales(staffSalesData)}
+                      nameLabel="전체"
+                    />
                   )}
                 </tbody>
               </table>

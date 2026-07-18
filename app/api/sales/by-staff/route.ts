@@ -8,6 +8,13 @@ import {
   capPaidDepositToService,
   resolvePaidDepositFromSaleRecord,
 } from '@/lib/sale-paid-deposit';
+import {
+  allocateSalePaymentDetailsToDesigners,
+  emptyPaymentDetails,
+  mergePaymentDetails,
+  recalculatePaymentDetailColumnTotals,
+  type PaymentDetailsBreakdown,
+} from '@/lib/sales-payment-details';
 import { supabase } from '@/lib/supabase';
 import { roundToCents } from '@/lib/utils';
 
@@ -22,6 +29,10 @@ const SALES_HEADER_SELECT = `
   sales_date,
   booking_id,
   paid_deposit,
+  cash_amount,
+  card_amount,
+  bank_transfer_amount,
+  total_amount,
   bookings:booking_id ( deposit_paid, designer_id )
 `;
 
@@ -131,6 +142,7 @@ type StaffSalesData = {
   deposit: {
     service: { amount: number };
   };
+  paymentDetails: PaymentDetailsBreakdown;
 };
 
 export async function GET(request: NextRequest) {
@@ -285,6 +297,7 @@ export async function GET(request: NextRequest) {
           deposit: {
             service: { amount: 0 },
           },
+          paymentDetails: emptyPaymentDetails(),
         });
       }
 
@@ -335,6 +348,8 @@ export async function GET(request: NextRequest) {
 
         const staffData = ensureStaffData(designer);
         staffData.deposit.service.amount += share;
+        staffData.paymentDetails.deposit.service += share;
+        staffData.paymentDetails.deposit.total += share;
       });
     };
 
@@ -354,9 +369,32 @@ export async function GET(request: NextRequest) {
 
       const staffData = ensureStaffData(designer);
       staffData.deposit.service.amount += roundToCents(row.amount);
+      staffData.paymentDetails.deposit.service += roundToCents(row.amount);
+      staffData.paymentDetails.deposit.total += roundToCents(row.amount);
     };
 
     salesData.forEach((sale: any) => {
+      const designerTypeAmounts = new Map<
+        number,
+        { service: number; product: number; membership: number }
+      >();
+      const designerPrepaid = new Map<
+        number,
+        { service: number; product: number; membership: number }
+      >();
+
+      const bumpTypeAmount = (
+        map: Map<number, { service: number; product: number; membership: number }>,
+        designerId: number,
+        key: 'service' | 'product' | 'membership',
+        value: number,
+      ) => {
+        if (value <= 0) return;
+        const current = map.get(designerId) || { service: 0, product: 0, membership: 0 };
+        current[key] += value;
+        map.set(designerId, current);
+      };
+
       (sale.sales_items || []).forEach((item: any) => {
         const matchedDesigners = resolveDesignersForItem(item);
         if (matchedDesigners.length === 0) return;
@@ -371,10 +409,12 @@ export async function GET(request: NextRequest) {
           if (item.item_type === 'service') {
             staffData.sales.service.quantity += quantity;
             staffData.sales.service.amount += amount;
+            bumpTypeAmount(designerTypeAmounts, designer.id, 'service', amount);
 
             if (prepaidDeduction > 0) {
               staffData.membershipDeduction.service.quantity += 1;
               staffData.membershipDeduction.service.amount += prepaidDeduction;
+              bumpTypeAmount(designerPrepaid, designer.id, 'service', prepaidDeduction);
             }
             return;
           }
@@ -382,10 +422,12 @@ export async function GET(request: NextRequest) {
           if (item.item_type === 'product') {
             staffData.sales.product.quantity += quantity;
             staffData.sales.product.amount += amount;
+            bumpTypeAmount(designerTypeAmounts, designer.id, 'product', amount);
 
             if (prepaidDeduction > 0) {
               staffData.membershipDeduction.product.quantity += 1;
               staffData.membershipDeduction.product.amount += prepaidDeduction;
+              bumpTypeAmount(designerPrepaid, designer.id, 'product', prepaidDeduction);
             }
             return;
           }
@@ -393,9 +435,32 @@ export async function GET(request: NextRequest) {
           if (item.item_type === 'prepaid') {
             staffData.sales.membership.quantity += quantity;
             staffData.sales.membership.amount += amount;
+            bumpTypeAmount(designerTypeAmounts, designer.id, 'membership', amount);
+
+            if (prepaidDeduction > 0) {
+              bumpTypeAmount(designerPrepaid, designer.id, 'membership', prepaidDeduction);
+            }
           }
         });
       });
+
+      if (designerTypeAmounts.size > 0 || designerPrepaid.size > 0) {
+        const amountMap = new Map(designerTypeAmounts);
+        designerPrepaid.forEach((_, designerId) => {
+          if (!amountMap.has(designerId)) {
+            amountMap.set(designerId, { service: 0, product: 0, membership: 0 });
+          }
+        });
+        const allocated = allocateSalePaymentDetailsToDesigners(sale, amountMap, {
+          designerPrepaid,
+        });
+        allocated.forEach((details, designerId) => {
+          const designer = designersMap.get(designerId);
+          if (!designer) return;
+          const staffData = ensureStaffData(designer);
+          mergePaymentDetails(staffData.paymentDetails, details);
+        });
+      }
 
       const serviceItems = (sale.sales_items || []).filter(
         (item: any) => item.item_type === 'service',
@@ -448,6 +513,8 @@ export async function GET(request: NextRequest) {
         staffData.sales.product.amount + staffData.membershipDeduction.product.amount;
       staffData.total.subtotal =
         staffData.total.service.amount + staffData.total.product.amount;
+
+      recalculatePaymentDetailColumnTotals(staffData.paymentDetails);
     });
 
     const staffSales = Array.from(staffSalesMap.values()).sort((a, b) =>
