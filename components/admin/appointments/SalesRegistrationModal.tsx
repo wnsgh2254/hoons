@@ -27,7 +27,6 @@ import { formatAudAmount, roundToCents } from '@/lib/utils';
 import {
   clearSalesDraft,
   getSalesDraftKey,
-  getSalesDraftFallbackKey,
   loadSalesDraftForCustomer,
   saveSalesDraft,
   type SalesRegistrationDraft,
@@ -967,9 +966,6 @@ export default function SalesRegistrationModal({
     if (!saved) {
       alert('임시 저장에 실패했습니다. 브라우저 저장 공간을 확인해 주세요.');
       return;
-    }
-    if (bookingId) {
-      saveSalesDraft(getSalesDraftFallbackKey(customer.id), draftPayload);
     }
     setDraftSavedMessage('임시 저장되었습니다.');
     setTimeout(() => setDraftSavedMessage(null), 2500);

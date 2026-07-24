@@ -32,13 +32,9 @@ export type SalesRegistrationDraft = {
   savedAt: string;
 };
 
+/** Drafts are scoped to a booking. Use bookingId=null only for customer-drawer sales (no booking). */
 export function getSalesDraftKey(customerId: number, bookingId: number | null | undefined) {
   return `haeyoom-sales-draft-${customerId}-${bookingId ?? 'none'}`;
-}
-
-/** Comment: Customer-level fallback key so drafts saved from booking flow are found from drawer/mobile entry. */
-export function getSalesDraftFallbackKey(customerId: number) {
-  return getSalesDraftKey(customerId, null);
 }
 
 export function loadSalesDraft(key: string): SalesRegistrationDraft | null {
@@ -52,37 +48,16 @@ export function loadSalesDraft(key: string): SalesRegistrationDraft | null {
   }
 }
 
+/** Load only the draft for this customer + booking pair — never another visit's draft. */
 export function loadSalesDraftForCustomer(
   customerId: number,
   bookingId: number | null | undefined,
 ): { draft: SalesRegistrationDraft; key: string } | null {
-  const keysToTry = Array.from(
-    new Set([
-      getSalesDraftKey(customerId, bookingId),
-      getSalesDraftFallbackKey(customerId),
-    ]),
-  );
-
-  for (const key of keysToTry) {
-    const draft = loadSalesDraft(key);
-    if (draft && draft.salesItems.length > 0) {
-      return { draft, key };
-    }
+  const key = getSalesDraftKey(customerId, bookingId);
+  const draft = loadSalesDraft(key);
+  if (draft && draft.salesItems.length > 0) {
+    return { draft, key };
   }
-
-  // Comment: Drawer/mobile entry uses bookingId=null — also pick up drafts saved from a booking flow.
-  if (typeof window !== 'undefined') {
-    const prefix = `haeyoom-sales-draft-${customerId}-`;
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (!key?.startsWith(prefix) || keysToTry.includes(key)) continue;
-      const draft = loadSalesDraft(key);
-      if (draft && draft.salesItems.length > 0) {
-        return { draft, key };
-      }
-    }
-  }
-
   return null;
 }
 
