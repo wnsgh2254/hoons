@@ -757,14 +757,19 @@ function InternalUsageView({ shopId }: { shopId: number }) {
   const [editingRow, setEditingRow] = useState<
     | {
         id: number;
+        inventory_item_id: number | null;
         product_name: string | null;
         quantity: number;
+        staff_name: string | null;
+        memo: string | null;
+        used_at: string;
       }
     | null
   >(null);
   const [rows, setRows] = useState<
     {
       id: number;
+      inventory_item_id: number | null;
       used_at: string;
       staff_name: string | null;
       product_code: string | null;
@@ -844,8 +849,12 @@ function InternalUsageView({ shopId }: { shopId: number }) {
           onClick={() =>
             setEditingRow({
               id: row.id,
+              inventory_item_id: row.inventory_item_id ?? null,
               product_name: row.product_name,
               quantity: row.quantity,
+              staff_name: row.staff_name,
+              memo: row.memo,
+              used_at: row.used_at,
             })
           }
         >
@@ -942,10 +951,20 @@ function InternalUsageView({ shopId }: { shopId: number }) {
         <InternalUsageEntryModal
           mode="edit"
           shopId={shopId}
-          inventoryItemId={undefined}
+          usageId={editingRow.id}
+          inventoryItemId={editingRow.inventory_item_id ?? undefined}
           productName={editingRow.product_name ?? ''}
           defaultQuantity={editingRow.quantity}
-          onSaved={undefined}
+          defaultStaff={editingRow.staff_name ?? ''}
+          defaultMemo={editingRow.memo ?? ''}
+          defaultDate={
+            editingRow.used_at && editingRow.used_at.length >= 10
+              ? editingRow.used_at.slice(0, 10)
+              : todayDateString()
+          }
+          onSaved={() => {
+            setReloadKey((prev) => prev + 1);
+          }}
           onClose={() => setEditingRow(null)}
         />
       )}
@@ -2167,9 +2186,13 @@ function InternalUsageRegisterModal({ shopId, onClose, onSaved }: InternalUsageR
 type InternalUsageEntryModalProps = {
   mode: 'create' | 'edit';
   shopId: number;
+  usageId?: number;
   inventoryItemId?: number;
   productName: string;
   defaultQuantity: number;
+  defaultStaff?: string;
+  defaultMemo?: string;
+  defaultDate?: string;
   onSaved?: () => void;
   onClose: () => void;
 };
@@ -2178,26 +2201,43 @@ type InternalUsageEntryModalProps = {
 function InternalUsageEntryModal({
   mode,
   shopId,
+  usageId,
   inventoryItemId,
   productName,
   defaultQuantity,
+  defaultStaff = '',
+  defaultMemo = '',
+  defaultDate,
   onSaved,
   onClose,
 }: InternalUsageEntryModalProps) {
   const [quantity, setQuantity] = useState(defaultQuantity.toString());
-  const [staff, setStaff] = useState('');
-  const [memo, setMemo] = useState('');
-  const [date, setDate] = useState(todayDateString());
+  const [staff, setStaff] = useState(defaultStaff);
+  const [memo, setMemo] = useState(defaultMemo);
+  const [date, setDate] = useState(defaultDate || todayDateString());
+  const [staffOptions, setStaffOptions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Comment: Handle save internal usage (create only for now)
-  const handleSave = async () => {
-    if (!inventoryItemId || mode !== 'create') {
-      onClose();
-      return;
-    }
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const res = await fetch(`/api/staff?shop_id=${shopId}`);
+        const data = await res.json();
+        const names = Array.isArray(data.staff)
+          ? data.staff.map((s: { name?: string | null }) => String(s.name || '')).filter(Boolean)
+          : [];
+        setStaffOptions(names);
+      } catch {
+        setStaffOptions([]);
+      }
+    };
 
+    fetchStaff();
+  }, [shopId]);
+
+  // Comment: Create or update internal usage entry
+  const handleSave = async () => {
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) {
       setError('수량은 1 이상 숫자로 입력해주세요.');
@@ -2207,22 +2247,85 @@ function InternalUsageEntryModal({
     try {
       setSaving(true);
       setError(null);
-      await fetch(buildInventoryUrl('/api/inventory-usage', shopId), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inventoryItemId,
-          shopId,
-          quantity: qty,
-          staffName: staff || null,
-          memo: memo || null,
-          usedAt: date,
-        }),
-      });
+
+      if (mode === 'edit') {
+        if (!usageId) {
+          setError('수정할 내역을 찾을 수 없습니다.');
+          return;
+        }
+        const res = await fetch(buildInventoryUrl(`/api/inventory-usage/${usageId}`, shopId), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shopId,
+            quantity: qty,
+            staffName: staff || null,
+            memo: memo || null,
+            usedAt: date,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || '내부 소모 수정에 실패했습니다.');
+        }
+      } else {
+        if (!inventoryItemId) {
+          setError('제품을 선택해주세요.');
+          return;
+        }
+        const res = await fetch(buildInventoryUrl('/api/inventory-usage', shopId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inventoryItemId,
+            shopId,
+            quantity: qty,
+            staffName: staff || null,
+            memo: memo || null,
+            usedAt: date,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || '내부 소모 저장에 실패했습니다.');
+        }
+      }
+
       if (onSaved) onSaved();
       onClose();
     } catch (e: any) {
       setError(e?.message ?? '내부 소모를 저장하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Comment: Delete usage entry and restore stock
+  const handleDelete = async () => {
+    if (!usageId) {
+      onClose();
+      return;
+    }
+    if (!window.confirm('이 내부 소모 내역을 삭제할까요? 재고가 복원됩니다.')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      const res = await fetch(buildInventoryUrl(`/api/inventory-usage/${usageId}`, shopId), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '삭제에 실패했습니다.');
+      }
+      if (onSaved) onSaved();
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? '삭제에 실패했습니다.');
     } finally {
       setSaving(false);
     }
@@ -2237,10 +2340,12 @@ function InternalUsageEntryModal({
       footer={
         <>
           {mode === 'edit' && (
-            <Button variant="danger">삭제</Button>
+            <Button variant="danger" onClick={handleDelete} disabled={saving}>
+              삭제
+            </Button>
           )}
           <div className="flex-1" />
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             취소
           </Button>
           <Button variant="primary" onClick={handleSave} loading={saving}>
@@ -2278,7 +2383,10 @@ function InternalUsageEntryModal({
           <Select
             value={staff}
             onChange={(e) => setStaff(e.target.value)}
-            options={[]}
+            options={[
+              { value: '', label: '선택' },
+              ...staffOptions.map((name) => ({ value: name, label: name })),
+            ]}
             placeholder="선택"
             wrapperClassName="flex-1"
           />

@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('inventory_internal_usage_entries')
       .select(
-        'id, used_at, staff_name, product_code, product_name, unit_price, quantity, amount, memo'
+        'id, inventory_item_id, used_at, staff_name, product_code, product_name, unit_price, quantity, amount, memo'
       )
       .eq('shop_id', shopId)
       .order('used_at', { ascending: false });
