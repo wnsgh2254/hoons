@@ -3,9 +3,15 @@ import { supabase } from '@/lib/supabase';
 import { getInventoryStatus } from '@/lib/utils/inventory-utils';
 import { handleApiError } from '@/lib/api-utils';
 import { parseInventoryShopId, resolveCatalogInventoryShopIds } from '@/lib/inventory-shop';
+import {
+  findInventoryCatalogSiblingIds,
+  isCatalogMirrorRequest,
+  type InventoryCatalogRow,
+} from '@/lib/inventory-catalog-sync';
 
 type InventoryRow = {
   id: number;
+  shop_id?: number | null;
   brand?: string | null;
   price?: number | string | null;
   cost_price?: number | string | null;
@@ -210,7 +216,9 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { id, name, size, sku, category, brand, price, cost_price, icon, stock, for_internal, for_retail } =
       body;
-    const shopId = parseInventoryShopId(body.shop_id ?? body.shopId);
+    const rawShopId = body.shop_id ?? body.shopId;
+    const mirrorCatalog = isCatalogMirrorRequest(rawShopId);
+    const shopId = parseInventoryShopId(rawShopId);
 
     const numericId = Number(id);
     if (!numericId) {
@@ -234,26 +242,55 @@ export async function PATCH(request: NextRequest) {
     if (for_internal !== undefined) updates.for_internal = Boolean(for_internal);
     if (for_retail !== undefined) updates.for_retail = Boolean(for_retail);
 
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: '수정할 항목이 없습니다.' }, { status: 400 });
+    }
+
+    let targetIds = [numericId];
+
+    if (mirrorCatalog) {
+      const { data: source, error: sourceError } = await supabase
+        .from('inventory_items')
+        .select('id, shop_id, name, sku, brand, category')
+        .eq('id', numericId)
+        .eq('shop_id', shopId)
+        .single();
+
+      if (sourceError || !source) {
+        return handleApiError(sourceError, 'inventory PATCH', '인벤토리 상품을 찾지 못했습니다.');
+      }
+
+      targetIds = await findInventoryCatalogSiblingIds(source as InventoryCatalogRow);
+    }
+
     const { data, error } = await supabase
       .from('inventory_items')
       .update(updates)
-      .eq('id', numericId)
-      .eq('shop_id', shopId)
-      .select()
-      .single();
+      .in('id', targetIds)
+      .select();
 
     if (error) {
       return handleApiError(error, 'inventory PATCH', '인벤토리 상품을 수정하지 못했습니다.');
     }
 
+    const rows = (data ?? []) as InventoryRow[];
+    const primary =
+      rows.find((row) => row.id === numericId) ??
+      rows.find((row) => row.shop_id === shopId) ??
+      rows[0];
+
+    if (!primary) {
+      return NextResponse.json({ error: '인벤토리 상품을 찾지 못했습니다.' }, { status: 404 });
+    }
+
     const item = {
-      ...data,
-      price: Number(data.price ?? 0),
-      cost_price: Number(data.cost_price ?? 0),
-      stock: Number(data.stock ?? 0),
+      ...primary,
+      price: Number(primary.price ?? 0),
+      cost_price: Number(primary.cost_price ?? 0),
+      stock: Number(primary.stock ?? 0),
     };
 
-    return NextResponse.json({ item }, { status: 200 });
+    return NextResponse.json({ item, updated: rows.length }, { status: 200 });
   } catch (error) {
     return handleApiError(error, 'inventory PATCH', '인벤토리 상품을 수정하지 못했습니다.');
   }

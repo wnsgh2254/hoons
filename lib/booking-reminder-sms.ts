@@ -1,9 +1,20 @@
 // Comment: Shared 3-day reminder SMS body (sent via Mobile Message from the app).
+// Comment: Keep in sync with `supabase/functions/booking-reminder/index.ts`.
 
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
-/** dd/mm (Sat) 11:00am — calendar date + wall time from stored booking_date + booking_time. */
-export function formatReminderAppointmentLine(bookingDate: string, bookingTime: string | null): string {
+type AppointmentLineOptions = {
+  /** When true: `07/08 (Sat) 4:30pm`. When false: `07/08 4:30pm` (reminder SMS). */
+  includeWeekday?: boolean;
+};
+
+/** Calendar date + wall time from stored booking_date + booking_time. */
+export function formatReminderAppointmentLine(
+  bookingDate: string,
+  bookingTime: string | null,
+  options?: AppointmentLineOptions,
+): string {
+  const includeWeekday = options?.includeWeekday !== false;
   try {
     const [year, month, day] = bookingDate.split('-').map((v) => Number(v));
     const [hStr, mStr] = (bookingTime ?? '00:00:00').split(':');
@@ -18,7 +29,10 @@ export function formatReminderAppointmentLine(bookingDate: string, bookingTime: 
     const ampm = displayHour >= 12 ? 'pm' : 'am';
     displayHour = displayHour % 12;
     if (displayHour === 0) displayHour = 12;
-    return `${dd}/${mm} (${dow}) ${displayHour}:${displayMinute}${ampm}`;
+    if (includeWeekday) {
+      return `${dd}/${mm} (${dow}) ${displayHour}:${displayMinute}${ampm}`;
+    }
+    return `${dd}/${mm} ${displayHour}:${displayMinute}${ampm}`;
   } catch {
     return `${bookingDate} ${bookingTime ?? ''}`.trim();
   }
@@ -35,6 +49,18 @@ export function resolveReminderServiceLabel(
   return 'Appointment';
 }
 
+/**
+ * [Haeyoom Reminder]
+ *
+ * 07/08 4:30pm
+ * Colour / Men's haircut
+ *
+ * Change/Cancel:
+ * 0432 328 002
+ *
+ * Meadowbank Store
+ * Please do not reply.
+ */
 export function buildBookingReminderSmsBody(params: {
   appointmentLine: string;
   serviceLabel: string;
@@ -46,13 +72,11 @@ export function buildBookingReminderSmsBody(params: {
 
   return (
     `[Haeyoom Reminder]\n\n` +
-    `Booking:\n` +
-    `${params.appointmentLine}\n\n` +
-    `Service: ${params.serviceLabel}\n\n` +
-    `Change or Cancel:\n` +
-    `Call or Text\n` +
+    `${params.appointmentLine}\n` +
+    `${params.serviceLabel}\n\n` +
+    `Change/Cancel:\n` +
     `${contactPhone}\n\n` +
-    `Location: ${loc}\n\n` +
+    `${loc}\n` +
     `Please do not reply.`
   );
 }

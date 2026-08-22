@@ -59,7 +59,9 @@ export async function sendBookingReminder(
   bookingTime: string,
   venue?: SendBookingReminderVenue,
 ): Promise<{ success: boolean; messageSid?: string; error?: string }> {
-  const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime);
+  const appointmentLine = formatReminderAppointmentLine(bookingDate, bookingTime, {
+    includeWeekday: false,
+  });
   const customForSms = stripPromoFromCustomServiceNameForConfirmationSms(venue?.customServiceName);
   const serviceLabel = stripPromoFromConfirmationSmsServiceLabel(
     smsServiceLabelEn(
