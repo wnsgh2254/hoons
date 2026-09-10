@@ -5,7 +5,6 @@ import { handleApiError } from '@/lib/api-utils';
 import { parseInventoryShopId, resolveCatalogInventoryShopIds } from '@/lib/inventory-shop';
 import {
   findInventoryCatalogSiblingIds,
-  isCatalogMirrorRequest,
   type InventoryCatalogRow,
 } from '@/lib/inventory-catalog-sync';
 
@@ -217,7 +216,6 @@ export async function PATCH(request: NextRequest) {
     const { id, name, size, sku, category, brand, price, cost_price, icon, stock, for_internal, for_retail } =
       body;
     const rawShopId = body.shop_id ?? body.shopId;
-    const mirrorCatalog = isCatalogMirrorRequest(rawShopId);
     const shopId = parseInventoryShopId(rawShopId);
 
     const numericId = Number(id);
@@ -246,22 +244,19 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: '수정할 항목이 없습니다.' }, { status: 400 });
     }
 
-    let targetIds = [numericId];
+    const { data: source, error: sourceError } = await supabase
+      .from('inventory_items')
+      .select('id, shop_id, name, sku, brand, category')
+      .eq('id', numericId)
+      .single();
 
-    if (mirrorCatalog) {
-      const { data: source, error: sourceError } = await supabase
-        .from('inventory_items')
-        .select('id, shop_id, name, sku, brand, category')
-        .eq('id', numericId)
-        .eq('shop_id', shopId)
-        .single();
-
-      if (sourceError || !source) {
-        return handleApiError(sourceError, 'inventory PATCH', '인벤토리 상품을 찾지 못했습니다.');
-      }
-
-      targetIds = await findInventoryCatalogSiblingIds(source as InventoryCatalogRow);
+    if (sourceError || !source) {
+      return handleApiError(sourceError, 'inventory PATCH', '인벤토리 상품을 찾지 못했습니다.');
     }
+
+    // Comment: Products are shared across shops (mirrored catalog) — propagate edits to sibling rows
+    // so price/stock stay in sync regardless of which shop's page the edit was made from.
+    const targetIds = await findInventoryCatalogSiblingIds(source as InventoryCatalogRow);
 
     const { data, error } = await supabase
       .from('inventory_items')

@@ -218,6 +218,7 @@ function InventoryContent() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<InventoryItem | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
   const searchParams = useSearchParams();
   const viewKey = searchParams.get('view') ?? 'overview';
   const activeView = INVENTORY_VIEWS[viewKey] ?? INVENTORY_VIEWS.overview;
@@ -486,6 +487,29 @@ function InventoryContent() {
     }
   };
 
+  const handleDeleteProduct = async (product: InventoryItem) => {
+    if (!window.confirm(`"${product.name}"을(를) 삭제하시겠습니까?`)) return;
+    try {
+      setDeletingProductId(product.id);
+      setError(null);
+      const res = await fetch(
+        `/api/inventory/${product.id}?${new URLSearchParams({ shop_id: String(selectedShopId) }).toString()}`,
+        { method: 'DELETE' },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || '삭제에 실패했습니다.');
+      }
+      setProducts((prev) => prev.filter((p) => p.id !== product.id));
+      setSuccessMessage('상품이 삭제되었습니다.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setError(err.message || '삭제에 실패했습니다.');
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
   const inventoryColumns = [
     {
       key: 'name',
@@ -556,6 +580,31 @@ function InventoryContent() {
           <span className="size-1.5 rounded-full bg-current mr-1.5" />
           {product.status}
         </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (product: InventoryItem) => (
+        <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            title="수정"
+            onClick={() => setEditingProduct(product)}
+            className="p-1.5 rounded-md text-gray-500 hover:text-black hover:bg-gray-100"
+          >
+            <span className="material-symbols-outlined text-lg">edit</span>
+          </button>
+          <button
+            type="button"
+            title="삭제"
+            disabled={deletingProductId === product.id}
+            onClick={() => handleDeleteProduct(product)}
+            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-lg">delete</span>
+          </button>
+        </div>
       ),
     },
   ];

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { parseInventoryShopId } from '@/lib/inventory-shop';
 import {
   findInventoryCatalogSiblingIds,
-  isCatalogMirrorRequest,
   type InventoryCatalogRow,
 } from '@/lib/inventory-catalog-sync';
 
@@ -18,27 +16,19 @@ export async function DELETE(
     if (Number.isNaN(itemId)) {
       return NextResponse.json({ error: 'Invalid item ID' }, { status: 400 });
     }
-    const { searchParams } = new URL(request.url);
-    const rawShopId = searchParams.get('shop_id');
-    const mirrorCatalog = isCatalogMirrorRequest(rawShopId);
-    const shopId = parseInventoryShopId(rawShopId);
+    const { data: source, error: sourceError } = await supabase
+      .from('inventory_items')
+      .select('id, shop_id, name, sku, brand, category')
+      .eq('id', itemId)
+      .single();
 
-    let targetIds = [itemId];
-
-    if (mirrorCatalog) {
-      const { data: source, error: sourceError } = await supabase
-        .from('inventory_items')
-        .select('id, shop_id, name, sku, brand, category')
-        .eq('id', itemId)
-        .eq('shop_id', shopId)
-        .single();
-
-      if (sourceError || !source) {
-        return NextResponse.json({ error: '제품을 찾지 못했습니다.' }, { status: 404 });
-      }
-
-      targetIds = await findInventoryCatalogSiblingIds(source as InventoryCatalogRow);
+    if (sourceError || !source) {
+      return NextResponse.json({ error: '제품을 찾지 못했습니다.' }, { status: 404 });
     }
+
+    // Comment: Products are shared across shops (mirrored catalog) — delete sibling rows too
+    // so a product removed from one shop's page doesn't linger (mismatched/duplicate) in the other.
+    const targetIds = await findInventoryCatalogSiblingIds(source as InventoryCatalogRow);
 
     const { error } = await supabase.from('inventory_items').delete().in('id', targetIds);
 
