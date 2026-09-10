@@ -18,6 +18,7 @@ import {
   recalculatePaymentDetailColumnTotals,
 } from '@/lib/sales-payment-details';
 import { roundToCents } from '@/lib/utils';
+import { getSydneyDayUtcRange } from '@/lib/sydney-datetime-range';
 
 const toNum = (value: unknown) => Number(value || 0);
 const isTransientUpstreamError = (error: any) => {
@@ -118,6 +119,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Payments by payment date (created_at), not booking appointment date.
+    // created_at is a timestamptz — compare against Sydney-local day boundaries, not naive UTC.
+    const { gteIso: paymentsGteIso, ltIso: paymentsLtIso } = getSydneyDayUtcRange(startDate, endDate);
     let paymentsQuery = supabase
       .from('payments')
       .select(
@@ -133,8 +136,8 @@ export async function GET(request: NextRequest) {
         )
       `,
       )
-      .gte('created_at', `${startDate}T00:00:00`)
-      .lte('created_at', `${endDate}T23:59:59.999`);
+      .gte('created_at', paymentsGteIso)
+      .lt('created_at', paymentsLtIso);
 
     if (shopId) {
       paymentsQuery = paymentsQuery.eq('bookings.shop_id', Number(shopId));
