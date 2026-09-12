@@ -31,6 +31,32 @@ const isTransientUpstreamError = (error: any) => {
   );
 };
 
+// Comment: PostgREST caps unpaginated selects at ~1000 rows — periods with more sales than that
+// were silently truncated. Page through with .range() to fetch every row in the date range.
+const FETCH_PAGE_SIZE = 1000;
+
+async function fetchAllRows<T>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+): Promise<{ data: T[]; error: any }> {
+  const all: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await buildPage(offset, offset + FETCH_PAGE_SIZE - 1);
+    if (error) {
+      return { data: all, error };
+    }
+    const batch = data || [];
+    all.push(...batch);
+    if (batch.length < FETCH_PAGE_SIZE) {
+      break;
+    }
+    offset += FETCH_PAGE_SIZE;
+  }
+
+  return { data: all, error: null };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -45,58 +71,64 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let salesQuery = supabase
-      .from('sales')
-      .select(`
-        id,
-        shop_id,
-        customer_id,
-        sales_date,
-        total_amount,
-        cash_amount,
-        card_amount,
-        bank_transfer_amount,
-        payment_method,
-        booking_id,
-        paid_deposit,
-        bookings:booking_id ( deposit_paid ),
-        sales_items (
-          item_type,
-          quantity,
-          amount,
-          prepaid_deduction
-        )
-      `)
-      .gte('sales_date', startDate)
-      .lte('sales_date', endDate);
+    const buildSalesQuery = (from: number, to: number) => {
+      let query = supabase
+        .from('sales')
+        .select(`
+          id,
+          shop_id,
+          customer_id,
+          sales_date,
+          total_amount,
+          cash_amount,
+          card_amount,
+          bank_transfer_amount,
+          payment_method,
+          booking_id,
+          paid_deposit,
+          bookings:booking_id ( deposit_paid ),
+          sales_items (
+            item_type,
+            quantity,
+            amount,
+            prepaid_deduction
+          )
+        `)
+        .gte('sales_date', startDate)
+        .lte('sales_date', endDate);
+      if (shopId) {
+        query = query.eq('shop_id', Number(shopId));
+      }
+      return query.order('id', { ascending: true }).range(from, to);
+    };
 
-    let refundsQuery = supabase
-      .from('refunds')
-      .select(`
-        id,
-        shop_id,
-        refund_date,
-        total_amount,
-        cash_amount,
-        card_amount,
-        bank_transfer_amount,
-        refund_items (
-          item_type,
-          quantity,
-          amount
-        )
-      `)
-      .gte('refund_date', startDate)
-      .lte('refund_date', endDate);
-
-    if (shopId) {
-      const numericShopId = Number(shopId);
-      salesQuery = salesQuery.eq('shop_id', numericShopId);
-      refundsQuery = refundsQuery.eq('shop_id', numericShopId);
-    }
+    const buildRefundsQuery = (from: number, to: number) => {
+      let query = supabase
+        .from('refunds')
+        .select(`
+          id,
+          shop_id,
+          refund_date,
+          total_amount,
+          cash_amount,
+          card_amount,
+          bank_transfer_amount,
+          refund_items (
+            item_type,
+            quantity,
+            amount
+          )
+        `)
+        .gte('refund_date', startDate)
+        .lte('refund_date', endDate);
+      if (shopId) {
+        query = query.eq('shop_id', Number(shopId));
+      }
+      return query.order('id', { ascending: true }).range(from, to);
+    };
 
     const [{ data: sales, error: salesError }, { data: refunds, error: refundsError }] =
-      await Promise.all([salesQuery, refundsQuery]);
+      await Promise.all([fetchAllRows(buildSalesQuery), fetchAllRows(buildRefundsQuery)]);
 
     if (salesError) {
       console.error('Error fetching sales:', salesError);
@@ -121,29 +153,31 @@ export async function GET(request: NextRequest) {
     // Payments by payment date (created_at), not booking appointment date.
     // created_at is a timestamptz — compare against Sydney-local day boundaries, not naive UTC.
     const { gteIso: paymentsGteIso, ltIso: paymentsLtIso } = getSydneyDayUtcRange(startDate, endDate);
-    let paymentsQuery = supabase
-      .from('payments')
-      .select(
-        `
-        id,
-        booking_id,
-        amount,
-        method,
-        type,
-        created_at,
-        bookings!inner (
-          shop_id
+    const buildPaymentsQuery = (from: number, to: number) => {
+      let query = supabase
+        .from('payments')
+        .select(
+          `
+          id,
+          booking_id,
+          amount,
+          method,
+          type,
+          created_at,
+          bookings!inner (
+            shop_id
+          )
+        `,
         )
-      `,
-      )
-      .gte('created_at', paymentsGteIso)
-      .lt('created_at', paymentsLtIso);
+        .gte('created_at', paymentsGteIso)
+        .lt('created_at', paymentsLtIso);
+      if (shopId) {
+        query = query.eq('bookings.shop_id', Number(shopId));
+      }
+      return query.order('id', { ascending: true }).range(from, to);
+    };
 
-    if (shopId) {
-      paymentsQuery = paymentsQuery.eq('bookings.shop_id', Number(shopId));
-    }
-
-    const { data: payments, error: paymentsError } = await paymentsQuery;
+    const { data: payments, error: paymentsError } = await fetchAllRows(buildPaymentsQuery);
     if (paymentsError) {
       console.error('Error fetching payments:', paymentsError);
     }

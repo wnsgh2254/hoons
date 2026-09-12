@@ -1349,6 +1349,30 @@ function ByStaffSalesTab({
   const [staffSalesData, setStaffSalesData] = useState<any[]>([]);
   const [shouldFetch, setShouldFetch] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [shops, setShops] = useState<any[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchShops = async () => {
+      try {
+        const res = await fetch('/api/shops');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+        setShops(data.shops || []);
+      } catch (error) {
+        console.error('Error fetching shops for by-staff sales filter:', error);
+      }
+    };
+
+    fetchShops();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSearch = () => {
     if (dateMode === 'daily' && !selectedDate) {
@@ -1380,6 +1404,9 @@ function ByStaffSalesTab({
         if (selectedDesignerId) {
           params.append('designer_id', selectedDesignerId);
         }
+        if (selectedShopId) {
+          params.append('shop_id', selectedShopId);
+        }
         const res = await fetch(`/api/sales/by-staff?${params.toString()}`);
         if (!res.ok) {
           throw new Error('Failed to fetch staff sales data');
@@ -1396,7 +1423,7 @@ function ByStaffSalesTab({
     };
 
     fetchData();
-  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedDesignerId]);
+  }, [shouldFetch, dateMode, selectedDate, startDate, endDate, selectedDesignerId, selectedShopId]);
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
@@ -1415,6 +1442,11 @@ function ByStaffSalesTab({
     label: d.shop_name ? `${d.name} - ${d.shop_name}` : d.name,
   }));
 
+  const shopOptions = shops.map((shop: any) => ({
+    value: String(shop.id),
+    label: shop.name,
+  }));
+
   return (
     <div className="flex flex-col gap-6">
       <DateFilterBar
@@ -1430,6 +1462,13 @@ function ByStaffSalesTab({
         handleSearch={handleSearch}
         extraFilters={
           <>
+            <Select
+              value={selectedShopId}
+              onChange={(e) => setSelectedShopId(e.target.value)}
+              options={shopOptions}
+              placeholder="전체 지점"
+              wrapperClassName="flex-1 min-w-0 md:max-w-xs"
+            />
             <Select
               value={selectedDesignerId}
               onChange={(e) => setSelectedDesignerId(e.target.value)}
