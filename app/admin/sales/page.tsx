@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useStaff } from '@/hooks/useStaff';
 import { useServices } from '@/hooks/useServices';
-import { bookingTimeToLabel, getSydneyToday } from '@/lib/utils/appointment-utils';
+import { bookingTimeToLabel, getSydneyToday, addDaysToDateStr } from '@/lib/utils/appointment-utils';
 import { formatSydneyPayDateTime } from '@/lib/sydney-datetime-range';
 import { formatPaymentMethod, formatAudNumber } from '@/lib/utils';
 import {
@@ -359,13 +359,7 @@ function TotalSalesTab({
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
-      const date = new Date(selectedDate);
-      if (direction === 'prev') {
-        date.setDate(date.getDate() - 1);
-      } else {
-        date.setDate(date.getDate() + 1);
-      }
-      setSelectedDate(date.toISOString().split('T')[0]);
+      setSelectedDate(addDaysToDateStr(selectedDate, direction === 'prev' ? -1 : 1));
     }
   };
 
@@ -559,13 +553,7 @@ function DepositSalesTab({
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
-      const date = new Date(selectedDate);
-      if (direction === 'prev') {
-        date.setDate(date.getDate() - 1);
-      } else {
-        date.setDate(date.getDate() + 1);
-      }
-      setSelectedDate(date.toISOString().split('T')[0]);
+      setSelectedDate(addDaysToDateStr(selectedDate, direction === 'prev' ? -1 : 1));
     }
   };
 
@@ -1427,13 +1415,7 @@ function ByStaffSalesTab({
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
-      const date = new Date(selectedDate);
-      if (direction === 'prev') {
-        date.setDate(date.getDate() - 1);
-      } else {
-        date.setDate(date.getDate() + 1);
-      }
-      setSelectedDate(date.toISOString().split('T')[0]);
+      setSelectedDate(addDaysToDateStr(selectedDate, direction === 'prev' ? -1 : 1));
     }
   };
 
@@ -1682,13 +1664,7 @@ function ByItemSalesTab({
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
-      const date = new Date(selectedDate);
-      if (direction === 'prev') {
-        date.setDate(date.getDate() - 1);
-      } else {
-        date.setDate(date.getDate() + 1);
-      }
-      setSelectedDate(date.toISOString().split('T')[0]);
+      setSelectedDate(addDaysToDateStr(selectedDate, direction === 'prev' ? -1 : 1));
     }
   };
 
@@ -2225,13 +2201,7 @@ function SalesHistoryModal({
 
   const handleDateChange = (direction: 'prev' | 'next') => {
     if (dateMode === 'daily') {
-      const date = new Date(selectedDate);
-      if (direction === 'prev') {
-        date.setDate(date.getDate() - 1);
-      } else {
-        date.setDate(date.getDate() + 1);
-      }
-      setSelectedDate(date.toISOString().split('T')[0]);
+      setSelectedDate(addDaysToDateStr(selectedDate, direction === 'prev' ? -1 : 1));
     }
   };
 

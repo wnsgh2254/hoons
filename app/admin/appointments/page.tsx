@@ -60,6 +60,7 @@ import {
   bookingTimeToLabel,
   labelToDbTime,
   parseLocalDateString,
+  addDaysToDateStr,
   getBookingDurationMinutes,
   getBookingServiceDisplayName,
   clampBookingMenuHorizontalPosition,
@@ -1010,11 +1011,8 @@ export default function AppointmentsManagementPage() {
       try {
         if (isWeekViewMode && weekViewStartDate) {
           // Comment: Load restrictions for the entire week
-          const startDate = new Date(weekViewStartDate);
-          const endDate = new Date(startDate);
-          endDate.setDate(endDate.getDate() + 6);
-          const startDateStr = startDate.toISOString().split('T')[0];
-          const endDateStr = endDate.toISOString().split('T')[0];
+          const startDateStr = weekViewStartDate;
+          const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
 
           const res = await fetch(
             `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`
@@ -1055,12 +1053,8 @@ export default function AppointmentsManagementPage() {
     let isMounted = true;
     const fetchWeekBookings = async () => {
       try {
-        const startDate = new Date(weekViewStartDate);
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 6);
-        
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
+        const startDateStr = weekViewStartDate;
+        const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
 
         const res = await fetch(
           buildWeekViewBookingsUrl({
@@ -1219,9 +1213,7 @@ export default function AppointmentsManagementPage() {
       try {
         const dates: string[] = [];
         for (let i = 0; i < 7; i++) {
-          const d = new Date(weekViewStartDate);
-          d.setDate(d.getDate() + i);
-          dates.push(d.toISOString().split('T')[0]);
+          dates.push(addDaysToDateStr(weekViewStartDate, i));
         }
 
         const results = await Promise.all(
@@ -2044,11 +2036,8 @@ export default function AppointmentsManagementPage() {
           }
           const responseData = await response.json();
           if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
-            const startDate = new Date(weekViewStartDate);
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 6);
-            const startDateStr = startDate.toISOString().split('T')[0];
-            const endDateStr = endDate.toISOString().split('T')[0];
+            const startDateStr = weekViewStartDate;
+            const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
             const weekRes = await fetch(
               buildWeekViewBookingsUrl({
                 designerId: weekViewDesignerId,
@@ -2665,11 +2654,8 @@ export default function AppointmentsManagementPage() {
                               }
                               // Refresh week view bookings if in week view mode
                               if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
-                                const startDate = new Date(weekViewStartDate);
-                                const endDate = new Date(startDate);
-                                endDate.setDate(endDate.getDate() + 6);
-                                const startDateStr = startDate.toISOString().split('T')[0];
-                                const endDateStr = endDate.toISOString().split('T')[0];
+                                const startDateStr = weekViewStartDate;
+                                const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
                                 const weekRes = await fetch(
                                   buildWeekViewBookingsUrl({
                                     designerId: weekViewDesignerId,
@@ -3785,11 +3771,8 @@ export default function AppointmentsManagementPage() {
 
                     // Refresh week view bookings if in week view mode
                     if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
-                      const startDate = new Date(weekViewStartDate);
-                      const endDate = new Date(startDate);
-                      endDate.setDate(endDate.getDate() + 6);
-                      const startDateStr = startDate.toISOString().split('T')[0];
-                      const endDateStr = endDate.toISOString().split('T')[0];
+                      const startDateStr = weekViewStartDate;
+                      const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
                       const weekRes = await fetch(
                         buildWeekViewBookingsUrl({
                           designerId: weekViewDesignerId,
@@ -4124,11 +4107,8 @@ export default function AppointmentsManagementPage() {
           setEditingSaleId(null);
           await refreshBookings();
           if (isWeekViewMode && weekViewDesignerId && weekViewStartDate) {
-            const startDate = new Date(weekViewStartDate);
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 6);
-            const startDateStr = startDate.toISOString().split('T')[0];
-            const endDateStr = endDate.toISOString().split('T')[0];
+            const startDateStr = weekViewStartDate;
+            const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
             const weekRes = await fetch(
               buildWeekViewBookingsUrl({
                 designerId: weekViewDesignerId,

@@ -338,6 +338,18 @@ export function isPublicBookingDateBeyondHorizon(dateStr: string): boolean {
   return dateStr > max;
 }
 
+// Comment: Add days to a YYYY-MM-DD calendar date, staying in the local time frame throughout.
+// `new Date(dateStr)` (no time part) parses as UTC midnight, but `.getDate()/.setDate()` and
+// `.toISOString()` read/write the BROWSER's local calendar day. Mixing those frames means any
+// DST transition inside the range (e.g. Sydney's AEDT start on the first Sunday of October)
+// shifts the result by a day and can make two different calendar days collapse onto the same
+// string (seen as duplicated week-view bookings on the DST-transition weekend).
+export function addDaysToDateStr(dateStr: string, days: number): string {
+  const date = parseLocalDateString(dateStr);
+  date.setDate(date.getDate() + days);
+  return formatLocalDateString(date);
+}
+
 // Comment: fullDate for checkout/payment — Sydney today through end of horizon only
 export function isPublicBookingDateAllowed(dateStr: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;

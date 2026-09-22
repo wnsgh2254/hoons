@@ -16,6 +16,7 @@ import {
   nudgeFixedPopoverIntoViewport,
   BOOKING_CONTEXT_MENU_EST_HEIGHT,
   resolveBookingPopoverVerticalPlacement,
+  addDaysToDateStr,
   type BookingHoverCardPosition,
 } from '@/lib/utils/appointment-utils';
 import BookingContextMenu from './BookingContextMenu';
@@ -297,9 +298,7 @@ export default function WeekViewGrid({
 
       {/* Show 7 days */}
       {Array.from({ length: 7 }).map((_, dayIndex) => {
-        const currentDate = new Date(weekViewStartDate);
-        currentDate.setDate(currentDate.getDate() + dayIndex);
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateStr = addDaysToDateStr(weekViewStartDate, dayIndex);
         const dayBookings = weekViewBookings.filter((b) => {
           if (b.booking_date !== dateStr) return false;
           // Comment: 취소된 예약은 타임테이블에서 제외
@@ -792,13 +791,8 @@ export default function WeekViewGrid({
                                           );
                                           if (res.ok) {
                                             // 예약 금지 목록 새로고침
-                                            const startDate = new Date(weekViewStartDate);
-                                            const endDate = new Date(startDate);
-                                            endDate.setDate(endDate.getDate() + 6);
-                                            const startDateStr =
-                                              startDate.toISOString().split('T')[0];
-                                            const endDateStr =
-                                              endDate.toISOString().split('T')[0];
+                                            const startDateStr = weekViewStartDate;
+                                            const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
 
                                             const restrictionsRes = await fetch(
                                               `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`,
@@ -899,13 +893,8 @@ export default function WeekViewGrid({
                                           });
                                           if (res.ok) {
                                             // 예약 금지 목록 새로고침
-                                            const startDate = new Date(weekViewStartDate);
-                                            const endDate = new Date(startDate);
-                                            endDate.setDate(endDate.getDate() + 6);
-                                            const startDateStr =
-                                              startDate.toISOString().split('T')[0];
-                                            const endDateStr =
-                                              endDate.toISOString().split('T')[0];
+                                            const startDateStr = weekViewStartDate;
+                                            const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
 
                                             const restrictionsRes = await fetch(
                                               `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`,

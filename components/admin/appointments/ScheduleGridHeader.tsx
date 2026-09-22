@@ -1,5 +1,7 @@
 'use client';
 
+import { addDaysToDateStr, parseLocalDateString } from '@/lib/utils/appointment-utils';
+
 export type ScheduleColumnHeader = {
   columnKey: string;
   designerId: number;
@@ -265,12 +267,11 @@ export default function ScheduleGridHeader({
         {weekViewDesignerId ? (
           <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))' }}>
             {Array.from({ length: 7 }).map((_, dayIndex) => {
-              const currentDate = new Date(weekViewStartDate);
-              currentDate.setDate(currentDate.getDate() + dayIndex);
-              const dateStr = currentDate.toISOString().split('T')[0];
-              const dayName = ['일', '월', '화', '수', '목', '금', '토'][currentDate.getDay()];
-              const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-              const day = String(currentDate.getDate()).padStart(2, '0');
+              const dateStr = addDaysToDateStr(weekViewStartDate, dayIndex);
+              const [, monthStr, dayStr] = dateStr.split('-');
+              const dayName = ['일', '월', '화', '수', '목', '금', '토'][parseLocalDateString(dateStr).getDay()];
+              const month = monthStr;
+              const day = dayStr;
               const isDayOff = weekViewAvailableDates.size > 0 && !weekViewAvailableDates.has(dateStr);
               return (
                 <div
