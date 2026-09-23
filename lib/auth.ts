@@ -42,11 +42,16 @@ function normalizeRole(role: UserRole): 'director' | 'manager' | 'designer' {
 }
 
 // Comment: Check if a role has access to a specific admin route
-// director  → full access
-// manager   → all except /admin/wages
-// designer  → only /admin/appointments and /admin/sales
+// director  → full access (the only role allowed into /admin/sales-analysis)
+// manager   → all except /admin/wages and /admin/sales-analysis
+// designer  → only /admin/appointments and /admin/sales (excl. /admin/sales-analysis)
 export function hasAccess(role: UserRole, path: string): boolean {
   const r = normalizeRole(role);
+
+  // Comment: Sales analysis is director-only, regardless of role.
+  if (path.startsWith('/admin/sales-analysis')) {
+    return r === 'director';
+  }
 
   if (r === 'director') return true;
 
@@ -70,6 +75,7 @@ export function getAllowedRoutes(role: UserRole): string[] {
   const allRoutes = [
     '/admin/appointments',
     '/admin/sales',
+    '/admin/sales-analysis',
     '/admin/customers',
     '/admin/prepaid',
     '/admin/service-history',

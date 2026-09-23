@@ -26,6 +26,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: '/admin/appointments', icon: 'calendar_month', label: 'Appointments' },
   { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
+  { href: '/admin/sales-analysis', icon: 'query_stats', label: 'Sales Analysis' },
   { href: '/admin/customers', icon: 'people', label: 'Customers' },
   { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
   {

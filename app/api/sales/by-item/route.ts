@@ -13,6 +13,8 @@ type ItemSalesRow = {
   total: number;
   avgPrice: number;
   pointDeduction: number;
+  customerCount: number;
+  customerBookable: boolean;
 };
 
 export async function GET(request: NextRequest) {
@@ -38,6 +40,7 @@ export async function GET(request: NextRequest) {
         id,
         shop_id,
         sales_date,
+        customer_id,
         sales_items (
           item_type,
           item_name,
@@ -113,6 +116,13 @@ export async function GET(request: NextRequest) {
       serviceCategoryMap.set(normalizeName(service.name), service.category || 'Others');
     });
 
+    // Comment: Rank/length surcharge add-ons (e.g. "원장 직급 추가 - Color", "기장추가 L") are
+    // never a standalone item a customer books directly — they're admin-added extra fees.
+    // `services.visible_to` doesn't distinguish these (the settings UI sets every card-priced
+    // row to 'both' regardless), so we key off the "추가"/"addition" naming convention instead.
+    const isSurchargeAddonName = (name: string) =>
+      name.includes('추가') || name.toLowerCase().includes('addition');
+
     const productCategoryMap = new Map<string, string>();
     (inventoryItems || []).forEach((item: any) => {
       productCategoryMap.set(normalizeName(item.name), item.brand || item.category || 'Others');
@@ -120,8 +130,14 @@ export async function GET(request: NextRequest) {
 
     const normalizedItemType = itemType === 'membership' ? 'prepaid' : itemType;
     const itemSalesMap = new Map<string, ItemSalesRow>();
+    const customerIdsByKey = new Map<string, Set<number>>();
 
-    const ensureItemSales = (key: string, category: string, serviceName?: string) => {
+    const ensureItemSales = (
+      key: string,
+      category: string,
+      serviceName?: string,
+      customerBookable: boolean = true,
+    ) => {
       if (!itemSalesMap.has(key)) {
         itemSalesMap.set(key, {
           category,
@@ -131,6 +147,8 @@ export async function GET(request: NextRequest) {
           total: 0,
           avgPrice: 0,
           pointDeduction: 0,
+          customerCount: 0,
+          customerBookable,
         });
       }
 
@@ -138,6 +156,8 @@ export async function GET(request: NextRequest) {
     };
 
     (sales || []).forEach((sale: any) => {
+      const customerId = sale.customer_id != null ? Number(sale.customer_id) : null;
+
       (sale.sales_items || []).forEach((item: any) => {
         if (String(item.item_type) !== normalizedItemType) return;
         if (!itemMatchesTarget(item)) return;
@@ -150,14 +170,20 @@ export async function GET(request: NextRequest) {
         let key = item.item_name || 'Unknown';
         let category = item.item_name || 'Unknown';
         let serviceName: string | undefined;
+        const isServiceBookable =
+          normalizedItemType === 'service' ? !isSurchargeAddonName(item.item_name || '') : true;
 
         if (normalizedItemType === 'service') {
-          category = serviceCategoryMap.get(normalizedItemName) || 'Others';
           if (aggregationMode === 'service') {
+            category = serviceCategoryMap.get(normalizedItemName) || 'Others';
             key = item.item_name || 'Unknown';
             serviceName = item.item_name || 'Unknown';
           } else {
-            key = category;
+            // Comment: Category mapping isn't reliable enough to break services down by
+            // Cut/Color/Perm/etc. today, so this view is just two rows: real bookable
+            // services vs. addon/surcharge fees (rank/length additions).
+            key = isServiceBookable ? 'service' : 'addon';
+            category = isServiceBookable ? '서비스' : 'Others';
           }
         } else if (normalizedItemType === 'product') {
           category = productCategoryMap.get(normalizedItemName) || 'Others';
@@ -167,7 +193,7 @@ export async function GET(request: NextRequest) {
           key = item.item_name || 'Prepaid';
         }
 
-        const row = ensureItemSales(key, aggregationMode === 'service' ? category : key, serviceName);
+        const row = ensureItemSales(key, category, serviceName, isServiceBookable);
         row.sales.quantity += quantity;
         row.sales.amount += amount;
 
@@ -175,12 +201,22 @@ export async function GET(request: NextRequest) {
           row.membershipDeduction.quantity += 1;
           row.membershipDeduction.amount += prepaidDeduction;
         }
+
+        if (customerId != null) {
+          let customerSet = customerIdsByKey.get(key);
+          if (!customerSet) {
+            customerSet = new Set<number>();
+            customerIdsByKey.set(key, customerSet);
+          }
+          customerSet.add(customerId);
+        }
       });
     });
 
-    itemSalesMap.forEach((row) => {
+    itemSalesMap.forEach((row, key) => {
       row.total = row.sales.amount + row.membershipDeduction.amount;
       row.avgPrice = row.sales.quantity > 0 ? roundToCents(row.sales.amount / row.sales.quantity) : 0;
+      row.customerCount = customerIdsByKey.get(key)?.size || 0;
     });
 
     const itemSales = Array.from(itemSalesMap.values());
