@@ -8,6 +8,11 @@ interface NumericKeypadProps {
   onBackspace: () => void;
   allowDecimal?: boolean;
   className?: string;
+  // Comment: when provided, replaces the 00/000/0000 digit-padding shortcuts with fixed
+  // preset-amount buttons (e.g. quick $10/$20/$30 discount buttons) — exactly 3 values,
+  // filling the same 3 slots (top two + bottom-left).
+  quickAmounts?: [number, number, number];
+  onQuickAmount?: (amount: number) => void;
 }
 
 export default function NumericKeypad({
@@ -15,6 +20,8 @@ export default function NumericKeypad({
   onBackspace,
   allowDecimal = false,
   className,
+  quickAmounts,
+  onQuickAmount,
 }: NumericKeypadProps) {
   return (
     <div className={className}>
@@ -32,20 +39,41 @@ export default function NumericKeypad({
           ))}
         </div>
         <div className="col-span-1 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => onNumberClick('000')}
-            className={btnBase}
-          >
-            000
-          </button>
-          <button
-            type="button"
-            onClick={() => onNumberClick('0000')}
-            className={btnBase}
-          >
-            0000
-          </button>
+          {quickAmounts ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onQuickAmount?.(quickAmounts[0])}
+                className={btnBase}
+              >
+                {quickAmounts[0]}
+              </button>
+              <button
+                type="button"
+                onClick={() => onQuickAmount?.(quickAmounts[1])}
+                className={btnBase}
+              >
+                {quickAmounts[1]}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onNumberClick('000')}
+                className={btnBase}
+              >
+                000
+              </button>
+              <button
+                type="button"
+                onClick={() => onNumberClick('0000')}
+                className={btnBase}
+              >
+                0000
+              </button>
+            </>
+          )}
         </div>
       </div>
       <div className="grid grid-cols-4 gap-2 mt-2">
@@ -57,13 +85,23 @@ export default function NumericKeypad({
           >
             0
           </button>
-          <button
-            type="button"
-            onClick={() => onNumberClick('00')}
-            className={btnBase}
-          >
-            00
-          </button>
+          {quickAmounts ? (
+            <button
+              type="button"
+              onClick={() => onQuickAmount?.(quickAmounts[2])}
+              className={btnBase}
+            >
+              {quickAmounts[2]}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onNumberClick('00')}
+              className={btnBase}
+            >
+              00
+            </button>
+          )}
           <button
             type="button"
             onClick={onBackspace}

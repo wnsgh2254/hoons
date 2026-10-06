@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { supabase } from '@/lib/supabase';
-import { calculatePolicyRefundAmount } from '@/lib/cancellation-policy';
-import { refundStripeDepositForBooking } from '@/lib/refund-stripe-deposit';
 import { isCancelledBookingStatus } from '@/lib/booking-status';
+import { cancelBookingWithPolicyRefund } from '@/lib/booking-cancellation';
 import { dbTimeStringToMinutes } from '@/lib/booking-time-math';
 import {
   assertBookingFitsWorkingHours,
@@ -203,7 +202,8 @@ export async function PATCH(
     const statusRaw = typeof body.status === 'string' ? body.status.trim() : '';
     const isCancelling = isCancelledBookingStatus(statusRaw);
 
-    let bookingBeforeCancel: BookingCancelLogRow | null = null;
+    // Comment: Cancelling goes through the shared helper (also used by the customer self-cancel
+    // route) so both paths apply the exact same refund policy and soft-cancel behavior.
     if (isCancelling) {
       const { data: cancelRow, error: cancelRowError } = await supabase
         .from('bookings')
@@ -219,133 +219,45 @@ export async function PATCH(
 
       if (cancelRowError) {
         console.warn('[admin-booking-cancel] Failed to load booking for cancel log:', cancelRowError);
-      } else if (cancelRow) {
-        bookingBeforeCancel = cancelRow as BookingCancelLogRow;
-      }
-    }
-
-    if (refundStripeDeposit && isCancelling) {
-      // Comment: Use * so missing optional columns (before SQL migration) does not break the query.
-      // Selecting unknown column names makes PostgREST return an error we were wrongly mapping to 404.
-      const { data: refundRow, error: refundFetchErr } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (refundFetchErr) {
-        console.error('Refund prefetch failed:', refundFetchErr);
-        return NextResponse.json(
-          { error: refundFetchErr.message || '예약을 불러오지 못했습니다.' },
-          { status: 500 },
-        );
-      }
-      if (!refundRow) {
-        return NextResponse.json({ error: '예약을 찾을 수 없습니다.' }, { status: 404 });
       }
 
-      const depositPaid = Math.max(0, Number((refundRow as any).deposit_paid) || 0);
-      const alreadyRefundedDb = (refundRow as any).deposit_refunded_at != null;
-      const policyRefund = calculatePolicyRefundAmount(
-        depositPaid,
-        typeof (refundRow as any).booking_date === 'string' ? (refundRow as any).booking_date : null,
-      );
+      const cancellationReason =
+        typeof body.cancellation_reason === 'string' || body.cancellation_reason === null
+          ? body.cancellation_reason
+          : undefined;
 
-      if (!alreadyRefundedDb && depositPaid > 0) {
-        const result = await refundStripeDepositForBooking({
+      const result = await cancelBookingWithPolicyRefund({
+        bookingId: Number(id),
+        cancellationReason,
+        applyRefund: refundStripeDeposit,
+        cancelledStatus: statusRaw,
+      });
+
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+
+      if (!result.alreadyCancelled) {
+        const adminUsername = await readAdminSessionUsername();
+        logAdminBookingCancellation({
           bookingId: Number(id),
-          stripePaymentIntentId: (refundRow as any).stripe_payment_intent_id,
-          depositPaidAud: depositPaid,
-          refundAmountAud: policyRefund.refundAmountAud,
+          before: (cancelRow as BookingCancelLogRow) ?? null,
+          adminUsername,
         });
-
-        if (!result.ok) {
-          return NextResponse.json(
-            {
-              error:
-                result.error ||
-                'Stripe 환불에 실패했습니다. 예약은 취소되지 않았습니다.',
-            },
-            { status: 502 },
-          );
-        }
-
-        let refundedAmountAud = 0;
-        if ('skipped' in result && result.skipped) {
-          if (
-            result.reason.includes('fully refunded') ||
-            result.reason.includes('Already refunded')
-          ) {
-            updates.deposit_refunded_at = new Date().toISOString();
-          }
-        } else if ('refundId' in result) {
-          updates.deposit_refunded_at = new Date().toISOString();
-          updates.stripe_refund_id = result.refundId;
-          refundedAmountAud = Math.max(
-            0,
-            Number((result as any).refundedAmountAud || policyRefund.refundAmountAud || 0),
-          );
-        }
-
-        if (refundedAmountAud > 0) {
-          const { data: refundHeader, error: refundHeaderError } = await supabase
-            .from('refunds')
-            .insert({
-              customer_id: (refundRow as any).customer_id || null,
-              shop_id: (refundRow as any).shop_id || null,
-              total_amount: refundedAmountAud,
-              point_deduction: 0,
-              cash_amount: 0,
-              card_amount: refundedAmountAud,
-              bank_transfer_amount: 0,
-              memo: `Booking #${id} deposit refund (${Math.round(policyRefund.refundRate * 100)}%)`,
-              refund_date: new Date().toISOString().split('T')[0],
-              refund_time: new Date().toTimeString().slice(0, 5),
-            })
-            .select('id')
-            .single();
-
-          if (refundHeaderError) {
-            console.error('Failed to create deposit refund header:', refundHeaderError);
-          } else if (refundHeader?.id) {
-            const { error: refundItemError } = await supabase
-              .from('refund_items')
-              .insert({
-                refund_id: refundHeader.id,
-                item_type: 'deposit',
-                item_name: 'Booking deposit refund',
-                unit_price: refundedAmountAud,
-                quantity: 1,
-                amount: refundedAmountAud,
-                manager: null,
-              });
-
-            if (refundItemError) {
-              console.error('Failed to create deposit refund item:', refundItemError);
-            }
-          }
-        }
       }
+
+      return NextResponse.json({ booking: result.booking }, { status: 200 });
     }
 
-    // Comment: cancellation_reason 필드는 선택적 (컬럼이 없을 수도 있음)
-    let cancellationReason: string | null | undefined = undefined;
-    if (body.cancellation_reason !== undefined) {
-      if (typeof body.cancellation_reason === 'string' || body.cancellation_reason === null) {
-        cancellationReason = body.cancellation_reason === null ? null : body.cancellation_reason;
-      }
-    }
-
-    if (Object.keys(updates).length === 0 && cancellationReason === undefined) {
+    if (Object.keys(updates).length === 0) {
       console.warn('⚠️ 업데이트할 필드가 없습니다.');
       return NextResponse.json({ error: '업데이트할 필드가 없습니다.' }, { status: 400 });
     }
 
-    console.log('📤 Supabase 업데이트 실행:', { id, updates, cancellationReason });
+    console.log('📤 Supabase 업데이트 실행:', { id, updates });
     console.log('📋 업데이트할 status 값:', updates.status);
-    
-    // Comment: cancellation_reason을 제외한 업데이트 먼저 실행
-    let { data, error } = await supabase
+
+    const { data, error } = await supabase
       .from('bookings')
       .update(updates)
       .eq('id', id)
@@ -376,33 +288,6 @@ export async function PATCH(
           requested: updates.status,
           saved: data.status
         });
-      }
-
-      if (isCancelling && isCancelledBookingStatus(data.status)) {
-        const adminUsername = await readAdminSessionUsername();
-        logAdminBookingCancellation({
-          bookingId: Number(id),
-          before: bookingBeforeCancel,
-          adminUsername,
-        });
-      }
-    }
-
-    // Comment: cancellation_reason이 있으면 별도로 업데이트 시도 (컬럼이 있을 경우)
-    if (cancellationReason !== undefined && data) {
-      const { data: updateData, error: updateError } = await supabase
-        .from('bookings')
-        .update({ cancellation_reason: cancellationReason })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (!updateError && updateData) {
-        data = updateData;
-        console.log('✅ cancellation_reason 업데이트 성공');
-      } else if (updateError) {
-        // Comment: cancellation_reason 컬럼이 없어도 메인 업데이트는 성공했으므로 경고만 로깅
-        console.warn('⚠️ cancellation_reason 업데이트 실패 (컬럼이 없을 수 있음):', updateError.message);
       }
     }
 

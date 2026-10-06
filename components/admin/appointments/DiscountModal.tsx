@@ -47,12 +47,16 @@ export default function DiscountModal({
   // 금액 입력 시 사용할 선택된 항목들 (항목 선택이 변경되면 초기화)
   const [amountInputSelectedItems, setAmountInputSelectedItems] = useState<Set<string>>(new Set());
 
-  // 모달이 열릴 때 초기화 (기본적으로 아무 항목도 선택되지 않은 상태)
+  // 모달이 열릴 때 초기화. 할인이 아직 적용되지 않은 항목은 기본적으로 모두 선택된 상태로 시작해서,
+  // 직원이 금액/퍼센트를 입력한 후 체크박스를 별도로 다시 체크할 필요가 없도록 한다.
   useEffect(() => {
     if (isOpen && items.length > 0) {
-      setSelectedItemIds(new Set()); // 기본적으로 아무 항목도 선택되지 않음
+      const defaultSelectable = new Set(
+        items.filter((item) => !(item.discountType && item.discount > 0)).map((item) => item.id),
+      );
+      setSelectedItemIds(defaultSelectable);
       setItemsToRemoveDiscount(new Set()); // 할인 제거 예정 항목 초기화
-      setAmountInputSelectedItems(new Set()); // 금액 입력 시 사용할 선택된 항목들 초기화
+      setAmountInputSelectedItems(defaultSelectable); // 금액 입력 시 사용할 선택된 항목들 초기화
       setPercentageValue(null);
       setCustomPercentage('');
       setAmountValue('');
@@ -186,9 +190,9 @@ export default function DiscountModal({
       });
     });
 
-    // 변경사항이 없으면 경고
+    // 변경사항이 없으면 그냥 조용히 닫는다 (팝업으로 재확인을 요구하지 않음)
     if (updates.length === 0) {
-      alert('변경할 사항이 없습니다.');
+      handleCancel();
       return;
     }
 
@@ -346,6 +350,12 @@ export default function DiscountModal({
 
   const handleAmountNumberClick = (num: string) => {
     setAmountValue((prev) => addDigits(prev, num, 1));
+  };
+
+  // 금액 할인 빠른 버튼 ($10/$20/$30 등): 즉시 선택된 항목에 적용
+  const handleAmountPresetSelect = (amount: number) => {
+    const itemsToUpdate = amountInputSelectedItems.size > 0 ? amountInputSelectedItems : selectedItemIds;
+    updateItemDiscounts(amount, 'amount', itemsToUpdate);
   };
 
   const handleAmountBackspace = () => {
@@ -523,6 +533,8 @@ export default function DiscountModal({
                 onBackspace={handleAmountBackspace}
                 allowDecimal
                 className="space-y-2"
+                quickAmounts={[10, 20, 30]}
+                onQuickAmount={handleAmountPresetSelect}
               />
             </div>
           )}

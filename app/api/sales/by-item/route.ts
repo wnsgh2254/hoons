@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
           membershipAmount: 0,
           totalAmount: 0,
           avgPrice: 0,
+          customerCount: 0,
         },
       });
     }
@@ -131,6 +132,9 @@ export async function GET(request: NextRequest) {
     const normalizedItemType = itemType === 'membership' ? 'prepaid' : itemType;
     const itemSalesMap = new Map<string, ItemSalesRow>();
     const customerIdsByKey = new Map<string, Set<number>>();
+    // Comment: distinct customers across ALL matched items/sales, for the overall summary —
+    // a customer who gets cut + color + clinic in one visit should count once here, not 3 times.
+    const summaryCustomerIds = new Set<number>();
 
     const ensureItemSales = (
       key: string,
@@ -209,13 +213,16 @@ export async function GET(request: NextRequest) {
             customerIdsByKey.set(key, customerSet);
           }
           customerSet.add(customerId);
+          summaryCustomerIds.add(customerId);
         }
       });
     });
 
     itemSalesMap.forEach((row, key) => {
       row.total = row.sales.amount + row.membershipDeduction.amount;
-      row.avgPrice = row.sales.quantity > 0 ? roundToCents(row.sales.amount / row.sales.quantity) : 0;
+      // Comment: 객단가 includes membership/deposit deduction amount, not just cash sales,
+      // so it reflects the full value of the service.
+      row.avgPrice = row.sales.quantity > 0 ? roundToCents(row.total / row.sales.quantity) : 0;
       row.customerCount = customerIdsByKey.get(key)?.size || 0;
     });
 
@@ -244,8 +251,9 @@ export async function GET(request: NextRequest) {
           ...summary,
           avgPrice:
             summary.salesQuantity > 0
-              ? roundToCents(summary.salesAmount / summary.salesQuantity)
+              ? roundToCents(summary.totalAmount / summary.salesQuantity)
               : 0,
+          customerCount: summaryCustomerIds.size,
         },
       },
       { status: 200 },

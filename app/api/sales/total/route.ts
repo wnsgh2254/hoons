@@ -340,14 +340,17 @@ export async function GET(request: NextRequest) {
       },
     };
 
+    // Comment: 객단가 must include membership/deposit deduction amount (revenueSummary.total.*),
+    // not just cash sales (revenueSummary.sales.*) — otherwise a customer who paid with a
+    // prepaid package or deposit shows as spending less than they actually did.
     if (revenueSummary.customers.service.quantity > 0) {
       revenueSummary.customers.service.amount = roundToCents(
-        revenueSummary.sales.service.amount / revenueSummary.customers.service.quantity,
+        revenueSummary.total.service.amount / revenueSummary.customers.service.quantity,
       );
     }
     if (revenueSummary.customers.product.quantity > 0) {
       revenueSummary.customers.product.amount = roundToCents(
-        revenueSummary.sales.product.amount / revenueSummary.customers.product.quantity,
+        revenueSummary.total.product.amount / revenueSummary.customers.product.quantity,
       );
     }
     if (revenueSummary.customers.total.quantity > 0) {

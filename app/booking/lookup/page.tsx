@@ -46,6 +46,34 @@ export default function BookingLookupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookings, setBookings] = useState<LookupBooking[] | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSuccess, setCancelSuccess] = useState<string | null>(null);
+
+  const handleCancel = async (bookingId: number) => {
+    if (!window.confirm('Cancel this appointment? This cannot be undone.')) return;
+    setCancelError(null);
+    setCancelSuccess(null);
+    setCancellingId(bookingId);
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCancelError(typeof data.error === 'string' ? data.error : 'Could not cancel this appointment.');
+        return;
+      }
+      setBookings((prev) => (prev ? prev.filter((b) => b.id !== bookingId) : prev));
+      setCancelSuccess('Your appointment has been cancelled.');
+    } catch {
+      setCancelError('Could not reach the server. Please try again.');
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +148,18 @@ export default function BookingLookupPage() {
           </p>
         )}
 
+        {cancelSuccess && (
+          <p className="text-sm text-green-800 border border-green-200 bg-green-50 px-4 py-3 mb-8" role="status">
+            {cancelSuccess}
+          </p>
+        )}
+
+        {cancelError && (
+          <p className="text-sm text-red-700 border border-red-200 bg-red-50 px-4 py-3 mb-8" role="alert">
+            {cancelError}
+          </p>
+        )}
+
         {bookings !== null && !error && (
           <div className="border-t border-black pt-8">
             <h2 className="text-xs uppercase tracking-widest text-black/60 mb-6">Upcoming appointments</h2>
@@ -156,6 +196,14 @@ export default function BookingLookupPage() {
                         </div>
                       )}
                     </dl>
+                    <button
+                      type="button"
+                      onClick={() => handleCancel(b.id)}
+                      disabled={cancellingId === b.id}
+                      className="mt-5 w-full sm:w-auto min-h-11 border border-red-700 text-red-700 px-6 py-2.5 text-xs uppercase tracking-widest hover:bg-red-700 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed touch-manipulation active:opacity-90"
+                    >
+                      {cancellingId === b.id ? 'Cancelling…' : 'Cancel appointment'}
+                    </button>
                   </li>
                 ))}
               </ul>

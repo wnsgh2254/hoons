@@ -31,6 +31,7 @@ type ItemSalesSummary = {
   membershipAmount: number;
   totalAmount: number;
   avgPrice: number;
+  customerCount: number;
 };
 
 type ItemSalesResponse = { itemSales: ItemSalesRow[]; summary: ItemSalesSummary | null };
@@ -359,8 +360,10 @@ function StaffAnalysisSection({
   );
 }
 
-// Comment: Sum a subset of item rows into the same shape as the API's overall summary
-function summarizeItemSales(rows: ItemSalesRow[]): ItemSalesSummary {
+// Comment: Sum a subset of item rows into the same shape as the API's overall summary.
+// customerCount is NOT summed from each row (that would double-count a customer who got
+// multiple services in one visit) — pass it in separately from the API's own distinct-customer total.
+function summarizeItemSales(rows: ItemSalesRow[], customerCount: number = 0): ItemSalesSummary {
   const totals = rows.reduce(
     (acc, row) => ({
       salesQuantity: acc.salesQuantity + row.sales.quantity,
@@ -374,12 +377,14 @@ function summarizeItemSales(rows: ItemSalesRow[]): ItemSalesSummary {
 
   return {
     ...totals,
-    avgPrice: totals.salesQuantity > 0 ? totals.salesAmount / totals.salesQuantity : 0,
+    // Comment: 객단가 includes membership/deposit deduction amount (totalAmount), not just cash sales.
+    avgPrice: totals.salesQuantity > 0 ? totals.totalAmount / totals.salesQuantity : 0,
+    customerCount,
   };
 }
 
-function ServiceDetailTable({ rows }: { rows: ItemSalesRow[] }) {
-  const summary = summarizeItemSales(rows);
+function ServiceDetailTable({ rows, customerCount }: { rows: ItemSalesRow[]; customerCount: number }) {
+  const summary = summarizeItemSales(rows, customerCount);
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -411,7 +416,7 @@ function ServiceDetailTable({ rows }: { rows: ItemSalesRow[] }) {
             <tr className="bg-yellow-50 border-t-2 border-yellow-200">
               <td className="px-4 py-2 font-bold">합계</td>
               <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.salesQuantity}</td>
-              <td className="px-4 py-2 text-center"></td>
+              <td className="px-4 py-2 text-center font-semibold tabular-nums">{summary.customerCount}</td>
               <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(summary.salesAmount)}</td>
               <td className="px-4 py-2 text-center font-semibold tabular-nums">{formatAudNumber(summary.membershipAmount)}</td>
               <td className="px-4 py-2 text-center font-bold tabular-nums">{formatAudNumber(summary.totalAmount)}</td>
@@ -431,6 +436,9 @@ function StaffServiceDetail({ staff, detail }: { staff: any; detail: ItemSalesRe
   const itemSales = detail?.itemSales || [];
   const bookableItems = itemSales.filter((item) => item.customerBookable !== false);
   const otherItems = itemSales.filter((item) => item.customerBookable === false);
+  // Comment: 고객수 합계 is the API's own distinct-customer count (one customer booking
+  // cut + color + clinic counts once), not a sum of each service row's customerCount.
+  const bookableCustomerCount = detail?.summary?.customerCount ?? 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -442,7 +450,7 @@ function StaffServiceDetail({ staff, detail }: { staff: any; detail: ItemSalesRe
       ) : (
         <>
           {bookableItems.length > 0 ? (
-            <ServiceDetailTable rows={bookableItems} />
+            <ServiceDetailTable rows={bookableItems} customerCount={bookableCustomerCount} />
           ) : (
             <p className="text-xs text-gray-400 px-1">해당 기간에 예약 가능한 서비스 판매 내역이 없습니다.</p>
           )}
@@ -450,7 +458,7 @@ function StaffServiceDetail({ staff, detail }: { staff: any; detail: ItemSalesRe
           {otherItems.length > 0 && (
             <div className="flex flex-col gap-2 pl-2">
               <h5 className="text-xs font-semibold text-gray-500">상세 - Others</h5>
-              <ServiceDetailTable rows={otherItems} />
+              <ServiceDetailTable rows={otherItems} customerCount={0} />
             </div>
           )}
         </>
