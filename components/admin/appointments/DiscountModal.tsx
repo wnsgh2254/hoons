@@ -131,26 +131,37 @@ export default function DiscountModal({
   };
 
   const handleConfirm = () => {
-    // 먼저 현재 선택된 항목들에 입력된 할인 값 적용
+    // 현재 선택된 항목들에 입력된 할인 값을 로컬 맵에 병합한다.
+    // (setState는 비동기라 같은 호출 안에서 itemDiscounts를 다시 읽으면 입력값이 누락된다)
+    const effectiveDiscounts = new Map(itemDiscounts);
+    const effectiveRemovals = new Set(itemsToRemoveDiscount);
     if (selectedItemIds.size > 0) {
+      let pending: { type: DiscountType; value: number; ids: Set<string> } | null = null;
       if (activeTab === 'percentage') {
         const percentage = percentageValue || (customPercentage ? Number(customPercentage) : 0);
         if (percentage > 0) {
-          updateItemDiscounts(percentage, 'percentage', selectedItemIds, false);
+          pending = { type: 'percentage', value: percentage, ids: selectedItemIds };
         }
       } else if (activeTab === 'amount') {
         const amount = amountValue ? parseAmount(amountValue) : 0;
         if (amount > 0) {
-          const itemsToUpdate = amountInputSelectedItems.size > 0 ? amountInputSelectedItems : selectedItemIds;
-          updateItemDiscounts(amount, 'amount', itemsToUpdate, false);
+          const ids = amountInputSelectedItems.size > 0 ? amountInputSelectedItems : selectedItemIds;
+          pending = { type: 'amount', value: amount, ids };
         }
+      }
+      if (pending) {
+        const { type, value, ids } = pending;
+        ids.forEach((itemId) => {
+          effectiveDiscounts.set(itemId, { type, value });
+          effectiveRemovals.delete(itemId);
+        });
       }
     }
 
     const updates: Array<{ itemId: string; discount: number; discountType: DiscountType; discountValue: number | string | null }> = [];
 
     // 할인을 제거할 항목 처리
-    itemsToRemoveDiscount.forEach(itemId => {
+    effectiveRemovals.forEach(itemId => {
       updates.push({
         itemId,
         discount: 0,
@@ -160,9 +171,9 @@ export default function DiscountModal({
     });
 
     // itemDiscounts에 저장된 모든 할인 정보를 업데이트에 추가
-    itemDiscounts.forEach((discountInfo, itemId) => {
+    effectiveDiscounts.forEach((discountInfo, itemId) => {
       // 제거 예정 항목이면 스킵
-      if (itemsToRemoveDiscount.has(itemId)) return;
+      if (effectiveRemovals.has(itemId)) return;
 
       const item = items.find(i => i.id === itemId);
       if (!item) return;
