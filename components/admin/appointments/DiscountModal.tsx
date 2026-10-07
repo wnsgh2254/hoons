@@ -487,7 +487,8 @@ export default function DiscountModal({
                       setCustomPercentage(value);
                       // 선택된 항목들에 할인 정보 저장 (입력 즉시 적용)
                       if (value && selectedItemIds.size > 0) {
-                        updateItemDiscounts(Number(value), 'percentage');
+                        // 선택을 해제하면 다음 자릿수 입력(25 → 2 다음 5)이 무시되므로 유지한다
+                        updateItemDiscounts(Number(value), 'percentage', undefined, false);
                       }
                     }}
                     placeholder="0"
