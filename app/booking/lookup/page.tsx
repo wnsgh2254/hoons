@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { getCancellationRefundPolicy } from '@/lib/cancellation-policy';
 
 type LookupBooking = {
   id: number;
@@ -51,7 +52,17 @@ export default function BookingLookupPage() {
   const [cancelSuccess, setCancelSuccess] = useState<string | null>(null);
 
   const handleCancel = async (bookingId: number) => {
-    if (!window.confirm('Cancel this appointment? This cannot be undone.')) return;
+    const booking = bookings?.find((b) => b.id === bookingId);
+    const policy = getCancellationRefundPolicy(booking?.booking_date);
+    const refundNote =
+      policy.refundBand === 'full'
+        ? 'Your deposit will be refunded in full (100%).'
+        : policy.refundBand === 'half'
+          ? 'Your deposit will be 50% refunded.'
+          : 'Deposits are non-refundable for same-day cancellations, so your deposit will not be refunded.';
+    if (!window.confirm(`Cancel this appointment? This cannot be undone.
+
+${refundNote}`)) return;
     setCancelError(null);
     setCancelSuccess(null);
     setCancellingId(bookingId);
@@ -169,6 +180,25 @@ export default function BookingLookupPage() {
                 contact the salon.
               </p>
             ) : (
+              <>
+              <div className="bg-white/60 p-4 flex gap-3 items-start border border-black mb-6">
+                <span className="material-symbols-outlined text-black mt-0.5 text-lg shrink-0">info</span>
+                <div className="text-xs text-gray-700 leading-relaxed space-y-1.5">
+                  <p className="font-bold text-black uppercase tracking-wide">Cancellation Policy</p>
+                  <p>
+                    <span className="font-bold text-black">3+ days before</span> your appointment —{' '}
+                    <span className="font-bold text-black">100% refund</span>
+                  </p>
+                  <p>
+                    <span className="font-bold text-black">1–2 days before</span> your appointment —{' '}
+                    <span className="font-bold text-black">50% refund</span>
+                  </p>
+                  <p className="text-gray-500 pt-0.5">
+                    Deposits are non-refundable for same-day cancellations. Rescheduling is available up
+                    to 24 hours before your appointment.
+                  </p>
+                </div>
+              </div>
               <ul className="space-y-6">
                 {bookings.map((b) => (
                   <li key={b.id} className="border border-black bg-white p-5 md:p-6 overflow-hidden">
@@ -207,6 +237,7 @@ export default function BookingLookupPage() {
                   </li>
                 ))}
               </ul>
+              </>
             )}
           </div>
         )}
