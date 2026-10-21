@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useStaff } from '@/hooks/useStaff';
+import { BOOKING_DEPOSIT_AUD } from '@/lib/booking-deposit';
 import { useServices } from '@/hooks/useServices';
 import {
   AdminPageLayout,
@@ -376,9 +377,8 @@ function EditServiceModal({
       const selectedService = services.find((svc) => String(svc.id) === selectedServiceId);
       if (selectedService) {
         setTotalAmount(String(selectedService.price || 0));
-        // Comment: Update deposit amount to 20% of total (if needed)
-        const newDeposit = Math.round((selectedService.price || 0) * 0.2);
-        setDepositAmount(String(newDeposit));
+        // Comment: Deposit is a flat amount regardless of service price
+        setDepositAmount(String(BOOKING_DEPOSIT_AUD));
         // Comment: Clear custom service fields when selecting a regular service
         setCustomServiceName('');
         setCustomServiceDuration('');

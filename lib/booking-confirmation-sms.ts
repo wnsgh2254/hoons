@@ -61,18 +61,16 @@ export function formatAuPhoneForSmsDisplay(raw: string | null | undefined): stri
 /**
  * Booking confirmation SMS body — keep in sync with Supabase Edge `booking-confirmation-sms`.
  *
- * Haeyoom Haymarket
+ * DO NOT REPLY
  *
- * Appointment:
- * 15/07 (Wed) 6:00pm
+ * Enquiry
+ * Call or Text 0432 328 002
  *
- * Service:
- * Men's Haircut
+ * 01/10 (Thu) 10:00am
  *
- * Change/Cancel:
- * Call or Text 0422 482 020
+ * Womancut
  *
- * Please do not reply.
+ * Haeyoom Meadowbank
  */
 export function buildBookingConfirmationSmsBody(params: {
   headerLine: string;
@@ -89,13 +87,11 @@ export function buildBookingConfirmationSmsBody(params: {
     : 'Call or Text your Haeyoom location';
 
   return (
-    `${params.headerLine}\n\n` +
-    `Appointment:\n` +
-    `${params.appointmentLine}\n\n` +
-    `Service:\n` +
-    `${params.serviceName}\n\n` +
-    `Change/Cancel:\n` +
+    `DO NOT REPLY\n\n` +
+    `Enquiry\n` +
     `${contactInstruction}\n\n` +
-    `Please do not reply.`
+    `${params.appointmentLine}\n\n` +
+    `${params.serviceName}\n\n` +
+    `${params.headerLine}`
   );
 }

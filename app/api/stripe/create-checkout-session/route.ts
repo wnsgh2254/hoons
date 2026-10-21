@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { supabase } from "@/lib/supabase";
+import { BOOKING_DEPOSIT_AUD } from "@/lib/booking-deposit";
 import { buildPhoneVariants, getCustomerIdByNameAndPhone, isValidAuMobilePhone } from "@/lib/data";
 import { cleanupExpiredPendingBookings } from "@/lib/pending-bookings";
 import {
@@ -155,16 +156,14 @@ export async function POST(request: NextRequest) {
     returnOrSuccessUrl.searchParams.set("time", timeLabel);
     returnOrSuccessUrl.searchParams.set(
       "deposit",
-      typeof depositAmount === "number" ? depositAmount.toFixed(2) : "0.00",
+      BOOKING_DEPOSIT_AUD.toFixed(2),
     );
 
     const cancelUrl = new URL("/booking", origin);
     cancelUrl.searchParams.set("canceled", "1");
 
-    const amountInCents =
-      typeof depositAmount === "number"
-        ? Math.round(depositAmount * 100)
-        : 0;
+    // Comment: Flat deposit is enforced server-side; client-sent amount is ignored.
+    const amountInCents = Math.round(BOOKING_DEPOSIT_AUD * 100);
 
     if (!amountInCents || amountInCents <= 0) {
       return NextResponse.json(

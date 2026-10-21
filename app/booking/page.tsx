@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import { BOOKING_DEPOSIT_AUD } from '@/lib/booking-deposit';
 import {
   isStartSlotUnavailable,
   timeLabelToMinutes,
@@ -963,7 +964,7 @@ export default function BookingPage() {
           year: 'numeric',
         })
       : '';
-    const depositAmt = combinedTotal * 0.2;
+    const depositAmt = BOOKING_DEPOSIT_AUD;
 
     setCheckoutError(null);
     setCheckoutLoading(true);
@@ -1178,7 +1179,7 @@ export default function BookingPage() {
   };
 
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
-  const depositAmount = totalPrice * 0.2; // 20% deposit
+  const depositAmount = BOOKING_DEPOSIT_AUD; // Flat $10 deposit
 
   // Step 4: Deposit Payment
   if (step === 'deposit') {
@@ -1348,7 +1349,7 @@ export default function BookingPage() {
                       <span className="text-lg font-bold text-black">${totalPrice.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-black">
-                      <span className="text-sm font-medium text-slate-900">Deposit (20%)</span>
+                      <span className="text-sm font-medium text-slate-900">Deposit</span>
                       <span className="text-xl font-bold text-black">${depositAmount.toFixed(2)}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-2">

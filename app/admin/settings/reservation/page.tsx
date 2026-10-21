@@ -1179,7 +1179,7 @@ function BookingItemModal({
               aria-label="시작 금액 (달러)"
             />
           </div>
-          <p className="mt-1 text-xs text-gray-500">고객 예약 시 총액·보증금(20%) 계산에 사용됩니다 (AUD).</p>
+          <p className="mt-1 text-xs text-gray-500">고객 예약 시 총액 계산에 사용됩니다 (AUD). 보증금은 항상 $10 고정입니다.</p>
         </div>
 
         <div>
