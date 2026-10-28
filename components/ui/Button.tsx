@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
@@ -41,14 +42,45 @@ export default function Button({
   disabled,
   className,
   children,
+  onClick,
   ...rest
 }: ButtonProps) {
-  const isDisabled = disabled || loading;
+  const [pending, setPending] = useState(false);
+  // Ref guards rapid double-clicks that land before React re-renders with disabled.
+  const lockRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const isLoading = loading || pending;
+  const isDisabled = disabled || isLoading;
+
+  // If the click handler returns a promise, lock the button until it settles.
+  const handleClick = onClick
+    ? (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (lockRef.current) return;
+        const result: unknown = onClick(e);
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          lockRef.current = true;
+          setPending(true);
+          const release = () => {
+            lockRef.current = false;
+            if (mountedRef.current) setPending(false);
+          };
+          (result as Promise<unknown>).then(release, release);
+        }
+      }
+    : undefined;
 
   return (
     <button
       type="button"
       disabled={isDisabled}
+      onClick={handleClick}
       className={cn(
         'font-medium rounded-lg transition-colors inline-flex items-center justify-center gap-2',
         variantStyles[variant],
@@ -58,10 +90,10 @@ export default function Button({
       )}
       {...rest}
     >
-      {loading && (
+      {isLoading && (
         <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
       )}
-      {icon && !loading && (
+      {icon && !isLoading && (
         <span className="material-symbols-outlined text-lg">{icon}</span>
       )}
       {children}

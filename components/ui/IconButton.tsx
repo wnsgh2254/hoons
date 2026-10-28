@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -20,15 +20,47 @@ const variantStyles = {
 };
 
 const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ icon, size = 'sm', variant = 'ghost', className, ...rest }, ref) => {
+  ({ icon, size = 'sm', variant = 'ghost', className, disabled, onClick, ...rest }, ref) => {
+    const [pending, setPending] = useState(false);
+    const lockRef = useRef(false);
+    const mountedRef = useRef(true);
+    useEffect(() => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+      };
+    }, []);
+
+    const isDisabled = disabled || pending;
+
+    // If the click handler returns a promise, lock the button until it settles.
+    const handleClick = onClick
+      ? (e: React.MouseEvent<HTMLButtonElement>) => {
+          if (lockRef.current) return;
+          const result: unknown = onClick(e);
+          if (result && typeof (result as Promise<unknown>).then === 'function') {
+            lockRef.current = true;
+            setPending(true);
+            const release = () => {
+              lockRef.current = false;
+              if (mountedRef.current) setPending(false);
+            };
+            (result as Promise<unknown>).then(release, release);
+          }
+        }
+      : undefined;
+
     return (
       <button
         ref={ref}
         type="button"
+        disabled={isDisabled}
+        onClick={handleClick}
         className={cn(
           'flex items-center justify-center rounded-lg transition-colors',
           sizeStyles[size],
           variantStyles[variant],
+          isDisabled && 'opacity-50 cursor-not-allowed',
           className,
         )}
         {...rest}

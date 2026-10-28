@@ -7,7 +7,7 @@ interface ConfirmationAlertModalProps {
   title: string;
   message: string;
   highlightText?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }
 
