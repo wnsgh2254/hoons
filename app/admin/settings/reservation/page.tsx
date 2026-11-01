@@ -788,16 +788,33 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
       }
     }
 
+    // Comment: Linked staff must be saved to the DB (schedules + weekday venues); local-only state is lost on refresh
+    const linkedStaffId = data.isLinked ? staffList.find((s) => s.name === data.linkedStaff)?.id : undefined;
+    if (linkedStaffId != null) {
+      setResourceSavePending(true);
+      saveResourceToDb(linkedStaffId, data, false)
+        .then(() => setIsAdding(false))
+        .catch((err) => {
+          console.error('Error adding resource:', err);
+          alert(err instanceof Error ? err.message : '자원 저장에 실패했습니다.');
+        })
+        .finally(() => setResourceSavePending(false));
+      return;
+    }
+
     setResources((prev) => [...prev, { ...data, id: getNextId() }]);
     setIsAdding(false);
   };
 
-  const handleUpdate = async (data: Omit<BookingResource, 'id'>) => {
-    if (!editingResource) return;
-    setResourceSavePending(true);
-    try {
-      // Update shop_id via staff API
-      await fetch(`/api/staff?id=${editingResource.id}`, {
+  // Comment: Save one designer's resource (staff flags, schedules, weekday venue defaults); shared by add and edit
+  const saveResourceToDb = async (
+    designerId: number,
+    data: Omit<BookingResource, 'id'>,
+    updateStaff: boolean,
+  ) => {
+    // Update shop_id via staff API (edit only: adding must not overwrite the staff's home shop)
+    if (updateStaff) {
+      await fetch(`/api/staff?id=${designerId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -805,93 +822,106 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           is_active: data.isActive,
         }),
       });
+    }
 
-      // Update schedules via designer-schedules API
-      // Get current DB schedules for this designer
-      const currentRes = await fetch(`/api/designer-schedules?designer_id=${editingResource.id}`);
-      const currentData = await currentRes.json();
-      const currentSchedules: any[] = currentData.schedules || [];
+    // Update schedules via designer-schedules API
+    // Get current DB schedules for this designer
+    const currentRes = await fetch(`/api/designer-schedules?designer_id=${designerId}`);
+    const currentData = await currentRes.json();
+    const currentSchedules: any[] = currentData.schedules || [];
 
-      // Expand new schedules to individual (weekday, shop_id, start_time, end_time) entries
-      const newEntries: { weekday: number; shop_id: number | null; start_time: string; end_time: string }[] = [];
-      for (const sched of data.schedules) {
-        for (const day of sched.days) {
-          const weekday = KOREAN_TO_WEEKDAY[day];
-          if (weekday !== undefined) {
-            newEntries.push({
-              weekday,
-              shop_id: sched.shopId ?? null,
-              start_time: sched.startTime + ':00',
-              end_time: sched.endTime + ':00',
-            });
-          }
+    // Expand new schedules to individual (weekday, shop_id, start_time, end_time) entries
+    const newEntries: { weekday: number; shop_id: number | null; start_time: string; end_time: string }[] = [];
+    for (const sched of data.schedules) {
+      for (const day of sched.days) {
+        const weekday = KOREAN_TO_WEEKDAY[day];
+        if (weekday !== undefined) {
+          newEntries.push({
+            weekday,
+            shop_id: sched.shopId ?? null,
+            start_time: sched.startTime + ':00',
+            end_time: sched.endTime + ':00',
+          });
         }
       }
+    }
 
-      const activeCurrent = currentSchedules.filter((cs) => !cs.effective_to);
+    const activeCurrent = currentSchedules.filter((cs) => !cs.effective_to);
 
-      const deleteIds: number[] = [];
-      for (const cs of activeCurrent) {
-        const match = newEntries.find(
-          (ne) =>
-            ne.weekday === cs.weekday &&
-            ne.start_time === cs.start_time &&
-            ne.end_time === cs.end_time &&
-            (ne.shop_id == null || cs.shop_id == null || ne.shop_id === cs.shop_id),
-        );
-        if (!match) deleteIds.push(cs.id);
+    const deleteIds: number[] = [];
+    for (const cs of activeCurrent) {
+      const match = newEntries.find(
+        (ne) =>
+          ne.weekday === cs.weekday &&
+          ne.start_time === cs.start_time &&
+          ne.end_time === cs.end_time &&
+          (ne.shop_id == null || cs.shop_id == null || ne.shop_id === cs.shop_id),
+      );
+      if (!match) deleteIds.push(cs.id);
+    }
+
+    const entriesToAdd: typeof newEntries = [];
+    for (const ne of newEntries) {
+      const match = activeCurrent.find(
+        (cs) =>
+          cs.weekday === ne.weekday &&
+          cs.start_time === ne.start_time &&
+          cs.end_time === ne.end_time &&
+          (ne.shop_id == null || cs.shop_id == null || cs.shop_id === ne.shop_id),
+      );
+      if (!match) entriesToAdd.push(ne);
+    }
+
+    if (deleteIds.length > 0 || entriesToAdd.length > 0) {
+      const syncRes = await fetch('/api/designer-schedules/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          designer_id: designerId,
+          shop_id: data.shopId ?? undefined,
+          delete_ids: deleteIds,
+          entries: entriesToAdd,
+        }),
+      });
+      if (!syncRes.ok) {
+        const errorData = await syncRes.json().catch(() => ({}));
+        throw new Error(errorData?.error || '스케줄 저장에 실패했습니다.');
       }
+    }
 
-      const entriesToAdd: typeof newEntries = [];
-      for (const ne of newEntries) {
-        const match = activeCurrent.find(
-          (cs) =>
-            cs.weekday === ne.weekday &&
-            cs.start_time === ne.start_time &&
-            cs.end_time === ne.end_time &&
-            (ne.shop_id == null || cs.shop_id == null || cs.shop_id === ne.shop_id),
-        );
-        if (!match) entriesToAdd.push(ne);
-      }
-
-      if (deleteIds.length > 0 || entriesToAdd.length > 0) {
-        await fetch('/api/designer-schedules/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            designer_id: editingResource.id,
-            shop_id: data.shopId ?? undefined,
-            delete_ids: deleteIds,
-            entries: entriesToAdd,
-          }),
-        });
-      }
-
-      // Comment: Save weekday venue defaults derived from each schedule block's shopId
-      const weekdayDefaultRows: { weekday: number; shop_id: number }[] = [];
-      for (const sched of data.schedules) {
-        if (sched.shopId == null) continue;
-        for (const day of sched.days) {
-          const weekday = KOREAN_TO_WEEKDAY[day];
-          if (weekday !== undefined) {
-            weekdayDefaultRows.push({ weekday, shop_id: sched.shopId });
-          }
+    // Comment: Save weekday venue defaults derived from each schedule block's shopId
+    const weekdayDefaultRows: { weekday: number; shop_id: number }[] = [];
+    for (const sched of data.schedules) {
+      if (sched.shopId == null) continue;
+      for (const day of sched.days) {
+        const weekday = KOREAN_TO_WEEKDAY[day];
+        if (weekday !== undefined) {
+          weekdayDefaultRows.push({ weekday, shop_id: sched.shopId });
         }
       }
-      if (weekdayDefaultRows.length > 0) {
-        // Comment: Silently ignore errors for single-venue designers (API returns {skipped:true})
-        await fetch('/api/designer-weekday-defaults', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ designer_id: editingResource.id, rows: weekdayDefaultRows }),
-        }).catch((e) => console.warn('weekday defaults save skipped:', e));
-      }
+    }
+    if (weekdayDefaultRows.length > 0) {
+      // Comment: Silently ignore errors for single-venue designers (API returns {skipped:true})
+      await fetch('/api/designer-weekday-defaults', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ designer_id: designerId, rows: weekdayDefaultRows }),
+      }).catch((e) => console.warn('weekday defaults save skipped:', e));
+    }
 
-      invalidateStaffCache();
-      // Refetch all resources
-      fetchResources();
+    invalidateStaffCache();
+    // Refetch all resources
+    fetchResources();
+  };
+
+  const handleUpdate = async (data: Omit<BookingResource, 'id'>) => {
+    if (!editingResource) return;
+    setResourceSavePending(true);
+    try {
+      await saveResourceToDb(editingResource.id, data, true);
     } catch (err) {
       console.error('Error updating resource:', err);
+      alert(err instanceof Error ? err.message : '자원 저장에 실패했습니다.');
     } finally {
       setResourceSavePending(false);
       setEditingResource(null);
@@ -1047,6 +1077,7 @@ function BookingResourcesTab({ shops }: { shops: ShopOption[] }) {
           title="자원 등록"
           shops={shops}
           staffList={staffList}
+          saveInProgress={resourceSavePending}
           businessHours={businessHoursForModal}
         />
       )}

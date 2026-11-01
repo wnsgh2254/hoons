@@ -78,9 +78,10 @@ function isDirectorRole(role: string | null | undefined): boolean {
   return String(role || '').toLowerCase().includes('director');
 }
 
-// Comment: Match admin/staff venue (designers.shop_id + shop name). Directors: every shop. Non-directors: home shop only (ignore designer_shops for column placement).
+// Comment: Directors: every shop. Others: home shop + extra venues from designer_shops (shop_ids_at, set on admin/staff).
 function designerBelongsToShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null }, shopId: number): boolean {
   if (isDirectorRole(d.role)) return true;
+  if (d.shop_ids_at && d.shop_ids_at.length > 0) return d.shop_ids_at.some((sid) => Number(sid) === shopId);
   return d.shop_id != null && Number(d.shop_id) === shopId;
 }
 
@@ -1497,7 +1498,7 @@ export default function AppointmentsManagementPage() {
       });
   }, [mobileDesignerBookings, allDesigners]);
 
-  // Comment: One grid column per (designer, venue) when "전체"; non-directors use designers.shop_id only (same as admin/staff)
+  // Comment: One grid column per (designer, venue) when "전체"; non-directors use shop_ids_at (home shop + extra venues)
   const scheduleColumns = useMemo((): ScheduleColumn[] => {
     if (allDesigners.length === 0) return [];
 

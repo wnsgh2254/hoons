@@ -9,6 +9,7 @@ import {
   deleteDesigner,
 } from '@/lib/data';
 import { supabase } from '@/lib/supabase';
+import { loadDesignerShopsMap, mergeDesignerShopIds, syncDesignerShops } from '@/lib/designer-multi-venue';
 
 // Comment: GET - Fetch staff list with stats, or single staff by id, or just stats
 export async function GET(request: NextRequest) {
@@ -57,9 +58,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Comment: Combine staff with sales data and shop info
+    const designerShopsMap = await loadDesignerShopsMap();
     const staffWithSales = staff.map((member: any) => {
       const sales = salesData.find((s: any) => s.designer_id === member.id);
       const shopName = member.shop_id ? shopsMap.get(member.shop_id) : null;
+      // Comment: Primary shop + designer_shops (used by the staff form to prefill extra venues)
+      const shop_ids_at = mergeDesignerShopIds(member.shop_id, designerShopsMap.get(member.id));
 
       if (member.wage_type === 'percent') {
         // Commission staff: use sales from designer_sales table
@@ -68,6 +72,7 @@ export async function GET(request: NextRequest) {
           sales: sales?.total_sales || 0,
           bookings: sales?.bookings_count || 0,
           shop_name: shopName,
+          shop_ids_at,
         };
       } else {
         // Hourly staff: no sales
@@ -76,6 +81,7 @@ export async function GET(request: NextRequest) {
           sales: 0,
           bookings: 0,
           shop_name: shopName,
+          shop_ids_at,
         };
       }
     });
@@ -102,7 +108,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, english_name, role, shop_id, wage_type, percent_rate, hourly_rate, instagramLink, is_active } = body;
+    const { name, english_name, role, shop_id, wage_type, percent_rate, hourly_rate, instagramLink, is_active, extra_shop_ids } = body;
 
     // Validate required fields
     if (!name || !name.trim()) {
@@ -151,6 +157,11 @@ export async function POST(request: NextRequest) {
       throw new Error(error.message);
     }
 
+    // Comment: Extra venues (non-directors working at more than one shop)
+    if (Array.isArray(extra_shop_ids) && extra_shop_ids.length > 0) {
+      await syncDesignerShops(data.id, extra_shop_ids.filter((sid: number) => Number(sid) !== Number(shop_id)));
+    }
+
     return NextResponse.json({ designer: data }, { status: 201 });
   } catch (error: any) {
     console.error('Error in staff POST route:', error);
@@ -185,6 +196,7 @@ export async function PATCH(request: NextRequest) {
       instagramLink,
       is_active,
       weekly_deduction,
+      extra_shop_ids,
     } = body;
 
     const designer = await updateDesigner(Number(id), {
@@ -201,6 +213,14 @@ export async function PATCH(request: NextRequest) {
       is_active,
       weekly_deduction,
     });
+
+    // Comment: Only touch designer_shops when the client sent extra_shop_ids (undefined = leave as is)
+    if (Array.isArray(extra_shop_ids)) {
+      await syncDesignerShops(
+        Number(id),
+        extra_shop_ids.filter((sid: number) => Number(sid) !== Number(designer.shop_id)),
+      );
+    }
 
     return NextResponse.json({ designer }, { status: 200 });
   } catch (error: any) {

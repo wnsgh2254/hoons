@@ -301,6 +301,46 @@ export default function StaffManagementPage() {
   );
 }
 
+// Comment: Checkboxes for additional venues a non-director also works at (saved to designer_shops)
+function ExtraShopsField({
+  shops,
+  primaryShopId,
+  value,
+  onChange,
+}: {
+  shops: any[];
+  primaryShopId: string;
+  value: number[];
+  onChange: (next: number[]) => void;
+}) {
+  const options = shops.filter((shop) => String(shop.id) !== String(primaryShopId));
+  if (options.length === 0) return null;
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">추가 근무 매장</label>
+      <div className="flex flex-wrap gap-3 rounded-lg border border-gray-200 px-3 py-2.5">
+        {options.map((shop) => (
+          <label key={shop.id} className="flex items-center gap-1.5 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={value.includes(Number(shop.id))}
+              onChange={(e) =>
+                onChange(
+                  e.target.checked
+                    ? [...value, Number(shop.id)]
+                    : value.filter((sid) => sid !== Number(shop.id)),
+                )
+              }
+            />
+            {shop.name}
+          </label>
+        ))}
+      </div>
+      <p className="mt-1 text-xs text-gray-400">체크한 매장은 예약 자원에서 요일별 근무 매장으로 지정할 수 있어요.</p>
+    </div>
+  );
+}
+
 // Add Staff Modal Component
 function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean; shops: any[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({
@@ -313,6 +353,7 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
     hourly_rate: '',
     instagramLink: '',
   });
+  const [extraShopIds, setExtraShopIds] = useState<number[]>([]);
   const [customRole, setCustomRole] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -357,6 +398,7 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
         // Comment: Optional Instagram profile URL
         instagramLink: formData.instagramLink.trim() || null,
         is_active: true,
+        extra_shop_ids: resolvedRole.toLowerCase().includes('director') ? [] : extraShopIds,
       };
 
       console.log('Submitting staff data:', requestBody); // Debug log
@@ -455,13 +497,21 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
             </div>
           </div>
         ) : (
-          <Select
-            label="Venue (Shop)"
-            value={formData.shop_id}
-            onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-            options={shopOptions}
-            placeholder="Select Venue"
-          />
+          <>
+            <Select
+              label="Venue (Shop)"
+              value={formData.shop_id}
+              onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+              options={shopOptions}
+              placeholder="Select Venue"
+            />
+            <ExtraShopsField
+              shops={shops}
+              primaryShopId={formData.shop_id}
+              value={extraShopIds}
+              onChange={setExtraShopIds}
+            />
+          </>
         )}
         <Select
           label="Wage Type"
@@ -528,6 +578,10 @@ function ManageServiceModal({
     instagramLink: designer.instagramLink || '',
   });
   const [customRole, setCustomRole] = useState(initialRoleIsPreset ? '' : designer.role);
+  // Comment: Extra venues = designer_shops minus the primary shop
+  const [extraShopIds, setExtraShopIds] = useState<number[]>(
+    ((designer as any).shop_ids_at ?? []).filter((sid: number) => sid !== designer.shop_id),
+  );
   const [shops, setShops] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -576,6 +630,8 @@ function ManageServiceModal({
         // Comment: Optional Instagram profile URL
         instagramLink: formData.instagramLink.trim() || null,
         is_active: true,
+        // Comment: Directors already work at every shop, so leave designer_shops untouched for them
+        ...(resolvedRole.toLowerCase().includes('director') ? {} : { extra_shop_ids: extraShopIds }),
       };
 
       const response = await fetch(`/api/staff?id=${designer.id}`, {
@@ -699,13 +755,21 @@ function ManageServiceModal({
             </div>
           </div>
         ) : (
-          <Select
-            label="Venue (Shop)"
-            value={formData.shop_id}
-            onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-            options={shopOptions}
-            placeholder="Select Venue"
-          />
+          <>
+            <Select
+              label="Venue (Shop)"
+              value={formData.shop_id}
+              onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+              options={shopOptions}
+              placeholder="Select Venue"
+            />
+            <ExtraShopsField
+              shops={shops}
+              primaryShopId={formData.shop_id}
+              value={extraShopIds}
+              onChange={setExtraShopIds}
+            />
+          </>
         )}
         <Input
           label="Instagram URL"
