@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
@@ -11,6 +11,34 @@ import styles from './landing.module.css';
 
 export default function Home() {
   const demo = useHoonsDemo();
+  const locationsRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const section = locationsRef.current;
+    if (!section || !('IntersectionObserver' in window)
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const targets = section.querySelectorAll<HTMLElement>('[data-scroll-reveal]');
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        (entry.target as HTMLElement).dataset.scrollReveal = 'visible';
+        observer.unobserve(entry.target);
+      }
+    }, { rootMargin: '0px 0px -32px 0px' });
+
+    for (const target of targets) {
+      if (target.getBoundingClientRect().top < window.innerHeight) continue;
+      target.dataset.scrollReveal = 'pending';
+      observer.observe(target);
+    }
+
+    return () => {
+      observer.disconnect();
+      for (const target of targets) target.dataset.scrollReveal = '';
+    };
+  }, []);
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.ctrlKey && event.shiftKey && event.key === 'L') {
@@ -39,11 +67,11 @@ export default function Home() {
           Book an appointment <ArrowRight size={16} aria-hidden="true" />
         </Link>
 
-        <section id="locations" className={styles.location} aria-labelledby="location-title">
-          <h2 id="location-title" className={styles.sectionTitle}>Location</h2>
+        <section id="locations" ref={locationsRef} className={styles.location} aria-labelledby="location-title">
+          <h2 id="location-title" data-scroll-reveal="" className={styles.sectionTitle}>Location</h2>
           <div className={styles.locationGrid}>
             {HOONS_LOCATIONS.map((location) => (
-              <article key={location.id} className={styles.locationCard}>
+              <article key={location.id} data-scroll-reveal="" className={styles.locationCard}>
                 <div className={styles.locationPhoto}>
                   <Image src={location.image} alt="" fill sizes="(max-width: 560px) 88vw, (max-width: 1079px) 42vw, 21vw" />
                 </div>

@@ -19,6 +19,7 @@ const BANNERS = [
     id: 'launch',
     title: '10% off haircuts',
     eyebrow: 'Website launch offer',
+    image: '/images/hoons-launch-portrait.webp',
   },
 ];
 
@@ -82,16 +83,17 @@ export default function HeroBanner() {
             aria-roledescription="slide"
             aria-label={`${index + 1} of ${BANNERS.length}`}
           >
-            {banner.image && (
+            <div className={banner.id === 'launch' ? styles.offerMedia : styles.heroMedia}>
               <Image
                 src={banner.image}
                 alt=""
                 fill
                 unoptimized
-                preload
-                className={styles.heroImage}
+                preload={index === 0}
+                loading={index === 0 ? undefined : 'eager'}
+                className={banner.id === 'launch' ? styles.offerImage : styles.heroImage}
               />
-            )}
+            </div>
             {banner.eyebrow ? (
               <div className={styles.offerCopy}>
                 <p className={styles.offerEyebrow}>{banner.eyebrow}</p>

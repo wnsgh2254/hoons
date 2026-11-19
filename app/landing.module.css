@@ -75,15 +75,37 @@
   opacity: 1;
 }
 
-.heroImage {
+.heroMedia {
+  position: absolute;
+  inset: 0;
+}
+
+.heroImage,
+.offerImage {
   object-fit: cover;
   object-position: center;
 }
 
 .heroSlide[data-banner="launch"] {
+  background: #222;
+}
+
+.offerMedia {
+  position: absolute;
+  inset: clamp(0.75rem, 2.4svh, 1.5rem) 0 0;
+}
+
+.offerMedia::after {
+  position: absolute;
+  inset: 0;
+  content: "";
   background:
-    radial-gradient(ellipse at 76% 14%, #785949, transparent 58%),
-    linear-gradient(125deg, #2c211b, #4d382c 62%, #392920);
+    linear-gradient(180deg, #222 0, #0006 7%, transparent 24%),
+    linear-gradient(90deg, #000b 0, #0007 35%, transparent 68%);
+}
+
+.offerImage {
+  object-position: 62% top;
 }
 
 .heroTitle {
@@ -102,10 +124,9 @@
 
 .offerCopy {
   position: absolute;
-  inset: 45.5% 6.25% auto;
+  inset: 45.5% 52% auto 6.25%;
   transform: translateY(-50%);
   color: var(--ivory);
-  text-align: center;
 }
 
 .offerEyebrow {
@@ -205,8 +226,8 @@
   transform: translateX(-50%);
   border: 1px solid #fffaf4b3;
   border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0.35rem 1.25rem #2a20184d;
+  background-color: #17130f9e;
+  box-shadow: 0 0.35rem 1.25rem #17130f40;
   color: var(--ivory);
   font-size: 0.75rem;
   letter-spacing: 0.11em;
@@ -216,7 +237,20 @@
 
 .bookingButton:hover,
 .bookingButton:focus-visible {
-  background: var(--ink);
+  background-color: #17130fce;
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .bookingButton {
+    background-color: #17130f1a;
+    -webkit-backdrop-filter: blur(12px) brightness(0.52);
+    backdrop-filter: blur(12px) brightness(0.52);
+  }
+
+  .bookingButton:hover,
+  .bookingButton:focus-visible {
+    background-color: #17130f5c;
+  }
 }
 
 .bookingButton:focus-visible {
@@ -353,6 +387,23 @@
     text-wrap: balance;
   }
 
+  .offerImage {
+    object-position: 74% top;
+  }
+
+  .offerMedia::after {
+    background: linear-gradient(180deg, #222 0, #0005 8%, transparent 35%, #0009 57%, #000c 100%);
+  }
+
+  .offerCopy {
+    inset: 53.5% 6.25% auto;
+    text-align: center;
+  }
+
+  .offerEyebrow {
+    margin-bottom: 0.55rem;
+  }
+
   .offerTitle {
     font-size: clamp(2.25rem, 10vw, 3.8rem);
   }
@@ -372,5 +423,49 @@
   .heroSlide,
   .bookingButton {
     transition: none;
+  }
+}
+
+@keyframes heroPhotoDrift {
+  from { transform: translateY(0); }
+  to { transform: translateY(24px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll(root block)) and (animation-range: 0px 85svh) {
+    .heroMedia,
+    .offerMedia {
+      animation: heroPhotoDrift auto linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0px 85svh;
+    }
+  }
+
+  .location [data-scroll-reveal="pending"] {
+    opacity: 0.65;
+    transform: translateY(12px);
+  }
+
+  .location [data-scroll-reveal="visible"] {
+    transition: opacity 520ms ease-out, transform 520ms ease-out;
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  .location [data-scroll-reveal]:focus-within {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  @media (min-width: 1080px) {
+    .locationCard:nth-child(2) { --reveal-delay: 45ms; }
+    .locationCard:nth-child(3) { --reveal-delay: 90ms; }
+    .locationCard:nth-child(4) { --reveal-delay: 135ms; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :global(html):has(.landing) {
+    scroll-behavior: auto;
   }
 }

@@ -7,32 +7,19 @@ export interface User {
   role: UserRole;
 }
 
-// Comment: Hardcoded user credentials (in production, these should be in a database)
-const USERS: Record<string, { password: string; role: UserRole }> = {
-  haeyoom_director: {
-    password: 'gPdba12!',
-    role: 'director',
-  },
-  haeyoom_manager: {
-    password: 'manager123!',
-    role: 'manager',
-  },
-  haeyoom_stylist: {
-    password: 'stylist123!',
-    role: 'designer',
-  },
-};
+const ADMIN_ROLES = new Map<string, UserRole>([
+  ['hoons_director', 'director'],
+  ['hoons_manager', 'manager'],
+  ['hoons_stylist', 'designer'],
+]);
 
-// Comment: Validate user credentials
+const ADMIN_PASSWORD = '1234';
+
 export function validateCredentials(username: string, password: string): User | null {
   const normalizedUsername = username.trim();
-  const normalizedPassword = password.trim();
-
-  const user = USERS[normalizedUsername];
-  if (!user) return null;
-  if (user.password !== normalizedPassword) return null;
-
-  return { username: normalizedUsername, role: user.role };
+  const role = ADMIN_ROLES.get(normalizedUsername);
+  if (!role || password.trim() !== ADMIN_PASSWORD) return null;
+  return { username: normalizedUsername, role };
 }
 
 // Comment: Normalize legacy 'stylist' role to 'designer' for consistent checks

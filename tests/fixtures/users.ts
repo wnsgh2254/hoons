@@ -1,18 +1,18 @@
 // Test user credentials (matches lib/auth.ts)
 export const TEST_USERS = {
   director: {
-    username: 'haeyoom_director',
-    password: 'gPdba12!',
+    username: 'hoons_director',
+    password: '1234',
     role: 'director',
   },
   manager: {
-    username: 'haeyoom_manager',
-    password: 'manager123!',
+    username: 'hoons_manager',
+    password: '1234',
     role: 'manager',
   },
   designer: {
-    username: 'haeyoom_stylist',
-    password: 'stylist123!',
+    username: 'hoons_stylist',
+    password: '1234',
     role: 'designer',
   },
   invalid: {
