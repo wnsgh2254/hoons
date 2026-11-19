@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect } from 'react';
 import { Select, Badge } from '@/components/ui';
 import { formatPaymentMethod, formatTimeString, formatAudNumber } from '@/lib/utils';
@@ -52,12 +53,13 @@ export default function SalesHistoryTable({
   onFilterChange,
   onViewDetail,
 }: SalesHistoryTableProps) {
+  const request = useAppointmentRequest();
   const [loading, setLoading] = useState(true);
   const [salesHistory, setSalesHistory] = useState<SalesRecord[]>([]);
   const [shops, setShops] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
+    request('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -65,8 +67,8 @@ export default function SalesHistoryTable({
       try {
         setLoading(true);
         const [salesRes, refundsRes] = await Promise.all([
-          fetch(`/api/sales?customer_id=${customerId}`),
-          fetch(`/api/refunds?customer_id=${customerId}`),
+          request(`/api/sales?customer_id=${customerId}`),
+          request(`/api/refunds?customer_id=${customerId}`),
         ]);
 
         const salesData = await salesRes.json();

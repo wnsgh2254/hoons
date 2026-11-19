@@ -9,7 +9,7 @@ import {
   nullIfExcludedSmsServiceName,
 } from '@/lib/booking-confirmation-sms';
 import { sendMobileMessageSMS } from '@/lib/mobile-message';
-import { haeyoomSmsHeader, smsServiceLabelEn, smsVenueLocationForReminder } from '@/lib/public-booking-labels';
+import { hoonsSmsHeader, smsServiceLabelEn, smsVenueLocationForReminder } from '@/lib/public-booking-labels';
 
 // Comment: Send SMS via Mobile Message (mobilemessage.com.au)
 export async function sendSMS(
@@ -34,7 +34,7 @@ export async function sendBookingConfirmation(params: {
 }): Promise<{ success: boolean; messageSid?: string; error?: string }> {
   const { phone, bookingDate, bookingTime, shopName, serviceName, venuePhone } = params;
   const message = buildBookingConfirmationSmsBody({
-    headerLine: haeyoomSmsHeader(shopName),
+    headerLine: hoonsSmsHeader(shopName),
     appointmentLine: formatReminderAppointmentLine(bookingDate, bookingTime),
     serviceName: stripPromoFromConfirmationSmsServiceLabel(serviceName),
     venuePhone,

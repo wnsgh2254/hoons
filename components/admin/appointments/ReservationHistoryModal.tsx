@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useEffect, useMemo, useState } from 'react';
 import ReservationHistoryFilters from './ReservationHistoryFilters';
 import ReservationHistoryTable from './ReservationHistoryTable';
@@ -32,6 +33,7 @@ export default function ReservationHistoryModal({
   onCustomerClick,
   refreshTrigger,
 }: ReservationHistoryModalProps) {
+  const request = useAppointmentRequest();
   const [dateType, setDateType] = useState<'booking' | 'created'>('booking');
   const [dateMode, setDateMode] = useState<'single' | 'range'>('range');
   const [startDate, setStartDate] = useState(defaultStartDate);
@@ -74,7 +76,7 @@ export default function ReservationHistoryModal({
           date_type: dateType,
           limit: '1000',
         });
-        const res = await fetch(`/api/appointment?${params.toString()}`);
+        const res = await request(`/api/appointment?${params.toString()}`);
         const json = await res.json();
         if (!res.ok) {
           throw new Error(json.error || '예약 내역을 불러오지 못했습니다.');

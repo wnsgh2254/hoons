@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useEffect, useState, useRef } from 'react';
 import {
   EDIT_TIME_OPTIONS,
@@ -153,6 +154,7 @@ export default function NewBookingModal({
   editingBooking = null,
   onBookingsRefresh,
 }: NewBookingModalProps) {
+  const request = useAppointmentRequest();
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
@@ -196,9 +198,9 @@ export default function NewBookingModal({
     setSelfLoadingBaseOptions(true);
 
     Promise.all([
-      needsShops ? fetch('/api/shops').then((r) => r.json()) : Promise.resolve({ shops }),
+      needsShops ? request('/api/shops').then((r) => r.json()) : Promise.resolve({ shops }),
       needsServices
-        ? fetch('/api/booking-modal-services').then((r) => r.json())
+        ? request('/api/booking-modal-services').then((r) => r.json())
         : Promise.resolve({ services: selfLoadedServices }),
     ])
       .then(([shopsData, servicesData]) => {
@@ -250,7 +252,7 @@ export default function NewBookingModal({
     const targetDate = bookingDate || selectedDate || new Date().toISOString().split('T')[0];
     setSelfLoadingDesigners(true);
 
-    fetch(
+    request(
       `/api/available-designers?date=${encodeURIComponent(targetDate)}&shopId=${encodeURIComponent(String(shopId))}`,
     )
       .then(async (response) => {
@@ -347,7 +349,7 @@ export default function NewBookingModal({
         };
         if (!snap.name.trim() && !snap.phone) {
           try {
-            const res = await fetch(`/api/customers/${cid}`);
+            const res = await request(`/api/customers/${cid}`);
             const data = await res.json();
             if (cancelled) return;
             if (res.ok && data.customer) {
@@ -485,7 +487,7 @@ export default function NewBookingModal({
     const timeoutId = setTimeout(async () => {
       setIsCustomerSearching(true);
       try {
-        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
+        const res = await request(`/api/customers/search?q=${encodeURIComponent(q)}`);
         const data = await res.json();
         if (res.ok && Array.isArray(data.customers)) {
           setCustomerSearchResults(data.customers);
@@ -525,8 +527,8 @@ export default function NewBookingModal({
     (async () => {
       try {
         const [customerRes, statsRes] = await Promise.all([
-          fetch(`/api/customers/${selectedCustomerId}`),
-          fetch(`/api/customers/${selectedCustomerId}/stats`),
+          request(`/api/customers/${selectedCustomerId}`),
+          request(`/api/customers/${selectedCustomerId}/stats`),
         ]);
         if (cancelled) return;
         const customerData = await customerRes.json();
@@ -647,7 +649,7 @@ export default function NewBookingModal({
         return;
       }
       try {
-        const res = await fetch('/api/customers', {
+        const res = await request('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -739,7 +741,7 @@ export default function NewBookingModal({
             designer_id: String(slot.designerId),
           });
           qs.set('shop_id', String(shopId));
-          const resExisting = await fetch(`/api/appointment?${qs.toString()}`);
+          const resExisting = await request(`/api/appointment?${qs.toString()}`);
           const dataExisting = await resExisting.json();
 
           if (resExisting.ok && Array.isArray(dataExisting.bookings)) {
@@ -800,7 +802,7 @@ export default function NewBookingModal({
           patchBody.service_id = null;
           if (serviceSummary) patchBody.custom_service_name = serviceSummary;
         }
-        const resPatch = await fetch(`/api/appointment/${editingBooking.id}`, {
+        const resPatch = await request(`/api/appointment/${editingBooking.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patchBody),
@@ -822,7 +824,7 @@ export default function NewBookingModal({
         onClose();
         const weekStart = getWeekStart(selectedDate);
         const weekEnd = getWeekEnd(selectedDate);
-        const res = await fetch(
+        const res = await request(
           `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`,
         );
         const data = await res.json();
@@ -839,7 +841,7 @@ export default function NewBookingModal({
       for (const [slotIndex, slot] of slots.entries()) {
         const selectedServiceIds = slotServiceSelections[slotIndex] || [];
         const serviceSummary = getServiceNameSummary(selectedServiceIds);
-        const resCreate = await fetch('/api/appointment', {
+        const resCreate = await request('/api/appointment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -885,7 +887,7 @@ export default function NewBookingModal({
       // Comment: Refetch full week range (same as main schedule) so UI shows correct data
       const weekStart = getWeekStart(selectedDate);
       const weekEnd = getWeekEnd(selectedDate);
-      const res = await fetch(
+      const res = await request(
         `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
       );
       const data = await res.json();

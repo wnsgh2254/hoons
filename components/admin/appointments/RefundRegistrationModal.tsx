@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect } from 'react';
 import PaymentInputModal from './PaymentInputModal';
 import { AlertModal, Button, Input, Modal, Select } from '@/components/ui';
@@ -40,6 +41,7 @@ export default function RefundRegistrationModal({
   onOpenItemPicker,
   onComplete,
 }: RefundRegistrationModalProps) {
+  const request = useAppointmentRequest();
   const [activeTab, setActiveTab] = useState<SalesItemType>('service');
   const [refundItems, setRefundItems] = useState<RefundItem[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
@@ -68,7 +70,7 @@ export default function RefundRegistrationModal({
   // Fetch shops only when the modal is first opened (avoid calling on mount when closed)
   useEffect(() => {
     if (!isOpen) return;
-    fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
+    request('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
   }, [isOpen]);
 
   useEffect(() => {
@@ -173,7 +175,7 @@ export default function RefundRegistrationModal({
     if (!customer || refundItems.length === 0) return;
 
     try {
-      const response = await fetch('/api/refunds', {
+      const response = await request('/api/refunds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

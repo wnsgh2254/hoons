@@ -7,10 +7,10 @@ export default function SettingsPage() {
   const settingsCategories = [
     {
       id: 1,
-      title: 'Shop Profile & Hours',
-      description: 'Update salon address, contact info, and weekly operating hours.',
+      title: 'HOONS 지점 및 직원 이동',
+      description: '네 지점의 데모 예약 연동을 설정하고 직원의 소속 지점을 변경합니다.',
       icon: 'storefront',
-      href: '#',
+      href: '/admin/settings/locations',
     },
     {
       id: 2,
@@ -96,7 +96,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="mt-7.5 pt-7.5 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center text-gray-500 text-sm">
-        <p>&copy; 2024 Haeyoom Salon. All rights reserved.</p>
+        <p>&copy; 2024 Hoons Salon. All rights reserved.</p>
         <div className="flex gap-4 mt-4 md:mt-0">
           <a className="hover:text-black transition-colors" href="#">
             Support Center

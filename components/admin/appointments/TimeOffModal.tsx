@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -15,6 +16,7 @@ interface TimeOffModalProps {
 }
 
 export default function TimeOffModal({ isOpen, onClose, initialDesigners }: TimeOffModalProps) {
+  const request = useAppointmentRequest();
   const [designers, setDesigners] = useState<any[]>(initialDesigners || []);
   const [records, setRecords] = useState<any[]>([]);
   const [designerId, setDesignerId] = useState<number | null>(null);
@@ -29,11 +31,11 @@ export default function TimeOffModal({ isOpen, onClose, initialDesigners }: Time
       try {
         // Only fetch designers if the parent didn't provide them (avoids /api/staff call on load)
         if (!initialDesigners || initialDesigners.length === 0) {
-          const designersRes = await fetch('/api/staff?role=designer');
+          const designersRes = await request('/api/staff?role=designer');
           const designersData = await designersRes.json();
           if (designersRes.ok && designersData.staff) setDesigners(designersData.staff);
         }
-        const recordsRes = await fetch('/api/designer-time-off');
+        const recordsRes = await request('/api/designer-time-off');
         const recordsData = await recordsRes.json();
         if (recordsRes.ok && recordsData.timeOffs) setRecords(recordsData.timeOffs);
       } catch (err) {
@@ -52,7 +54,7 @@ export default function TimeOffModal({ isOpen, onClose, initialDesigners }: Time
     }
     setSubmitting(true);
     try {
-      const res = await fetch('/api/designer-time-off', {
+      const res = await request('/api/designer-time-off', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -67,7 +69,7 @@ export default function TimeOffModal({ isOpen, onClose, initialDesigners }: Time
         setEndDate('');
         setReason('');
         setDesignerId(null);
-        const recordsRes = await fetch('/api/designer-time-off');
+        const recordsRes = await request('/api/designer-time-off');
         const recordsData = await recordsRes.json();
         if (recordsRes.ok) setRecords(recordsData.timeOffs || []);
       } else {
@@ -151,7 +153,7 @@ export default function TimeOffModal({ isOpen, onClose, initialDesigners }: Time
                     onClick={async () => {
                       if (confirm('Delete this time off record?')) {
                         try {
-                          const res = await fetch(`/api/designer-time-off/${record.id}`, { method: 'DELETE' });
+                          const res = await request(`/api/designer-time-off/${record.id}`, { method: 'DELETE' });
                           if (res.ok) {
                             setRecords((prev) => prev.filter((r: any) => r.id !== record.id));
                           }

@@ -70,7 +70,7 @@ export function formatAuPhoneForSmsDisplay(raw: string | null | undefined): stri
  *
  * Womancut
  *
- * Haeyoom Meadowbank
+ * Hoons Meadowbank
  */
 export function buildBookingConfirmationSmsBody(params: {
   headerLine: string;
@@ -84,7 +84,7 @@ export function buildBookingConfirmationSmsBody(params: {
     formattedContact ?? (rawVenuePhone.length > 0 ? rawVenuePhone : null);
   const contactInstruction = contactPhone
     ? `Call or Text ${contactPhone}`
-    : 'Call or Text your Haeyoom location';
+    : 'Call or Text your Hoons location';
 
   return (
     `DO NOT REPLY\n\n` +

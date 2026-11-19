@@ -50,7 +50,7 @@ export function resolveReminderServiceLabel(
 }
 
 /**
- * [Haeyoom Reminder]
+ * [Hoons Reminder]
  *
  * 07/08 4:30pm
  * Colour / Men's haircut
@@ -68,10 +68,10 @@ export function buildBookingReminderSmsBody(params: {
   shopPhone?: string | null;
 }): string {
   const contactPhone = String(params.shopPhone ?? '').trim() || '0432 328 002';
-  const loc = String(params.shopLocation ?? '').trim() || 'Haeyoom salon';
+  const loc = String(params.shopLocation ?? '').trim() || 'Hoons salon';
 
   return (
-    `[Haeyoom Reminder]\n\n` +
+    `[Hoons Reminder]\n\n` +
     `${params.appointmentLine}\n` +
     `${params.serviceLabel}\n\n` +
     `Change/Cancel:\n` +

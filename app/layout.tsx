@@ -14,30 +14,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteTitle = "HOONS | Korean Hair Salon in Sydney";
+const siteDescription = "HOONS is a Korean hair salon in Sydney with locations in Eastwood, Strathfield and Chatswood.";
+
 export const metadata: Metadata = {
-  title: "Haeyoom - Sydney Hair Salon",
-  description: "Where minimalism meets artistry. Experience the finest hair styling in a space curated for your comfort.",
+  title: siteTitle,
+  description: siteDescription,
   icons: {
-    icon: "/images/favicon.png",
+    icon: "/images/hoons-icon.svg",
   },
   openGraph: {
-    title: "Haeyoom - Sydney Hair Salon",
-    description: "Where minimalism meets artistry. Experience the finest hair styling in a space curated for your comfort.",
+    title: siteTitle,
+    description: siteDescription,
     images: [
       {
-        url: "/images/haeyoom_image.png",
+        url: "/images/hoons-share.jpg",
         width: 1200,
         height: 630,
-        alt: "Haeyoom - Sydney Hair Salon",
+        alt: "Sunlight on a textured wall",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Haeyoom - Sydney Hair Salon",
-    description: "Where minimalism meets artistry. Experience the finest hair styling in a space curated for your comfort.",
-    images: ["/images/haeyoom_image.png"],
+    title: siteTitle,
+    description: siteDescription,
+    images: ["/images/hoons-share.jpg"],
   },
 };
 

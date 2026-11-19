@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     const bodyText =
       message?.trim() ||
-      `Hi ${customerName?.trim() || 'there'},\n\nThis is a test SMS from Haeyoom (Mobile Message).\n\nIf you received this, local SMS integration is working.`;
+      `Hi ${customerName?.trim() || 'there'},\n\nThis is a test SMS from Hoons (Mobile Message).\n\nIf you received this, local SMS integration is working.`;
 
     const result = await sendMobileMessageSMS(to, bodyText);
     return NextResponse.json(result, { status: result.success ? 200 : 500 });

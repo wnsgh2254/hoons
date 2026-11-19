@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect } from 'react';
 import { calculatePolicyRefundAmount } from '@/lib/cancellation-policy';
 import type { BookingWithRelations } from '@/lib/types';
@@ -30,6 +31,7 @@ export default function CancelBookingModal({
   onClose,
   onSuccess,
 }: CancelBookingModalProps) {
+  const request = useAppointmentRequest();
   const [selectedReason, setSelectedReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refundStripeDeposit, setRefundStripeDeposit] = useState(false);
@@ -60,7 +62,7 @@ export default function CancelBookingModal({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/appointment/${booking.id}`, {
+      const res = await request(`/api/appointment/${booking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

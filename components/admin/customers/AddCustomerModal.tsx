@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
+
 import { useState, useEffect } from 'react';
 import { useStaff } from '@/hooks/useStaff';
 import Modal from '@/components/ui/Modal';
@@ -17,6 +19,7 @@ export default function AddCustomerModal({
   onClose,
   onSuccess,
 }: AddCustomerModalProps) {
+  const request = useAppointmentRequest();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [assignedDesignerId, setAssignedDesignerId] = useState<number | null>(null);
@@ -50,7 +53,7 @@ export default function AddCustomerModal({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/customers', {
+      const res = await request('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

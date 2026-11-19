@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -28,6 +29,7 @@ export default function EditPrepaidMemberModal({
   onClose,
   onSuccess,
 }: EditPrepaidMemberModalProps) {
+  const request = useAppointmentRequest();
   const [points, setPoints] = useState<string>(String(currentPoints));
   const [expiresAt, setExpiresAt] = useState<string>('');
   const [isActive, setIsActive] = useState<boolean>(true);
@@ -53,7 +55,7 @@ export default function EditPrepaidMemberModal({
     try {
       setFetching(true);
       setError(null);
-      const res = await fetch(`/api/prepaid?customer_id=${customerId}`);
+      const res = await request(`/api/prepaid?customer_id=${customerId}`);
       const data = await res.json();
 
       if (res.ok && data.member) {
@@ -91,7 +93,7 @@ export default function EditPrepaidMemberModal({
       setLoading(true);
       setError(null);
 
-      const res = await fetch(`/api/prepaid?id=${prepaidMemberId}`, {
+      const res = await request(`/api/prepaid?id=${prepaidMemberId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

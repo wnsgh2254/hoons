@@ -13,12 +13,13 @@ export async function fetchSaleDetailForBooking(
     booking_time?: string | null;
     shop_id?: number | null;
   },
+  request: typeof fetch = fetch,
 ): Promise<SalesDetailData | null> {
   const customerNameFallback =
     booking.customer?.name || booking.customer_name || '';
 
   if (booking.id) {
-    const linkedRes = await fetch(`/api/sales?booking_id=${booking.id}`);
+    const linkedRes = await request(`/api/sales?booking_id=${booking.id}`);
     if (linkedRes.ok) {
       const linkedData = await linkedRes.json();
       const linkedSale = (linkedData.sales || [])[0];
@@ -31,7 +32,7 @@ export async function fetchSaleDetailForBooking(
   const customerId = booking.customer?.id ?? booking.customer_id;
   if (!customerId) return null;
 
-  const res = await fetch(`/api/sales?customer_id=${customerId}`);
+  const res = await request(`/api/sales?customer_id=${customerId}`);
   if (!res.ok) return null;
 
   const { sales = [] } = await res.json();

@@ -17,7 +17,7 @@ export default function AppointmentPolicyPage() {
           {/* Intro */}
           <section className="space-y-6 text-sm md:text-base font-normal leading-relaxed">
             <p>
-              At HAEYOOM, we value both your time and the time of our stylists.
+              At HOONS, we value both your time and the time of our stylists.
             </p>
             <p>
               To ensure a calm, thoughtful, and high-quality experience for every guest, we kindly ask you to review the following appointment guidelines.
@@ -29,7 +29,7 @@ export default function AppointmentPolicyPage() {
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">Appointment Confirmation</h2>
             <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>All appointments require confirmation.</p>
-              <p>After making a booking, you will receive a confirmation message from HAEYOOM via SMS.</p>
+              <p>After making a booking, you will receive a confirmation message from HOONS via SMS.</p>
               <p>Please confirm your appointment by replying <strong>YES</strong>.</p>
               <p>Appointments that are not confirmed may be released to other clients.</p>
             </div>
@@ -78,7 +78,7 @@ export default function AppointmentPolicyPage() {
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">Contact</h2>
             <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>If you have any questions regarding your appointment, please feel free to contact us.</p>
-              <p className="font-bold mt-4">HAEYOOM</p>
+              <p className="font-bold mt-4">HOONS</p>
               <p className="font-mono">Phone: +61 432 328 002</p>
             </div>
           </section>

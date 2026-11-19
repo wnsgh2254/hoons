@@ -1,5 +1,6 @@
 'use client';
 
+import { defaultAppointmentRequest, useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect, useRef } from 'react';
 
 export interface InventoryItem {
@@ -50,6 +51,8 @@ export function invalidateInventoryCache() {
 }
 
 export function useInventory(options: { enabled?: boolean; shopId?: number | null } = {}) {
+  const request = useAppointmentRequest();
+  const useSharedCache = request === defaultAppointmentRequest;
   const { enabled = true, shopId = null } = options;
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [brands, setBrands] = useState<InventoryBrand[]>([]);
@@ -67,7 +70,7 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
     if (!enabled) return;
 
     let cancelled = false;
-    if (shopId == null && isCacheValid() && cachedItems && cachedBrands && cachedCategories) {
+    if (useSharedCache && shopId == null && isCacheValid() && cachedItems && cachedBrands && cachedCategories) {
       Promise.resolve().then(() => {
         if (!cancelled && mountedRef.current && cachedItems && cachedBrands && cachedCategories) {
           setItems(cachedItems);
@@ -85,9 +88,9 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
         setLoading(true);
         setError(null);
         return Promise.all([
-          fetch(`/api/inventory${query}`).then((r) => r.json()),
-          fetch(`/api/inventory-brands${query}`).then((r) => r.json()),
-          fetch(`/api/inventory-product-categories${query}`).then((r) => r.json()),
+          request(`/api/inventory${query}`).then((r) => r.json()),
+          request(`/api/inventory-brands${query}`).then((r) => r.json()),
+          request(`/api/inventory-product-categories${query}`).then((r) => r.json()),
         ]);
       })
       .then(([itemsData, brandsData, categoriesData]) => {
@@ -95,7 +98,7 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
         const itemList: InventoryItem[] = itemsData.items || [];
         const brandList: InventoryBrand[] = brandsData.brands || [];
         const categoryList: InventoryProductCategory[] = categoriesData.categories || [];
-        if (shopId == null) {
+        if (useSharedCache && shopId == null) {
           cachedItems = itemList;
           cachedBrands = brandList;
           cachedCategories = categoryList;
@@ -119,25 +122,27 @@ export function useInventory(options: { enabled?: boolean; shopId?: number | nul
       });
 
     return () => { cancelled = true; };
-  }, [enabled, shopId]);
+  }, [enabled, shopId, request, useSharedCache]);
 
   const refetch = (): Promise<void> => {
-    invalidateInventoryCache();
+    if (useSharedCache) invalidateInventoryCache();
     setLoading(true);
     const query = shopId != null ? `?shop_id=${shopId}` : '';
     return Promise.all([
-      fetch(`/api/inventory${query}`).then((r) => r.json()),
-      fetch(`/api/inventory-brands${query}`).then((r) => r.json()),
-      fetch(`/api/inventory-product-categories${query}`).then((r) => r.json()),
+      request(`/api/inventory${query}`).then((r) => r.json()),
+      request(`/api/inventory-brands${query}`).then((r) => r.json()),
+      request(`/api/inventory-product-categories${query}`).then((r) => r.json()),
     ])
       .then(([itemsData, brandsData, categoriesData]) => {
         const itemList: InventoryItem[] = itemsData.items || [];
         const brandList: InventoryBrand[] = brandsData.brands || [];
         const categoryList: InventoryProductCategory[] = categoriesData.categories || [];
-        cachedItems = itemList;
-        cachedBrands = brandList;
-        cachedCategories = categoryList;
-        cacheTimestamp = Date.now();
+        if (useSharedCache) {
+          cachedItems = itemList;
+          cachedBrands = brandList;
+          cachedCategories = categoryList;
+          cacheTimestamp = Date.now();
+        }
         if (mountedRef.current) {
           setItems(itemList);
           setBrands(brandList);

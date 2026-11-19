@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect, useMemo } from 'react';
 import HolidayCalendarHeader from './HolidayCalendarHeader';
 import HolidayCalendarControls from './HolidayCalendarControls';
@@ -30,6 +31,7 @@ export default function HolidayCalendarModal({
   onOpenHolidayModal,
   refreshKey,
 }: HolidayCalendarModalProps) {
+  const request = useAppointmentRequest();
   const [selectedDesignerFilter, setSelectedDesignerFilter] = useState('전체');
   const [selectedShopFilter, setSelectedShopFilter] = useState('전체');
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -67,8 +69,8 @@ export default function HolidayCalendarModal({
         const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
         const [timeOffRes, schedulesRes] = await Promise.all([
-          fetch(`/api/designer-time-off?start_date=${monthStart}&end_date=${monthEnd}`),
-          fetch(`/api/designer-schedules?all=true`),
+          request(`/api/designer-time-off?start_date=${monthStart}&end_date=${monthEnd}`),
+          request(`/api/designer-schedules?all=true`),
         ]);
 
         const timeOffJson = await timeOffRes.json();

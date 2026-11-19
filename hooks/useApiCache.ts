@@ -1,5 +1,6 @@
 'use client';
 
+import { defaultAppointmentRequest, useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const CACHE_TTL = 30_000; // 30 seconds
@@ -42,6 +43,8 @@ interface UseApiCacheOptions<T> {
 }
 
 export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {}) {
+  const request = useAppointmentRequest();
+  const useSharedCache = request === defaultAppointmentRequest;
   const {
     enabled = true,
     cacheKey = 'default',
@@ -67,7 +70,7 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
   }, []);
 
   const fetchData = useCallback((skipCache = false) => {
-    if (!skipCache) {
+    if (!skipCache && useSharedCache) {
       const cached = isCacheValid<T>(url, cacheKey);
       if (cached) {
         const fn = filterRef.current;
@@ -80,7 +83,7 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
     setLoading(true);
     setError(null);
 
-    fetch(url)
+    request(url)
       .then((res) => res.json())
       .then((json) => {
         if (cancelled) return;
@@ -93,7 +96,7 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
               }
               return Array.isArray(json) ? json : [];
             })();
-        updateCache(url, list, cacheKey);
+        if (useSharedCache) updateCache(url, list, cacheKey);
         if (mountedRef.current) {
           const filterFn = filterRef.current;
           setData(filterFn ? filterFn(list) : list);
@@ -113,7 +116,7 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
       });
 
     return () => { cancelled = true; };
-  }, [url, cacheKey]);
+  }, [url, cacheKey, request, useSharedCache]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -121,9 +124,9 @@ export function useApiCache<T>(url: string, options: UseApiCacheOptions<T> = {})
   }, [enabled, fetchData]);
 
   const refetch = useCallback(() => {
-    invalidateCache(url);
+    if (useSharedCache) invalidateCache(url);
     fetchData(true);
-  }, [url, fetchData]);
+  }, [url, fetchData, useSharedCache]);
 
   return { data, loading, error, refetch };
 }

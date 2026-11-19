@@ -151,15 +151,15 @@ export function smsServiceLabelEn(
 }
 
 /** SMS header; Korean branch names become neutral English. */
-export function haeyoomSmsHeader(shopName: string | null | undefined): string {
+export function hoonsSmsHeader(shopName: string | null | undefined): string {
   const t = String(shopName ?? '').trim();
-  if (!t) return 'Haeyoom Salon';
-  if (containsHangul(t)) return 'Haeyoom Salon';
+  if (!t) return 'Hoons Salon';
+  if (containsHangul(t)) return 'Hoons Salon';
 
-  // Comment: DB shop names may already include "HAEYOOM" / "Haeyoom" — avoid "Haeyoom Haeyoom …".
-  const withoutBrand = t.replace(/^haeyoom\s*/i, '').trim();
-  if (!withoutBrand) return 'Haeyoom Salon';
-  return `Haeyoom ${withoutBrand}`;
+  // Comment: DB shop names may already include "HOONS" / "Hoons" — avoid "Hoons Hoons …".
+  const withoutBrand = t.replace(/^hoons\s*/i, '').trim();
+  if (!withoutBrand) return 'Hoons Salon';
+  return `Hoons ${withoutBrand}`;
 }
 
 /** Reminder Location line: known venues show store name only; hide Korean addresses. */
@@ -172,7 +172,7 @@ export function smsVenueLocationForReminder(
   if (haystack.includes('haymarket')) return 'Haymarket Store';
 
   const t = String(location ?? '').trim();
-  if (!t) return 'Haeyoom salon';
-  if (containsHangul(t)) return 'Your Haeyoom salon';
+  if (!t) return 'Hoons salon';
+  if (containsHangul(t)) return 'Your Hoons salon';
   return t;
 }

@@ -12,7 +12,7 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-4">연락처</h4>
             <p className="text-gray-400">전화: 02-1234-5678</p>
-            <p className="text-gray-400">이메일: info@haeyoom.com</p>
+            <p className="text-gray-400">이메일: info@hoons.com</p>
           </div>
           <div>
             <h4 className="font-semibold mb-4">운영시간</h4>

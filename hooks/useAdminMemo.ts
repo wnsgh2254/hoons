@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface UseAdminMemoOptions {
@@ -8,6 +9,7 @@ interface UseAdminMemoOptions {
 }
 
 export function useAdminMemo(options: UseAdminMemoOptions = {}) {
+  const request = useAppointmentRequest();
   const { initialMemo = '', skipInitialFetchOnce = false } = options;
   const [memo, setMemo] = useState(initialMemo);
   const [memoLoading, setMemoLoading] = useState(false);
@@ -26,7 +28,7 @@ export function useAdminMemo(options: UseAdminMemoOptions = {}) {
     const fetchMemo = async () => {
       setMemoLoading(true);
       try {
-        const res = await fetch('/api/admin-memo');
+        const res = await request('/api/admin-memo');
         const data = await res.json();
         if (mountedRef.current) {
           if (res.ok) {
@@ -52,7 +54,7 @@ export function useAdminMemo(options: UseAdminMemoOptions = {}) {
   const saveMemo = useCallback(async () => {
     setMemoSaving(true);
     try {
-      const res = await fetch('/api/admin-memo', {
+      const res = await request('/api/admin-memo', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: memo }),
@@ -75,7 +77,7 @@ export function useAdminMemo(options: UseAdminMemoOptions = {}) {
         setMemoSaving(false);
       }
     }
-  }, [memo]);
+  }, [memo, request]);
 
   return {
     memo,

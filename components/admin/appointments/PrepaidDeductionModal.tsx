@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect } from 'react';
 import { formatAudNumber, roundToCents } from '@/lib/utils';
 import { addDigits, removeLastDigit, parseAmount } from '@/lib/utils/numeric-input-utils';
@@ -43,6 +44,7 @@ export default function PrepaidDeductionModal({
   onComplete,
   onBalanceLoaded,
 }: PrepaidDeductionModalProps) {
+  const request = useAppointmentRequest();
   const [inputValue, setInputValue] = useState('0');
   const [prepaidPasses, setPrepaidPasses] = useState<PrepaidPass[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,7 +81,7 @@ export default function PrepaidDeductionModal({
     const timeoutId = setTimeout(async () => {
       try {
         setIsOwnerSearching(true);
-        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
+        const res = await request(`/api/customers/search?q=${encodeURIComponent(q)}`);
         const data = await res.json();
         if (res.ok && Array.isArray(data.customers)) {
           setOwnerSearchResults(
@@ -106,7 +108,7 @@ export default function PrepaidDeductionModal({
 
     try {
       setLoading(true);
-      const res = await fetch(`/api/prepaid?customer_id=${customerId}`);
+      const res = await request(`/api/prepaid?customer_id=${customerId}`);
       const data = await res.json();
 
       if (res.ok) {

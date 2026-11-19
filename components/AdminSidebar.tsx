@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
 type AdminSidebarProps = {
@@ -22,13 +21,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
     >
       <div className="flex flex-col gap-8 p-6">
         <Link href="/" className="flex items-center gap-3 hover:opacity-70 transition-opacity">
-          <Image
-            src="/images/image3.png"
-            alt="HAEYOOM Logo"
-            width={130}
-            height={28}
-            className="h-7 w-auto object-contain"
-          />
+          <span className="text-[1.85rem] leading-none tracking-[-0.045em] text-[#3c2b23] [font-family:Didot,Baskerville,Georgia,serif]">HOONS</span>
         </Link>
         <nav className="flex flex-col gap-2">
           <Link
@@ -86,6 +79,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
             <span className="material-symbols-outlined">groups</span>
             <span className="text-sm font-medium">Staff</span>
           </Link>
+          {/*
           <Link
             href="/admin/inventory"
             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
@@ -97,6 +91,7 @@ export default function AdminSidebar({ isSidebarOpen = false }: AdminSidebarProp
             <span className="material-symbols-outlined">inventory_2</span>
             <span className="text-sm font-medium">Inventory</span>
           </Link>
+          */}
           <Link
             href="/admin/prepaid"
             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${

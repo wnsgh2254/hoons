@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation';
 function BookingConfirmedContent() {
   const searchParams = useSearchParams();
 
-  const shop = searchParams.get('shop') || 'HAEYOOM';
+  const shop = searchParams.get('shop') || 'HOONS';
   const designer = searchParams.get('designer') || '';
   const service = searchParams.get('service') || '';
   const date = searchParams.get('date') || '';

@@ -10,13 +10,15 @@ export default function ConditionalLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const isHome = pathname === '/';
+  const isBookingDemo = pathname === '/booking' || pathname === '/booking/lookup';
   const isAdminPage = pathname?.startsWith('/admin');
 
   return (
     <>
-      {!isAdminPage && <MainNav />}
+      {!isAdminPage && !isHome && !isBookingDemo && <MainNav />}
       {children}
-      {!isAdminPage && <MainFooter />}
+      {!isAdminPage && <MainFooter warm={isHome || isBookingDemo} showBooking={isHome} />}
     </>
   );
 }

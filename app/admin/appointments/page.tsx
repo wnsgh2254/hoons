@@ -7,6 +7,9 @@ import type React from 'react';
 import type { Booking, BookingWithRelations, NewBookingTimeSlot } from '@/lib/types';
 import { DEFAULT_NEW_BOOKING_TIME_SLOT } from '@/lib/types';
 import AdminTopNav from '@/components/AdminTopNav';
+import { AppointmentRequestContext } from '@/lib/appointment-request';
+import { fetchHoonsAppointments as fetch, HOONS_APPOINTMENT_SHOPS } from '@/lib/hoons-appointment-preview';
+import { useHoonsDemo } from '@/lib/hoons-booking-demo';
 import { useAdminMemo } from '@/hooks/useAdminMemo';
 import { useScheduleSearch } from '@/hooks/useScheduleSearch';
 import { useBookings } from '@/hooks/useBookings';
@@ -74,25 +77,12 @@ import { compareDesignersByDisplayOrder } from '@/lib/designer-display-order';
 
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled']);
 
-function isDirectorRole(role: string | null | undefined): boolean {
-  return String(role || '').toLowerCase().includes('director');
+function designerBelongsToShop(designer: { shop_id?: number | null }, shopId: number): boolean {
+  return designer.shop_id != null && Number(designer.shop_id) === shopId;
 }
 
-// Comment: Directors: every shop. Others: home shop + extra venues from designer_shops (shop_ids_at, set on admin/staff).
-function designerBelongsToShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null }, shopId: number): boolean {
-  if (isDirectorRole(d.role)) return true;
-  if (d.shop_ids_at && d.shop_ids_at.length > 0) return d.shop_ids_at.some((sid) => Number(sid) === shopId);
-  return d.shop_id != null && Number(d.shop_id) === shopId;
-}
-
-function sortKeyPrimaryShop(d: { shop_id?: number | null; shop_ids_at?: number[]; role?: string | null } | undefined): number {
-  if (!d) return 0;
-  if (isDirectorRole(d.role)) {
-    const ids =
-      d.shop_ids_at && d.shop_ids_at.length > 0 ? d.shop_ids_at : d.shop_id != null ? [d.shop_id] : [];
-    return ids.length ? Math.min(...ids) : 0;
-  }
-  return d.shop_id != null && Number.isFinite(Number(d.shop_id)) ? Number(d.shop_id) : 0;
+function sortKeyPrimaryShop(designer: { shop_id?: number | null } | undefined): number {
+  return Number(designer?.shop_id) || 0;
 }
 
 type ScheduleColumn = {
@@ -107,19 +97,7 @@ function bookingColumnKeyForGrid(b: BookingWithRelations, allDesigners: any[]): 
   const designerId = b.designer?.id;
   const designer = designerId ? allDesigners.find((d) => d.id === designerId) : undefined;
   let sid = b.shop_id ?? null;
-  if (sid == null && designer) {
-    if (isDirectorRole(designer.role)) {
-      const ids =
-        designer.shop_ids_at && designer.shop_ids_at.length > 0
-          ? designer.shop_ids_at
-          : designer.shop_id != null
-            ? [designer.shop_id]
-            : [];
-      sid = ids[0] ?? null;
-    } else {
-      sid = designer.shop_id != null ? Number(designer.shop_id) : null;
-    }
-  }
+  if (sid == null && designer) sid = designer.shop_id ?? null;
   return `${designerId ?? 'unassigned'}::${sid === null ? 'null' : String(sid)}`;
 }
 
@@ -161,6 +139,15 @@ function buildWeekViewBookingsUrl(params: {
 
 
 export default function AppointmentsManagementPage() {
+  return (
+    <AppointmentRequestContext.Provider value={fetch}>
+      <AppointmentsManagement />
+    </AppointmentRequestContext.Provider>
+  );
+}
+
+function AppointmentsManagement() {
+  const demo = useHoonsDemo();
   const [selectedDate, setSelectedDate] = useState<string>(getSydneyToday());
   const [dayCounts, setDayCounts] = useState<Record<number, number>>({});
   const [initialDataReady, setInitialDataReady] = useState(false);
@@ -243,8 +230,8 @@ export default function AppointmentsManagementPage() {
   // Comment: Designer dropdown menu state
   const [openDesignerDropdown, setOpenDesignerDropdown] = useState<string | null>(null);
   const [allDesigners, setAllDesigners] = useState<any[]>([]);
-  const [allShops, setAllShops] = useState<Array<{ id: number; name: string }>>([]);
-  const [selectedShopFilter, setSelectedShopFilter] = useState<string>('전체');
+  const [allShops, setAllShops] = useState<Array<{ id: number; name: string }>>(HOONS_APPOINTMENT_SHOPS);
+  const [selectedShopFilter, setSelectedShopFilter] = useState(String(HOONS_APPOINTMENT_SHOPS[0].id));
   const [searchQuery, setSearchQuery] = useState<string>('');
   const { memo, setMemo, memoLoading, memoSaving, setMemoSaving, memoSuccessMessage, setMemoSuccessMessage, saveMemo } = useAdminMemo({
     skipInitialFetchOnce: skipMemoInitialFetch,
@@ -329,7 +316,7 @@ export default function AppointmentsManagementPage() {
     setRecentSearches,
     saveRecentSearch,
     handleDeleteRecentSearch,
-  } = useScheduleSearch();
+  } = useScheduleSearch('hoons-preview-recent-searches');
 
   // Bookings data (extracted to hook)
   const {
@@ -687,7 +674,7 @@ export default function AppointmentsManagementPage() {
     const loadInitialData = async () => {
       try {
         const res = await fetch(
-          `/api/appointments/initial-data?date=${encodeURIComponent(requestDate)}&month=${encodeURIComponent(requestMonthKey)}`,
+          `/api/appointments/initial-data?date=${encodeURIComponent(requestDate)}&month=${encodeURIComponent(requestMonthKey)}&shop_id=${selectedShopFilter}`,
         );
         const data = await res.json();
         if (!isMounted) return;
@@ -719,10 +706,10 @@ export default function AppointmentsManagementPage() {
         }
         try {
           if (Array.isArray(data.designers) && data.designers.length > 0) {
-            sessionStorage.setItem('haeyoom_designers', JSON.stringify(data.designers));
+            sessionStorage.setItem('hoons-preview-designers', JSON.stringify(data.designers));
           }
           if (Array.isArray(data.shops) && data.shops.length > 0) {
-            sessionStorage.setItem('haeyoom_shops', JSON.stringify(data.shops));
+            sessionStorage.setItem('hoons-preview-shops', JSON.stringify(data.shops));
           }
         } catch {
           // Ignore browser storage failures
@@ -746,8 +733,9 @@ export default function AppointmentsManagementPage() {
     };
 
     loadInitialData();
+    return () => { isMounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [demo, selectedShopFilter]);
 
   // Comment: Fetch user session + all designers in parallel on mount to cut waterfall latency
   useEffect(() => {
@@ -755,7 +743,7 @@ export default function AppointmentsManagementPage() {
     const fetchSessionAndDesigners = async () => {
       try {
         // Comment: Restore designers from sessionStorage immediately for instant grid render
-        const cached = sessionStorage.getItem('haeyoom_designers');
+        const cached = sessionStorage.getItem('hoons-preview-designers');
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
@@ -784,7 +772,7 @@ export default function AppointmentsManagementPage() {
           if (designers.length > 0) {
             setAllDesigners(designers);
             // Comment: Cache designers in sessionStorage to avoid re-fetch on back-navigation
-            try { sessionStorage.setItem('haeyoom_designers', JSON.stringify(designers)); } catch {/* quota exceeded */}
+            try { sessionStorage.setItem('hoons-preview-designers', JSON.stringify(designers)); } catch {/* quota exceeded */}
           }
         } else {
           console.error('Failed to load designers:', designersData.error || designersData);
@@ -804,7 +792,7 @@ export default function AppointmentsManagementPage() {
         const data = await res.json();
         if (res.ok && data.designers?.length > 0) {
           setAllDesigners(data.designers);
-          try { sessionStorage.setItem('haeyoom_designers', JSON.stringify(data.designers)); } catch {/* ignore */}
+          try { sessionStorage.setItem('hoons-preview-designers', JSON.stringify(data.designers)); } catch {/* ignore */}
         }
       } catch {/* silent */}
     }, 300_000);
@@ -816,7 +804,7 @@ export default function AppointmentsManagementPage() {
   // Comment: Load recent searches from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('recentSearches');
+      const stored = localStorage.getItem('hoons-preview-recent-searches');
       if (stored) {
         setRecentSearches(JSON.parse(stored));
       }
@@ -934,7 +922,7 @@ export default function AppointmentsManagementPage() {
       setRecentSearches((prev) => {
         const newSearch = { name, phone, id };
         const updated = [newSearch, ...prev.filter((s) => s.id !== id && s.name !== name)].slice(0, 10);
-        localStorage.setItem('recentSearches', JSON.stringify(updated));
+        localStorage.setItem('hoons-preview-recent-searches', JSON.stringify(updated));
         return updated;
       });
     } catch (err) {
@@ -1078,7 +1066,7 @@ export default function AppointmentsManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate, selectedShopFilter]);
+  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate, selectedShopFilter, demo]);
 
   // Comment: Load monthly booking counts to power calendar dots — uses minimal=true to avoid joins+COUNT overhead
   useEffect(() => {
@@ -1096,7 +1084,7 @@ export default function AppointmentsManagementPage() {
 
         // Comment: minimal=true returns server-aggregated dayCounts for the month
         const res = await fetch(
-          `/api/appointment?minimal=true&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`
+          `/api/appointment?minimal=true&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}&shop_id=${selectedShopFilter}`
         );
         const data = await res.json();
         if (!isMounted) return;
@@ -1115,7 +1103,7 @@ export default function AppointmentsManagementPage() {
 
     fetchMonth();
     return () => { isMounted = false; };
-  }, [monthKey, initialDataReady, hydratedMonthKey]);
+  }, [monthKey, initialDataReady, hydratedMonthKey, selectedShopFilter]);
 
   // Comment: Load shops + designer availability together in one pass to avoid render waterfall.
   // Shops are fetched once on first run; subsequent runs (date change, refresh) reuse cached allShops.
@@ -1134,7 +1122,7 @@ export default function AppointmentsManagementPage() {
         let shops = allShops;
         if (shops.length === 0) {
           // Comment: Try sessionStorage cache first for instant shop data
-          const cachedShops = sessionStorage.getItem('haeyoom_shops');
+          const cachedShops = sessionStorage.getItem('hoons-preview-shops');
           if (cachedShops) {
             try {
               const parsed = JSON.parse(cachedShops);
@@ -1151,7 +1139,7 @@ export default function AppointmentsManagementPage() {
           if (fetchedShops.length > 0) {
             shops = fetchedShops;
             if (isMounted) setAllShops(fetchedShops);
-            try { sessionStorage.setItem('haeyoom_shops', JSON.stringify(fetchedShops)); } catch {/* ignore */}
+            try { sessionStorage.setItem('hoons-preview-shops', JSON.stringify(fetchedShops)); } catch {/* ignore */}
           }
         }
 
@@ -1248,7 +1236,7 @@ export default function AppointmentsManagementPage() {
 
     fetchWeekAvailability();
     return () => { isMounted = false; };
-  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate, selectedShopFilter]);
+  }, [isWeekViewMode, weekViewDesignerId, weekViewStartDate, selectedShopFilter, demo]);
 
   // Comment: When a booking is focused from the schedule, scroll/highlight it in Upcoming
   useEffect(() => {
@@ -1498,115 +1486,31 @@ export default function AppointmentsManagementPage() {
       });
   }, [mobileDesignerBookings, allDesigners]);
 
-  // Comment: One grid column per (designer, venue) when "전체"; non-directors use shop_ids_at (home shop + extra venues)
-  const scheduleColumns = useMemo((): ScheduleColumn[] => {
-    if (allDesigners.length === 0) return [];
-
-    const roleOrder: Record<string, number> = {
-      Director: 1,
-      'Senior Designer': 2,
-      Designer: 3,
-    };
-
-    const sortDesigners = (a: (typeof allDesigners)[0], b: (typeof allDesigners)[0]) => {
-      const shopA = sortKeyPrimaryShop(a);
-      const shopB = sortKeyPrimaryShop(b);
-      if (shopA !== shopB) return shopA - shopB;
-      const roleA = (a.role || '').trim();
-      const roleB = (b.role || '').trim();
-      const orderA = roleOrder[roleA] || 999;
-      const orderB = roleOrder[roleB] || 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return compareDesignersByDisplayOrder(a, b);
-    };
-
-    const sortWithinShop = (a: (typeof allDesigners)[0], b: (typeof allDesigners)[0]) => {
-      const roleA = (a.role || '').trim();
-      const roleB = (b.role || '').trim();
-      const orderA = roleOrder[roleA] || 999;
-      const orderB = roleOrder[roleB] || 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return compareDesignersByDisplayOrder(a, b);
-    };
-
-    let filtered = [...allDesigners];
-
-    if (selectedShopFilter !== '전체') {
-      const shopId = Number(selectedShopFilter);
-      filtered = filtered.filter((d) => designerBelongsToShop(d, shopId));
-    }
-
-    if (selectedDesignerFilter === '전체') {
-      // no extra filter
-    } else if (selectedDesignerFilter === '전체(휴무 제외)') {
-      filtered = filtered.filter((d) => availableDesignerIds.includes(d.id));
-    } else {
-      filtered = filtered.filter((d) => d.name === selectedDesignerFilter);
-    }
-
-    const sorted = filtered.sort(sortDesigners);
-
-    if (selectedShopFilter === '전체') {
-      if (allShops.length === 0) {
-        return sorted.map((d) => ({
-          columnKey: `${d.id}-0`,
-          designerId: d.id,
-          name: d.name,
-          columnShopId: 0,
-        }));
-      }
-      const shopsOrdered = [...allShops].sort((a, b) => a.id - b.id);
-      const columns: ScheduleColumn[] = [];
-      for (const shop of shopsOrdered) {
-        const inShop = sorted.filter((d) => designerBelongsToShop(d, shop.id)).sort(sortWithinShop);
-        for (const d of inShop) {
-          columns.push({
-            columnKey: `${d.id}-${shop.id}`,
-            designerId: d.id,
-            name: d.name,
-            columnShopId: shop.id,
-          });
-        }
-      }
-      return columns;
-    }
-
-    const shopId = Number(selectedShopFilter);
-    return sorted.map((d) => ({
-      columnKey: `${d.id}-${shopId}`,
-      designerId: d.id,
-      name: d.name,
-      columnShopId: shopId,
-    }));
-  }, [
-    allDesigners,
-    allShops,
-    selectedShopFilter,
-    selectedDesignerFilter,
-    availableDesignerIds,
-  ]);
-
-  // Comment: Designers filtered by shop for the designer select dropdown (Directors in every shop)
   const shopFilteredDesigners = useMemo(() => {
-    const roleOrder: Record<string, number> = {
-      Director: 1,
-      'Senior Designer': 2,
-      Designer: 3,
-    };
-    const sortForDropdown = (list: typeof allDesigners) =>
-      [...list].sort((a, b) => {
-        const roleA = (a.role || '').trim();
-        const roleB = (b.role || '').trim();
-        const orderA = roleOrder[roleA] || 999;
-        const orderB = roleOrder[roleB] || 999;
-        if (orderA !== orderB) return orderA - orderB;
-        return compareDesignersByDisplayOrder(a, b);
-      });
-
-    if (selectedShopFilter === '전체') return sortForDropdown(allDesigners);
     const shopId = Number(selectedShopFilter);
-    return sortForDropdown(allDesigners.filter((d) => designerBelongsToShop(d, shopId)));
+    const roleOrder: Record<string, number> = { Director: 1, 'Senior Designer': 2, Designer: 3 };
+    return allDesigners
+      .filter((designer) => designerBelongsToShop(designer, shopId))
+      .sort((a, b) =>
+        (roleOrder[(a.role || '').trim()] ?? 999) - (roleOrder[(b.role || '').trim()] ?? 999)
+        || compareDesignersByDisplayOrder(a, b),
+      );
   }, [allDesigners, selectedShopFilter]);
+
+  const scheduleColumns = useMemo((): ScheduleColumn[] => {
+    const shopId = Number(selectedShopFilter);
+    return shopFilteredDesigners
+      .filter((designer) => selectedDesignerFilter === '전체'
+        || (selectedDesignerFilter === '전체(휴무 제외)'
+          ? availableDesignerIds.includes(designer.id)
+          : designer.name === selectedDesignerFilter))
+      .map((designer) => ({
+        columnKey: `${designer.id}-${shopId}`,
+        designerId: designer.id,
+        name: designer.name,
+        columnShopId: shopId,
+      }));
+  }, [shopFilteredDesigners, selectedShopFilter, selectedDesignerFilter, availableDesignerIds]);
 
   // O(1) designer lookup for render loop (replaces O(n) find per column)
   const designerByIdMap = useMemo(
@@ -2101,7 +2005,7 @@ export default function AppointmentsManagementPage() {
         bookingMenuOriginalPositionRef.current = null;
 
         try {
-          const salesDetail = await fetchSaleDetailForBooking(booking as any);
+          const salesDetail = await fetchSaleDetailForBooking(booking, fetch);
           if (!salesDetail) return;
           setSalesDetailData(salesDetail);
           setIsSalesDetailModalOpen(true);
@@ -2158,6 +2062,10 @@ export default function AppointmentsManagementPage() {
           onShopFilterChange={(value) => {
             setSelectedShopFilter(value);
             setSelectedDesignerFilter('전체');
+            setIsWeekViewMode(false);
+            setWeekViewDesignerId(null);
+            setWeekViewDesignerName('');
+            setWeekViewBookings([]);
           }}
           selectedDesignerFilter={selectedDesignerFilter}
           allDesigners={shopFilteredDesigners}

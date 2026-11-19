@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useEffect, useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -55,6 +56,7 @@ export default function AttendanceModal({
   workDate,
   onClose,
 }: AttendanceModalProps) {
+  const request = useAppointmentRequest();
   const [attendance, setAttendance] = useState<AttendanceRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<'clock_in' | 'clock_out' | 'manual' | null>(null);
@@ -64,7 +66,7 @@ export default function AttendanceModal({
   const fetchAttendance = async () => {
     setLoading(true);
     try {
-      const res = await fetch(
+      const res = await request(
         `/api/staff-attendance?designer_id=${designerId}&date=${encodeURIComponent(workDate)}`
       );
       const data = await res.json();
@@ -109,7 +111,7 @@ export default function AttendanceModal({
   const handleClockIn = async () => {
     setActionLoading('clock_in');
     try {
-      const res = await fetch('/api/staff-attendance', {
+      const res = await request('/api/staff-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -135,7 +137,7 @@ export default function AttendanceModal({
   const handleClockOut = async () => {
     setActionLoading('clock_out');
     try {
-      const res = await fetch('/api/staff-attendance', {
+      const res = await request('/api/staff-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -177,7 +179,7 @@ export default function AttendanceModal({
   const saveManualTotalMinutes = async (value: number | null) => {
     setActionLoading('manual');
     try {
-      const res = await fetch('/api/staff-attendance', {
+      const res = await request('/api/staff-attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

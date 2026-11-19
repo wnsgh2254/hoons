@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import type { Designer } from '@/lib/types';
+import { archiveDemoStaff, DEMO_WORKDAY_END, formatDemoTime, saveDemoStaff, saveDemoWorkingDays, useHoonsDemo } from '@/lib/hoons-booking-demo';
+import { HOONS_ADMIN_SHOPS, hoonsAdminStaff, type HoonsAdminStaff } from '@/lib/hoons-staff-preview';
 import {
   AdminPageLayout,
   PageHeader,
@@ -25,17 +26,44 @@ const STAFF_ROLE_OPTIONS = [
   { value: 'Other', label: 'Other' },
 ];
 
+const SHOP_OPTIONS = HOONS_ADMIN_SHOPS.map(({ id, name }) => ({ value: id, label: name }));
+
+type StaffForm = {
+  name: string;
+  english_name: string;
+  role: string;
+  shop_id: string;
+  wage_type: 'percent' | 'hourly';
+  percent_rate: string;
+  hourly_rate: string;
+  instagramLink: string;
+};
+
+function staffProfile(form: StaffForm, customRole: string) {
+  const location = HOONS_ADMIN_SHOPS.find(({ id }) => String(id) === form.shop_id);
+  const role = (form.role === 'Other' ? customRole : form.role).trim();
+  const name = form.name.trim();
+  if (!name || !role || !location) throw new Error('Enter a name, role and venue.');
+  return {
+    name,
+    englishName: form.english_name.trim() || null,
+    role,
+    locationId: location.locationKey,
+    wageType: form.wage_type,
+    percentRate: form.wage_type === 'percent' ? Number(form.percent_rate) : null,
+    hourlyRate: form.wage_type === 'hourly' ? Number(form.hourly_rate) : null,
+    instagramLink: form.instagramLink.trim(),
+  };
+}
+
 const PRESET_ROLE_VALUES = STAFF_ROLE_OPTIONS.map((opt) => opt.value).filter((v) => v !== 'Other');
 
 export default function StaffManagementPage() {
-  const [staffMembers, setStaffMembers] = useState<Designer[]>([]);
-  const [stats, setStats] = useState({ totalStaff: 0 });
-  const [loading, setLoading] = useState(true);
-  const [shops, setShops] = useState<any[]>([]);
+  const demo = useHoonsDemo();
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showManageServiceModal, setShowManageServiceModal] = useState(false);
   const [showViewScheduleModal, setShowViewScheduleModal] = useState(false);
-  const [selectedDesigner, setSelectedDesigner] = useState<Designer | null>(null);
+  const [selectedDesigner, setSelectedDesigner] = useState<HoonsAdminStaff | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
 
   // Get current month in Sydney timezone (format: 'YYYY-MM')
@@ -72,46 +100,10 @@ export default function StaffManagementPage() {
     fetchSession();
   }, []);
 
-  // Fetch staff data from API (single call with stats included)
-  useEffect(() => {
-    let isMounted = true;
-    const fetchStaffData = async () => {
-      try {
-        setLoading(true);
-        const params = new URLSearchParams();
-        params.append('include_stats', 'true');
-
-        const res = await fetch(`/api/staff?${params.toString()}`);
-        const data = await res.json();
-
-        if (isMounted) {
-          if (data.staff) setStaffMembers(data.staff);
-          if (data.shops) setShops(data.shops);
-          if (data.stats) {
-            setStats({
-              totalStaff: data.stats.totalStaff || 0,
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching staff data:', error);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchStaffData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const sortedStaff = sortStaffByRole(staffMembers);
+  const sortedStaff = sortStaffByRole(hoonsAdminStaff(demo).filter(({ is_active }) => is_active));
 
   // Format wage display - use DB wage_type value
-  const formatWage = (member: Designer) => {
+  const formatWage = (member: HoonsAdminStaff) => {
     if (member.wage_type === 'percent') {
       return `${member.percent_rate || 0}%`;
     } else if (member.wage_type === 'hourly') {
@@ -122,7 +114,7 @@ export default function StaffManagementPage() {
   };
 
   // Format wage type for display - use DB wage_type value directly
-  const formatWageType = (member: Designer) => {
+  const formatWageType = (member: HoonsAdminStaff) => {
     // Use DB wage_type value directly: 'percent' -> 'COMMISSION', 'hourly' -> 'HOURLY'
     // DB has 'percent' or 'hourly', display as uppercase
     if (member.wage_type === 'percent') {
@@ -134,17 +126,9 @@ export default function StaffManagementPage() {
     return 'UNKNOWN';
   };
 
-  // Format role with venue (except for Director)
-  const formatRoleWithVenue = (member: Designer) => {
-    if (member.role === 'Director' || member.role === 'director') {
-      return member.role;
-    }
-    const shopName = (member as any).shop_name;
-    if (shopName) {
-      return `${member.role} - ${shopName}`;
-    }
-    return member.role;
-  };
+  function formatRoleWithVenue(member: HoonsAdminStaff) {
+    return member.shop_name ? `${member.role} - ${member.shop_name}` : member.role;
+  }
 
   const canViewRate = userRole === 'director';
 
@@ -153,28 +137,32 @@ export default function StaffManagementPage() {
     <AdminPageLayout>
       <PageHeader
         title="직원 관리"
+        subtitle="HOONS 예약 화면에 연결된 예시 직원입니다."
         actions={
-          <Button
-            icon="add"
-            onClick={() => setShowAddStaffModal(true)}
-            className="shadow-md hover:shadow-lg bg-linear-to-r from-black to-gray-600"
-          >
-            직원 추가
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/admin/settings/locations#admin-transfers" className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium">
+              지점 이동 데모
+            </Link>
+            <Button
+              icon="add"
+              onClick={() => setShowAddStaffModal(true)}
+              className="shadow-md hover:shadow-lg bg-linear-to-r from-black to-gray-600"
+            >
+              직원 추가
+            </Button>
+          </div>
         }
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="전체 직원 수"
-          value={loading ? '...' : stats.totalStaff}
+          value={sortedStaff.length}
           icon="badge"
         />
       </div>
 
-      {loading ? (
-        <EmptyState title="Loading staff data..." />
-      ) : sortedStaff.length === 0 ? (
+      {sortedStaff.length === 0 ? (
         <EmptyState icon="group_off" title="No staff members found." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -214,20 +202,14 @@ export default function StaffManagementPage() {
                   <div className="flex flex-col">
                     <span className="text-gray-500 text-xs">{wageType === 'COMMISSION' ? `Sales (${currentMonthName})` : `Hours (${currentMonthName})`}</span>
                     <span className="font-bold text-black">
-                      {wageType === 'COMMISSION'
-                        ? (member as any).sales
-                          ? `AU$${((member as any).sales || 0).toLocaleString()}`
-                          : '-'
-                        : '-'}
+                      -
                     </span>
                   </div>
                   <div className="h-8 w-px bg-gray-200"></div>
                   <div className="flex flex-col text-right">
                     <span className="text-gray-500 text-xs">Est. Pay</span>
                     <span className="font-bold text-black">
-                      {wageType === 'COMMISSION' && (member as any).sales && member.percent_rate
-                        ? `AU$${Math.round(((member as any).sales * (member.percent_rate / 100)) || 0).toLocaleString()}`
-                        : '-'}
+                      -
                     </span>
                   </div>
                 </div>
@@ -261,22 +243,13 @@ export default function StaffManagementPage() {
         </div>
       )}
 
-      {/* Add Staff Modal */}
-      <AddStaffModal
-        isOpen={showAddStaffModal}
-        shops={shops}
-        onClose={() => setShowAddStaffModal(false)}
-        onSuccess={() => {
-          setShowAddStaffModal(false);
-          // Refresh staff data
-          window.location.reload();
-        }}
-      />
+      {showAddStaffModal && (
+        <AddStaffModal isOpen onClose={() => setShowAddStaffModal(false)} />
+      )}
 
-      {/* Manage Service Modal */}
-      {selectedDesigner && (
+      {selectedDesigner && showManageServiceModal && (
         <ManageServiceModal
-          isOpen={showManageServiceModal}
+          isOpen
           designer={selectedDesigner}
           canViewRate={canViewRate}
           onClose={() => {
@@ -286,10 +259,9 @@ export default function StaffManagementPage() {
         />
       )}
 
-      {/* View Schedule Modal */}
-      {selectedDesigner && (
+      {selectedDesigner && showViewScheduleModal && (
         <ViewScheduleModal
-          isOpen={showViewScheduleModal}
+          isOpen
           designer={selectedDesigner}
           onClose={() => {
             setShowViewScheduleModal(false);
@@ -301,66 +273,20 @@ export default function StaffManagementPage() {
   );
 }
 
-// Comment: Checkboxes for additional venues a non-director also works at (saved to designer_shops)
-function ExtraShopsField({
-  shops,
-  primaryShopId,
-  value,
-  onChange,
-}: {
-  shops: any[];
-  primaryShopId: string;
-  value: number[];
-  onChange: (next: number[]) => void;
-}) {
-  const options = shops.filter((shop) => String(shop.id) !== String(primaryShopId));
-  if (options.length === 0) return null;
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-500 mb-1">추가 근무 매장</label>
-      <div className="flex flex-wrap gap-3 rounded-lg border border-gray-200 px-3 py-2.5">
-        {options.map((shop) => (
-          <label key={shop.id} className="flex items-center gap-1.5 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={value.includes(Number(shop.id))}
-              onChange={(e) =>
-                onChange(
-                  e.target.checked
-                    ? [...value, Number(shop.id)]
-                    : value.filter((sid) => sid !== Number(shop.id)),
-                )
-              }
-            />
-            {shop.name}
-          </label>
-        ))}
-      </div>
-      <p className="mt-1 text-xs text-gray-400">체크한 매장은 예약 자원에서 요일별 근무 매장으로 지정할 수 있어요.</p>
-    </div>
-  );
-}
-
 // Add Staff Modal Component
-function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean; shops: any[]; onClose: () => void; onSuccess: () => void }) {
-  const [formData, setFormData] = useState({
+function AddStaffModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const [formData, setFormData] = useState<StaffForm>({
     name: '',
     english_name: '',
     role: '',
     shop_id: '',
-    wage_type: 'percent' as 'percent' | 'hourly',
+    wage_type: 'percent',
     percent_rate: '',
     hourly_rate: '',
     instagramLink: '',
   });
-  const [extraShopIds, setExtraShopIds] = useState<number[]>([]);
   const [customRole, setCustomRole] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const shopOptions = shops.map((shop) => ({
-    value: shop.id,
-    label: shop.name,
-  }));
 
   const wageTypeOptions = [
     { value: 'percent', label: 'Commission (Percent)' },
@@ -371,56 +297,11 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
     e.preventDefault();
     setLoading(true);
 
-    // Validate role is selected
-    if (!formData.role || formData.role === '') {
-      alert('Please select a role');
-      setLoading(false);
-      return;
-    }
-    if (formData.role === 'Other' && !customRole.trim()) {
-      alert('Please enter a custom role');
-      setLoading(false);
-      return;
-    }
-
-    const resolvedRole = formData.role === 'Other' ? customRole.trim() : formData.role.trim();
-
     try {
-      const requestBody = {
-        name: formData.name.trim(),
-        // Comment: English display name for public-facing pages
-        english_name: formData.english_name.trim() || null,
-        role: resolvedRole,
-        shop_id: formData.shop_id ? Number(formData.shop_id) : null,
-        wage_type: formData.wage_type,
-        percent_rate: formData.wage_type === 'percent' ? Number(formData.percent_rate) : null,
-        hourly_rate: formData.wage_type === 'hourly' ? Number(formData.hourly_rate) : null,
-        // Comment: Optional Instagram profile URL
-        instagramLink: formData.instagramLink.trim() || null,
-        is_active: true,
-        extra_shop_ids: resolvedRole.toLowerCase().includes('director') ? [] : extraShopIds,
-      };
-
-      console.log('Submitting staff data:', requestBody); // Debug log
-
-      const response = await fetch('/api/staff', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      const responseData = await response.json();
-
-      if (response.ok) {
-        console.log('Staff added successfully:', responseData); // Debug log
-        onSuccess();
-      } else {
-        console.error('Error response:', responseData); // Debug log
-        alert(responseData.error || 'Failed to add staff member');
-      }
+      await saveDemoStaff(staffProfile(formData, customRole));
+      onClose();
     } catch (error) {
-      console.error('Error adding staff:', error);
-      alert('Failed to add staff member');
+      alert(error instanceof Error ? error.message : 'Failed to add staff member');
     } finally {
       setLoading(false);
     }
@@ -489,30 +370,14 @@ function AddStaffModal({ isOpen, shops, onClose, onSuccess }: { isOpen: boolean;
             onChange={(e) => setCustomRole(e.target.value)}
           />
         )}
-        {(formData.role === 'Other' ? customRole : formData.role).toLowerCase().includes('director') ? (
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Venue (Shop)</label>
-            <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">
-              모든 매장 <span className="text-xs text-gray-400 ml-1">(요일별 매장은 예약 자원에서 설정)</span>
-            </div>
-          </div>
-        ) : (
-          <>
-            <Select
-              label="Venue (Shop)"
-              value={formData.shop_id}
-              onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-              options={shopOptions}
-              placeholder="Select Venue"
-            />
-            <ExtraShopsField
-              shops={shops}
-              primaryShopId={formData.shop_id}
-              value={extraShopIds}
-              onChange={setExtraShopIds}
-            />
-          </>
-        )}
+        <Select
+          label="Venue (Shop)"
+          required
+          value={formData.shop_id}
+          onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+          options={SHOP_OPTIONS}
+          placeholder="Select Venue"
+        />
         <Select
           label="Wage Type"
           required
@@ -562,12 +427,12 @@ function ManageServiceModal({
   onClose,
 }: {
   isOpen: boolean;
-  designer: Designer;
+  designer: HoonsAdminStaff;
   canViewRate: boolean;
   onClose: () => void;
 }) {
   const initialRoleIsPreset = PRESET_ROLE_VALUES.includes(designer.role);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<StaffForm>({
     name: designer.name,
     english_name: designer.english_name || '',
     role: initialRoleIsPreset ? designer.role : 'Other',
@@ -578,28 +443,8 @@ function ManageServiceModal({
     instagramLink: designer.instagramLink || '',
   });
   const [customRole, setCustomRole] = useState(initialRoleIsPreset ? '' : designer.role);
-  // Comment: Extra venues = designer_shops minus the primary shop
-  const [extraShopIds, setExtraShopIds] = useState<number[]>(
-    ((designer as any).shop_ids_at ?? []).filter((sid: number) => sid !== designer.shop_id),
-  );
-  const [shops, setShops] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    // Fetch shops
-    fetch('/api/staff')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.shops) setShops(data.shops);
-      })
-      .catch(console.error);
-  }, []);
-
-  const shopOptions = shops.map((shop) => ({
-    value: shop.id,
-    label: shop.name,
-  }));
 
   const wageTypeOptions = [
     { value: 'percent', label: 'Commission (Percent)' },
@@ -609,78 +454,29 @@ function ManageServiceModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    if (formData.role === 'Other' && !customRole.trim()) {
-      alert('Please enter a custom role');
-      setLoading(false);
-      return;
-    }
-
-    const resolvedRole = formData.role === 'Other' ? customRole.trim() : formData.role.trim();
-
     try {
-      const requestBody = {
-        name: formData.name.trim(),
-        // Comment: English display name for public-facing pages
-        english_name: formData.english_name.trim() || null,
-        role: resolvedRole,
-        shop_id: formData.shop_id ? Number(formData.shop_id) : null,
-        wage_type: formData.wage_type,
-        percent_rate: formData.wage_type === 'percent' ? Number(formData.percent_rate) : null,
-        hourly_rate: formData.wage_type === 'hourly' ? Number(formData.hourly_rate) : null,
-        // Comment: Optional Instagram profile URL
-        instagramLink: formData.instagramLink.trim() || null,
-        is_active: true,
-        // Comment: Directors already work at every shop, so leave designer_shops untouched for them
-        ...(resolvedRole.toLowerCase().includes('director') ? {} : { extra_shop_ids: extraShopIds }),
-      };
-
-      const response = await fetch(`/api/staff?id=${designer.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      const responseData = await response.json();
-
-      if (response.ok) {
-        alert('Designer updated successfully');
-        window.location.reload();
-      } else {
-        alert(responseData.error || 'Failed to update designer');
-      }
+      await saveDemoStaff(staffProfile(formData, customRole), designer.staffKey);
+      onClose();
     } catch (error) {
-      console.error('Error updating designer:', error);
-      alert('Failed to update designer');
+      alert(error instanceof Error ? error.message : 'Failed to update designer');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete ${designer.name}? This action cannot be undone.`)) {
-      return;
-    }
+  async function handleDelete() {
+    if (!confirm(`Are you sure you want to delete ${designer.name} from the demo staff?`)) return;
 
     setDeleting(true);
     try {
-      const response = await fetch(`/api/staff/${designer.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        alert('Designer deleted successfully');
-        window.location.reload();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to delete designer');
-      }
+      await archiveDemoStaff(designer.staffKey);
+      onClose();
     } catch (error) {
-      console.error('Error deleting designer:', error);
-      alert('Failed to delete designer');
+      alert(error instanceof Error ? error.message : 'Failed to delete designer');
     } finally {
       setDeleting(false);
     }
-  };
+  }
 
   return (
     <Modal
@@ -747,30 +543,14 @@ function ManageServiceModal({
             onChange={(e) => setCustomRole(e.target.value)}
           />
         )}
-        {(formData.role === 'Other' ? customRole : formData.role).toLowerCase().includes('director') ? (
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Venue (Shop)</label>
-            <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">
-              모든 매장 <span className="text-xs text-gray-400 ml-1">(요일별 매장은 예약 자원에서 설정)</span>
-            </div>
-          </div>
-        ) : (
-          <>
-            <Select
-              label="Venue (Shop)"
-              value={formData.shop_id}
-              onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
-              options={shopOptions}
-              placeholder="Select Venue"
-            />
-            <ExtraShopsField
-              shops={shops}
-              primaryShopId={formData.shop_id}
-              value={extraShopIds}
-              onChange={setExtraShopIds}
-            />
-          </>
-        )}
+        <Select
+          label="Venue (Shop)"
+          required
+          value={formData.shop_id}
+          onChange={(e) => setFormData({ ...formData, shop_id: e.target.value })}
+          options={SHOP_OPTIONS}
+          placeholder="Select Venue"
+        />
         <Input
           label="Instagram URL"
           type="url"
@@ -816,11 +596,9 @@ function ManageServiceModal({
 }
 
 // View Schedule Modal Component
-function ViewScheduleModal({ isOpen, designer, onClose }: { isOpen: boolean; designer: Designer; onClose: () => void }) {
-  const [schedules, setSchedules] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+function ViewScheduleModal({ isOpen, designer, onClose }: { isOpen: boolean; designer: HoonsAdminStaff; onClose: () => void }) {
+  const [workingDays, setWorkingDays] = useState(() => new Set(designer.workingDays));
   const [saving, setSaving] = useState(false);
-  const [workingDays, setWorkingDays] = useState<Set<number>>(new Set());
 
   const weekdays = [
     { day: 0, name: '일요일', label: 'Sun' },
@@ -832,117 +610,28 @@ function ViewScheduleModal({ isOpen, designer, onClose }: { isOpen: boolean; des
     { day: 6, name: '토요일', label: 'Sat' },
   ];
 
-  // Comment: Default working hours - same for all working days
-  const DEFAULT_START_TIME = '10:00:00';
-  const DEFAULT_END_TIME = '19:00:00';
-  const SATURDAY_START_TIME = '09:00:00';
-  const SATURDAY_END_TIME = '17:00:00';
+  const workHours = `${formatDemoTime(designer.start)}–${formatDemoTime(DEMO_WORKDAY_END)}`;
 
-  // Comment: Load schedules for this designer
-  useEffect(() => {
-    const fetchSchedules = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/designer-schedules?designer_id=${designer.id}`);
-        const data = await res.json();
-        if (res.ok) {
-          setSchedules(data.schedules || []);
-          // Comment: Set working days based on existing schedules
-          const workingDaysSet = new Set<number>();
-          (data.schedules || []).forEach((s: any) => {
-            if (!s.effective_to) {
-              workingDaysSet.add(s.weekday);
-            }
-          });
-          setWorkingDays(workingDaysSet);
-        }
-      } catch (error) {
-        console.error('Error fetching schedules:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  function handleToggleDay(weekday: number) {
+    setWorkingDays((current) => {
+      const next = new Set(current);
+      if (next.has(weekday)) next.delete(weekday);
+      else next.add(weekday);
+      return next;
+    });
+  }
 
-    fetchSchedules();
-  }, [designer.id]);
-
-  // Comment: Toggle working day
-  const handleToggleDay = (weekday: number) => {
-    const newWorkingDays = new Set(workingDays);
-    if (newWorkingDays.has(weekday)) {
-      newWorkingDays.delete(weekday);
-    } else {
-      newWorkingDays.add(weekday);
-    }
-    setWorkingDays(newWorkingDays);
-  };
-
-  // Comment: Save all schedules
-  const handleSave = async () => {
+  async function handleSave() {
     setSaving(true);
     try {
-      // Comment: Get current schedules to know which ones to delete
-      const currentSchedules = schedules.filter((s) => !s.effective_to);
-      const currentWorkingDays = new Set(currentSchedules.map((s) => s.weekday));
-
-      // Comment: Delete schedules for days that are no longer working days
-      const daysToDelete = Array.from(currentWorkingDays).filter((day) => !workingDays.has(day));
-      for (const day of daysToDelete) {
-        const schedule = currentSchedules.find((s) => s.weekday === day);
-        if (schedule?.id) {
-          await fetch(`/api/designer-schedules?id=${schedule.id}`, {
-            method: 'DELETE',
-          });
-        }
-      }
-
-      // Comment: Create or update schedules for working days
-      const daysToSave = Array.from(workingDays);
-      for (const day of daysToSave) {
-        const isSaturday = day === 6;
-        const startTime = isSaturday ? SATURDAY_START_TIME : DEFAULT_START_TIME;
-        const endTime = isSaturday ? SATURDAY_END_TIME : DEFAULT_END_TIME;
-
-        const body = {
-          designer_id: designer.id,
-          shop_id: designer.shop_id,
-          weekday: day,
-          start_time: startTime,
-          end_time: endTime,
-        };
-
-        await fetch('/api/designer-schedules', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-      }
-
-      // Comment: Reload schedules
-      const res = await fetch(`/api/designer-schedules?designer_id=${designer.id}`);
-      const data = await res.json();
-      if (res.ok) {
-        setSchedules(data.schedules || []);
-        alert('정기 휴일 설정이 저장되었습니다.');
-      }
-    } catch (error: any) {
-      console.error('Error saving schedules:', error);
-      alert(error.message || '스케줄 저장에 실패했습니다.');
+      await saveDemoWorkingDays(designer.staffKey, Array.from(workingDays));
+      onClose();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '스케줄 저장에 실패했습니다.');
     } finally {
       setSaving(false);
     }
-  };
-
-  // Comment: Format time from DB format (HH:MM:SS) to display format (HH:MM)
-  const formatTime = (time: string | null) => {
-    if (!time) return '';
-    return time.substring(0, 5); // HH:MM
-  };
-
-  // Comment: Get schedule for a specific weekday
-  const getScheduleForDay = (weekday: number) => {
-    return schedules.find((s) => s.weekday === weekday && !s.effective_to);
-  };
+  }
 
   return (
     <Modal
@@ -962,58 +651,52 @@ function ViewScheduleModal({ isOpen, designer, onClose }: { isOpen: boolean; des
         </>
       }
     >
-      {loading ? (
-        <EmptyState title="스케줄을 불러오는 중..." />
-      ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 mb-4">
-            출근하는 요일을 선택하세요. 출근하는 요일은 기본 근무시간(월-금: 10:00-19:00, 토: 09:00-17:00)으로 자동 설정됩니다.
-          </p>
-          <div className="space-y-2">
-            {weekdays.map(({ day, name, label }) => {
-              const isWorking = workingDays.has(day);
-              const schedule = getScheduleForDay(day);
-              const isSaturday = day === 6;
-              const defaultTime = isSaturday ? '09:00-17:00' : '10:00-19:00';
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 mb-4">
+          출근하는 요일을 선택하세요. 데모 근무시간은 {workHours}입니다.
+        </p>
+        <div className="space-y-2">
+          {weekdays.map(({ day, name, label }) => {
+            const isWorking = workingDays.has(day);
 
-              return (
-                <div
-                  key={day}
-                  className={`border rounded-lg p-4 transition-colors ${
-                    isWorking ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="w-20">
-                        <span className="text-sm font-semibold text-gray-900">{name}</span>
-                        <span className="text-xs text-gray-500 ml-2">({label})</span>
-                      </div>
-                      <div className="flex-1">
-                        {isWorking ? (
-                          <span className="text-sm text-gray-900 font-medium">
-                            출근 ({defaultTime})
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-500 font-medium">휴일</span>
-                        )}
-                      </div>
+            return (
+              <div
+                key={day}
+                className={`border rounded-lg p-4 transition-colors ${
+                  isWorking ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="w-20">
+                      <span className="text-sm font-semibold text-gray-900">{name}</span>
+                      <span className="text-xs text-gray-500 ml-2">({label})</span>
                     </div>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isWorking}
-                        onChange={() => handleToggleDay(day)}
-                        className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
-                      />
-                    </label>
+                    <div className="flex-1">
+                      {isWorking ? (
+                        <span className="text-sm text-gray-900 font-medium">
+                          출근 ({workHours})
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-500 font-medium">휴일</span>
+                      )}
+                    </div>
                   </div>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      aria-label={name}
+                      checked={isWorking}
+                      onChange={() => handleToggleDay(day)}
+                      className="w-5 h-5 rounded border-gray-300 text-black focus:ring-2 focus:ring-black"
+                    />
+                  </label>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
     </Modal>
   );
 }

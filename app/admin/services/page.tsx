@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { invalidateServicesCache } from '@/hooks/useServices';
+import { fetchHoonsServicePreview } from '@/lib/hoons-service-preview';
 import {
   AdminPageLayout,
   PageHeader,
@@ -87,7 +88,7 @@ export default function ServiceMenuSettingPage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch('/api/services');
+        const res = await fetchHoonsServicePreview('/api/services');
         const data = await res.json();
         if (isMounted) {
           if (!res.ok) {
@@ -134,7 +135,7 @@ export default function ServiceMenuSettingPage() {
 
   const handleUpdateService = async (serviceId: number, updates: Partial<Service>) => {
     try {
-      const res = await fetch(`/api/services/${serviceId}`, {
+      const res = await fetchHoonsServicePreview(`/api/services/${serviceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
@@ -162,7 +163,7 @@ export default function ServiceMenuSettingPage() {
     if (!confirm('Are you sure you want to delete this service?')) return;
 
     try {
-      const res = await fetch(`/api/services/${serviceId}`, {
+      const res = await fetchHoonsServicePreview(`/api/services/${serviceId}`, {
         method: 'DELETE',
       });
 
@@ -434,7 +435,7 @@ function AddServiceModal({
       // Add (card) or (cash) suffix to service name
       const serviceName = `${name.trim()} (${serviceType})`;
 
-      const res = await fetch('/api/services', {
+      const res = await fetchHoonsServicePreview('/api/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -600,7 +601,7 @@ function EditServiceModal({
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`/api/services/${service.id}`, {
+      const res = await fetchHoonsServicePreview(`/api/services/${service.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

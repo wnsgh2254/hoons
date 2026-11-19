@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -93,6 +94,7 @@ export default function HolidaySettingModal({
   onClose,
   onAvailableDesignerIdsChange,
 }: HolidaySettingModalProps) {
+  const request = useAppointmentRequest();
   const [designerId, setDesignerId] = useState<number | null>(initialDesignerId);
   const [holidayType, setHolidayType] = useState<'holiday' | 'special'>('holiday');
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
@@ -137,7 +139,7 @@ export default function HolidaySettingModal({
       try {
         if (designerId === null) {
           // "전체" mode: fetch all designers' time-off records (no designer_id filter)
-          const timeOffRes = await fetch('/api/designer-time-off');
+          const timeOffRes = await request('/api/designer-time-off');
           const timeOffData = await timeOffRes.json();
           if (cancelled) return;
           setRegularSchedule([]);
@@ -151,8 +153,8 @@ export default function HolidaySettingModal({
           }
         } else {
           const [scheduleRes, timeOffRes] = await Promise.all([
-            fetch(`/api/designer-schedules?designer_id=${designerId}`),
-            fetch(`/api/designer-time-off?designer_id=${designerId}`),
+            request(`/api/designer-schedules?designer_id=${designerId}`),
+            request(`/api/designer-time-off?designer_id=${designerId}`),
           ]);
           const [scheduleData, timeOffData] = await Promise.all([scheduleRes.json(), timeOffRes.json()]);
           if (cancelled) return;
@@ -347,7 +349,7 @@ export default function HolidaySettingModal({
       if (pendingRemoveTimeOffIds.length > 0) {
         const deleteResults = await Promise.all(
           pendingRemoveTimeOffIds.map((id) =>
-            fetch(`/api/designer-time-off/${id}`, { method: 'DELETE' }),
+            request(`/api/designer-time-off/${id}`, { method: 'DELETE' }),
           ),
         );
         const failedDelete = deleteResults.find((res) => !res.ok);
@@ -370,7 +372,7 @@ export default function HolidaySettingModal({
               reason: '임의 휴일',
             })),
           );
-          const bulkRes = await fetch('/api/designer-time-off', {
+          const bulkRes = await request('/api/designer-time-off', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ rows }),
@@ -390,7 +392,7 @@ export default function HolidaySettingModal({
           reason: holidayType === 'holiday' ? '임의 휴일' : '특별 근무일',
         }));
         if (rows.length > 0) {
-          const bulkRes = await fetch('/api/designer-time-off', {
+          const bulkRes = await request('/api/designer-time-off', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ rows }),

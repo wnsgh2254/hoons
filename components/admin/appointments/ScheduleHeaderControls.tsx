@@ -355,14 +355,13 @@ export default function ScheduleHeaderControls({
             <Select
               value={selectedShopFilter}
               onChange={(e) => onShopFilterChange(e.target.value)}
-              options={[
-                { value: '전체', label: '전 지점' },
-                ...allShops.map((s) => ({ value: String(s.id), label: s.name })),
-              ]}
+              aria-label="지점"
+              options={allShops.map((s) => ({ value: String(s.id), label: s.name }))}
               className="min-w-[110px] flex-1 md:flex-none md:min-w-[120px]"
             />
             {/* REQ_SCH_001_02 - Designer filter */}
             <Select
+              aria-label="직원"
               value={selectedDesignerFilter}
               onChange={(e) => onDesignerFilterChange(e.target.value)}
               options={[

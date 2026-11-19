@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import type { BookingWithRelations } from '@/lib/types';
 import { getWeekStart, getWeekEnd } from '@/lib/utils/appointment-utils';
 
@@ -13,6 +14,7 @@ interface UseBookingsOptions {
 }
 
 export function useBookings(selectedDate: string, options: UseBookingsOptions = {}) {
+  const request = useAppointmentRequest();
   const {
     designerFilter = '전체',
     shopFilter = '전체',
@@ -46,9 +48,9 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
       setError(null);
       const weekStart = getWeekStart(selectedDate);
       const weekEnd = getWeekEnd(selectedDate);
-      const res = await fetch(
-        `/api/appointment?start_date=${encodeURIComponent(weekStart)}&end_date=${encodeURIComponent(weekEnd)}&limit=1000`
-      );
+      const params = new URLSearchParams({ start_date: weekStart, end_date: weekEnd, limit: '1000' });
+      if (shopFilter !== '전체') params.set('shop_id', shopFilter);
+      const res = await request(`/api/appointment?${params}`);
       const data = await res.json();
       if (mountedRef.current && seq === requestSeqRef.current) {
         if (!res.ok) {
@@ -66,7 +68,7 @@ export function useBookings(selectedDate: string, options: UseBookingsOptions = 
         setLoading(false);
       }
     }
-  }, [selectedDate]);
+  }, [selectedDate, shopFilter, request]);
 
   useEffect(() => {
     // Skip only the very first fetch (initial data already loaded by consolidated API).

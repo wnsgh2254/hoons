@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface RecentSearch {
@@ -15,7 +16,8 @@ interface AutocompleteResult {
   customer_number?: number;
 }
 
-export function useScheduleSearch() {
+export function useScheduleSearch(storageKey = 'recentSearches') {
+  const request = useAppointmentRequest();
   const [searchInput, setSearchInput] = useState('');
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [searchDropdownPosition, setSearchDropdownPosition] = useState<{
@@ -33,14 +35,14 @@ export function useScheduleSearch() {
   // Load recent searches from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('recentSearches');
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
         setRecentSearches(JSON.parse(stored));
       }
     } catch (err) {
       console.error('Error loading recent searches:', err);
     }
-  }, []);
+  }, [storageKey]);
 
   // Handle customer autocomplete search (debounced)
   useEffect(() => {
@@ -54,7 +56,7 @@ export function useScheduleSearch() {
 
     const timeoutId = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/customers?search=${encodeURIComponent(searchTerm)}&limit=10`);
+        const res = await request(`/api/customers?search=${encodeURIComponent(searchTerm)}&limit=10`);
         const data = await res.json();
         if (res.ok && data.customers) {
           setSearchAutocompleteResults(data.customers);
@@ -72,7 +74,7 @@ export function useScheduleSearch() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [searchInput]);
+  }, [searchInput, request]);
 
   const saveRecentSearch = useCallback(
     (name: string, phone?: string, id?: number) => {
@@ -83,12 +85,12 @@ export function useScheduleSearch() {
           ...recentSearches.filter((s) => s.id !== id && s.name !== name),
         ].slice(0, 10);
         setRecentSearches(updated);
-        localStorage.setItem('recentSearches', JSON.stringify(updated));
+        localStorage.setItem(storageKey, JSON.stringify(updated));
       } catch (err) {
         console.error('Error saving recent search:', err);
       }
     },
-    [recentSearches],
+    [recentSearches, storageKey],
   );
 
   const handleDeleteRecentSearch = useCallback(
@@ -97,12 +99,12 @@ export function useScheduleSearch() {
       const updated = recentSearches.filter((_, idx) => idx !== index);
       setRecentSearches(updated);
       try {
-        localStorage.setItem('recentSearches', JSON.stringify(updated));
+        localStorage.setItem(storageKey, JSON.stringify(updated));
       } catch (err) {
         console.error('Error saving recent searches:', err);
       }
     },
-    [recentSearches],
+    [recentSearches, storageKey],
   );
 
   return {

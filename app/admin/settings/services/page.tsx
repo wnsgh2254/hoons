@@ -20,6 +20,8 @@ import {
   FormAlert,
 } from '@/components/ui';
 import { Z } from '@/lib/constants';
+import { useHoonsDemo } from '@/lib/hoons-booking-demo';
+import { fetchHoonsServicePreview } from '@/lib/hoons-service-preview';
 import {
   resolveInitialProductBrand,
   resolveInitialProductCategory,
@@ -55,7 +57,7 @@ const PAGE_TABS = [
   { key: 'productInventoryCategories', label: '제품카테고리' },
 ];
 
-const MINUTE_OPTIONS = [0, 10, 20, 30, 40, 50].map((m) => ({
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, m) => m).map((m) => ({
   value: m,
   label: String(m).padStart(2, '0'),
 }));
@@ -233,7 +235,7 @@ function ServiceItemModal({
     try {
       if (initial) {
         // Update
-        const res = await fetch(`/api/services/${initial.id}`, {
+        const res = await fetchHoonsServicePreview(`/api/services/${initial.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -250,7 +252,7 @@ function ServiceItemModal({
         if (!res.ok) throw new Error(data.error || '서비스 수정에 실패했습니다.');
       } else {
         // Create
-        const res = await fetch('/api/services', {
+        const res = await fetchHoonsServicePreview('/api/services', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -364,6 +366,7 @@ function ServiceItemModal({
 // ─── Tab 1: 서비스 ────────────────────────────────────────────────────────────
 
 function ServicesTab() {
+  const { catalog } = useHoonsDemo();
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -386,8 +389,8 @@ function ServicesTab() {
       setLoading(true);
       setFetchError(null);
       const [servicesRes, categoriesRes] = await Promise.all([
-        fetch('/api/services'),
-        fetch('/api/services/categories'),
+        fetchHoonsServicePreview('/api/services'),
+        fetchHoonsServicePreview('/api/services/categories'),
       ]);
       const servicesData = await servicesRes.json();
       const categoriesData = await categoriesRes.json();
@@ -417,7 +420,7 @@ function ServicesTab() {
 
   useEffect(() => {
     fetchServices();
-  }, [fetchServices]);
+  }, [fetchServices, catalog]);
 
   // Group services by category
   const servicesByCategory = services.reduce((acc, service) => {
@@ -449,11 +452,21 @@ function ServicesTab() {
     });
 
   // Category handlers
-  const handleAddCategory = (data: { name: string }) => {
+  const handleAddCategory = async (data: { name: string }) => {
     if (categories.includes(data.name)) return;
-    setCategories((prev) => [...prev, data.name]);
-    setSelectedCategory(data.name);
-    setIsAddingCategory(false);
+    try {
+      const response = await fetchHoonsServicePreview('/api/services/categories', {
+        method: 'PATCH',
+        body: JSON.stringify({ items: [...categories, data.name].map((name) => ({ name })) }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      await fetchServices();
+      setSelectedCategory(data.name);
+      setIsAddingCategory(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '분류를 추가하지 못했습니다.');
+    }
   };
   const handleUpdateCategory = async (data: { name: string }) => {
     if (!editingCategoryName) return;
@@ -465,7 +478,7 @@ function ServicesTab() {
       return;
     }
     try {
-      const res = await fetch('/api/services/categories', {
+      const res = await fetchHoonsServicePreview('/api/services/categories', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ renameFrom: oldName, renameTo: newName }),
@@ -485,7 +498,7 @@ function ServicesTab() {
     if (!confirm(`분류 "${editingCategoryName}"을(를) 삭제할까요? 해당 분류의 서비스는 "Others"로 옮겨집니다.`)) return;
     const name = editingCategoryName;
     try {
-      const res = await fetch(`/api/services/categories?name=${encodeURIComponent(name)}`, {
+      const res = await fetchHoonsServicePreview(`/api/services/categories?name=${encodeURIComponent(name)}`, {
         method: 'DELETE',
       });
       const body = await res.json().catch(() => ({}));
@@ -507,7 +520,7 @@ function ServicesTab() {
     if (!editingService) return;
     if (!confirm('이 서비스를 삭제하시겠습니까?')) return;
     try {
-      const res = await fetch(`/api/services/${editingService.id}`, { method: 'DELETE' });
+      const res = await fetchHoonsServicePreview(`/api/services/${editingService.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '서비스 삭제에 실패했습니다.');
       invalidateServicesCache();
@@ -613,7 +626,7 @@ function ServicesTab() {
               const prev = [...categories];
               setCategories(names);
               try {
-                const res = await fetch('/api/services/categories', {
+                const res = await fetchHoonsServicePreview('/api/services/categories', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -661,7 +674,7 @@ function ServicesTab() {
                 return updated;
               });
               try {
-                const res = await fetch('/api/services/reorder', {
+                const res = await fetchHoonsServicePreview('/api/services/reorder', {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -807,13 +820,13 @@ function DesignerServiceModal({
       if (initial) {
         // Comment: For custom entries, also update the service name if changed
         if (isCustom && customName.trim() && customName.trim() !== categoryLabel) {
-          await fetch(`/api/services/${initial.service_id}`, {
+          await fetchHoonsServicePreview(`/api/services/${initial.service_id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: customName.trim() }),
           });
         }
-        const res = await fetch('/api/designer-services', {
+        const res = await fetchHoonsServicePreview('/api/designer-services', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: initial.id, price: priceNum, duration_minutes: durationTotal, is_active: isActive, notes: notes.trim() || null }),
@@ -902,31 +915,31 @@ function AddDesignerServiceModal({
   existingRows: DesignerServiceRow[];
   serviceOptions: ServiceItem[];
 }) {
-  // Comment: Only show categories not already registered for this designer
-  const existingCategories = existingRows.map((r) => getRowCategoryLabel(r));
-  const availableCategories = CATEGORY_ORDER.filter((cat) => !existingCategories.includes(cat));
-
-  // Comment: Include '직접 입력' at the end of the options list
+  const existingIds = new Set(existingRows.map((row) => row.service_id));
+  const availableServices = serviceOptions.filter((item) =>
+    item.is_active && item.category !== 'Custom' && !existingIds.has(item.id),
+  );
   const selectOptions = [
-    ...availableCategories.map((cat) => ({ value: cat, label: cat })),
+    ...availableServices.map((item) => ({ value: String(item.id), label: getServiceDisplayName(item.name) })),
     { value: CUSTOM_CATEGORY_VALUE, label: '✏️ 직접 입력' },
   ];
-
-  const [selectedCategory, setSelectedCategory] = useState<string>(availableCategories[0] ?? CUSTOM_CATEGORY_VALUE);
+  const firstService = availableServices[0];
+  const [selectedService, setSelectedService] = useState(
+    firstService ? String(firstService.id) : CUSTOM_CATEGORY_VALUE,
+  );
   const [customName, setCustomName] = useState<string>('');
   // Comment: Use string so the field starts empty (placeholder "0") instead of pre-filled 0
-  const [price, setPrice] = useState<string>('');
-  const [durationHours, setDurationHours] = useState<number>(0);
-  const [durationMins, setDurationMins] = useState<number>(0);
+  const [price, setPrice] = useState(firstService ? String(firstService.price) : '');
+  const [durationHours, setDurationHours] = useState(Math.floor((firstService?.duration_minutes ?? 0) / 60));
+  const [durationMins, setDurationMins] = useState((firstService?.duration_minutes ?? 0) % 60);
   const [notes, setNotes] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const isCustom = selectedCategory === CUSTOM_CATEGORY_VALUE;
+  const isCustom = selectedService === CUSTOM_CATEGORY_VALUE;
 
   const handleSave = async () => {
     if (isCustom && !customName.trim()) { setError('항목명을 입력해주세요.'); return; }
-    if (!isCustom && !selectedCategory) { setError('서비스 분류를 선택해주세요.'); return; }
     const priceNum = Number(price);
     if (!price || priceNum <= 0) { setError('금액을 입력해주세요.'); return; }
     const durationTotal = durationHours * 60 + durationMins;
@@ -939,7 +952,7 @@ function AddDesignerServiceModal({
 
       if (isCustom) {
         // Comment: Create a new service entry for the custom name (visible_to: admin only)
-        const svcRes = await fetch('/api/services', {
+        const svcRes = await fetchHoonsServicePreview('/api/services', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -955,23 +968,12 @@ function AddDesignerServiceModal({
         if (!svcRes.ok) throw new Error(svcData.error || '서비스 생성 실패');
         serviceId = svcData.service?.id ?? svcData.id;
       } else {
-        // Comment: Find a representative service for the selected category
-        const normalizedCategory = selectedCategory === 'Others' ? 'Other' : selectedCategory;
-        const rep = serviceOptions.find((s) => {
-          if (!s.is_active) return false;
-          const svcCat = s.category || getServiceCategory(s.name);
-          const norm = svcCat === 'Other' ? 'Others' : svcCat;
-          return norm === selectedCategory || svcCat === normalizedCategory;
-        });
-        if (!rep) {
-          setError(`'${selectedCategory}' 분류에 등록된 서비스가 없습니다. 서비스 탭에서 먼저 등록해 주세요.`);
-          setLoading(false);
-          return;
-        }
-        serviceId = rep.id;
+        const selected = availableServices.find((item) => String(item.id) === selectedService);
+        if (!selected) throw new Error('서비스를 선택해 주세요.');
+        serviceId = selected.id;
       }
 
-      const res = await fetch('/api/designer-services', {
+      const res = await fetchHoonsServicePreview('/api/designer-services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1005,9 +1007,17 @@ function AddDesignerServiceModal({
       <div className="space-y-4">
         {error && <FormAlert message={error} variant="error" />}
         <Select
-          label="서비스 분류"
-          value={selectedCategory}
-          onChange={(e) => { setSelectedCategory(e.target.value); setCustomName(''); }}
+          label="서비스"
+          value={selectedService}
+          onChange={(event) => {
+            const id = event.target.value;
+            const selected = availableServices.find((item) => String(item.id) === id);
+            setSelectedService(id);
+            setCustomName('');
+            setPrice(selected ? String(selected.price) : '');
+            setDurationHours(Math.floor((selected?.duration_minutes ?? 0) / 60));
+            setDurationMins((selected?.duration_minutes ?? 0) % 60);
+          }}
           options={selectOptions}
           required
         />
@@ -1052,6 +1062,7 @@ function AddDesignerServiceModal({
 }
 
 function DesignerServicesTab() {
+  const demo = useHoonsDemo();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [designerServices, setDesignerServices] = useState<DesignerServiceRow[]>([]);
@@ -1065,9 +1076,9 @@ function DesignerServicesTab() {
     setLoading(true);
     try {
       const [staffRes, servicesRes, dsRes] = await Promise.all([
-        fetch('/api/staff'),
-        fetch('/api/services'),
-        fetch('/api/designer-services'),
+        fetchHoonsServicePreview('/api/staff'),
+        fetchHoonsServicePreview('/api/services'),
+        fetchHoonsServicePreview('/api/designer-services'),
       ]);
       const staffData = await staffRes.json();
       const servicesData = await servicesRes.json();
@@ -1076,17 +1087,17 @@ function DesignerServicesTab() {
       setStaff(staffList);
       setServices(servicesData.services || []);
       setDesignerServices(dsData.designerServices || []);
-      if (staffList.length > 0 && selectedDesignerId === null) {
-        setSelectedDesignerId(staffList[0].id);
-      }
+      setSelectedDesignerId((current) =>
+        staffList.some(({ id }) => id === current) ? current : staffList[0]?.id ?? null,
+      );
     } catch (err) {
       console.error('Error fetching designer services data:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedDesignerId]);
+  }, []);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [fetchAll, demo]);
 
   const selectedDesigner = staff.find((s) => s.id === selectedDesignerId) ?? null;
   const rowsForDesigner = designerServices.filter((ds) => ds.designer_id === selectedDesignerId);
@@ -1095,7 +1106,7 @@ function DesignerServicesTab() {
   const handleDelete = async (row: DesignerServiceRow) => {
     if (!confirm('이 항목을 삭제하시겠습니까?')) return;
     try {
-      const res = await fetch(`/api/designer-services?id=${row.id}`, { method: 'DELETE' });
+      const res = await fetchHoonsServicePreview(`/api/designer-services?id=${row.id}`, { method: 'DELETE' });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setDesignerServices((prev) => prev.filter((r) => r.id !== row.id));
       setEditingRow(null);
@@ -1111,7 +1122,7 @@ function DesignerServicesTab() {
       render: (item: DesignerServiceRow) => (
         <div className="flex items-center gap-2">
           <span className={!item.is_active ? 'text-gray-400' : 'font-medium text-black'}>
-            {getRowCategoryLabel(item)}
+            {item.services ? getServiceDisplayName(item.services.name) : getRowCategoryLabel(item)}
           </span>
           {!item.is_active && <Badge variant="default">미사용</Badge>}
         </div>
@@ -2192,7 +2203,9 @@ function ProductInventoryCategoriesTab({
 
 export default function ServicesAndProductsPage() {
   const [activeTab, setActiveTab] = useState('services');
-  const { items, brands, categories, loading: inventoryLoading, refetch: inventoryRefetch } = useInventory();
+  const { items, brands, categories, loading: inventoryLoading, refetch: inventoryRefetch } = useInventory({
+    enabled: activeTab.startsWith('product'),
+  });
 
   return (
     <AdminPageLayout>

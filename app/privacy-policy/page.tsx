@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
           {/* Intro */}
           <section className="space-y-6 text-sm md:text-base font-normal leading-relaxed">
             <p>
-              HAEYOOM is committed to providing quality services to our clients and respecting your privacy.
+              HOONS is committed to providing quality services to our clients and respecting your privacy.
             </p>
             <p>
               This Privacy Policy outlines how we collect, use, disclose, store, and protect your personal information in accordance with the <strong>Privacy Act 1988 (Cth)</strong> and the <strong>Australian Privacy Principles (APPs)</strong>.
@@ -69,7 +69,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">2. Sensitive Information</h2>
             <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>Sensitive information includes information about an individual’s health or other matters defined under the Privacy Act.</p>
-              <p>Any sensitive information collected by HAEYOOM will be used only:</p>
+              <p>Any sensitive information collected by HOONS will be used only:</p>
               <ul className="list-disc list-inside pl-4 space-y-1 marker:text-gray-400">
                 <li>For the primary purpose for which it was collected</li>
                 <li>For a directly related secondary purpose</li>
@@ -126,7 +126,7 @@ export default function PrivacyPolicyPage() {
           <section className="border-t border-black pt-8">
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">7. Maintaining the quality of your Personal Information</h2>
             <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
-              <p>HAEYOOM takes reasonable steps to ensure that the Personal Information we hold is accurate, complete, and up to date.</p>
+              <p>HOONS takes reasonable steps to ensure that the Personal Information we hold is accurate, complete, and up to date.</p>
               <p>If you believe any information we hold is incorrect or outdated, please contact us so we can update our records.</p>
             </div>
           </section>
@@ -145,7 +145,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="font-display text-2xl md:text-3xl uppercase tracking-tighter mb-6">9. Privacy policy enquiries and complaints</h2>
             <div className="space-y-4 text-sm md:text-base font-normal leading-relaxed">
               <p>If you have any questions, concerns, or complaints regarding this Privacy Policy or how we handle your Personal Information, please contact us at:</p>
-              <p className="font-mono mt-4">Email: info@haeyoom.com</p>
+              <p className="font-mono mt-4">Email: info@hoons.com</p>
             </div>
           </section>
 

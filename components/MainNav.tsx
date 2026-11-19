@@ -8,15 +8,12 @@ import { ArrowUpRight } from 'lucide-react';
 // Comment: Global top navigation bar used across landing and booking pages
 export function MainNav() {
   const pathname = usePathname();
-  const isHome = pathname === '/';
   const isAdmin = pathname.startsWith('/admin');
 
   // Comment: Don't show navigation on admin pages
   if (isAdmin) {
     return null;
   }
-
-  const sectionHref = (hash: string) => (isHome ? hash : `/${hash}`);
 
   return (
     <>
@@ -28,7 +25,7 @@ export function MainNav() {
           <Link href="/" className="block z-50 group shrink-0 min-w-0 md:shrink-0" style={{ isolation: 'isolate' }}>
             <Image 
               src="/images/logo-white.png" 
-              alt="HAEYOOM" 
+              alt="HOONS"
               width={140} 
               height={140}
               className="group-hover:opacity-70 transition-opacity max-h-6 w-auto"
@@ -42,12 +39,9 @@ export function MainNav() {
           </Link>
 
           {/* Center: Navigation (Desktop) */}
-          <nav className="hidden md:flex absolute left-1/2 transform -translate-x-1/2" style={{ gap: '36px' }}>
-            <Link href={sectionHref('#about')} className="hover:underline">About</Link>
-            <Link href={sectionHref('#services')} className="hover:underline">Services</Link>
-            <Link href={sectionHref('#locations')} className="hover:underline">Locations</Link>
-            <Link href={sectionHref('#designers')} className="hover:underline">Designers</Link>
-            <Link href="/booking/lookup" className="hover:underline">
+          <nav className="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-4 lg:gap-8">
+            <Link href="/#locations" className="hover:underline">Location</Link>
+            <Link href="/booking/lookup" className="whitespace-nowrap hover:underline">
               My Booking
             </Link>
           </nav>

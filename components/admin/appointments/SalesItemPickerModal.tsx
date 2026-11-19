@@ -1,5 +1,6 @@
 'use client';
 
+import { defaultAppointmentRequest, useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect } from 'react';
 import { getServiceCategoryForPicker } from '@/lib/utils/appointment-utils';
 import { useServices } from '@/hooks/useServices';
@@ -121,6 +122,7 @@ export default function SalesItemPickerModal({
   defaultManager = null,
   shopId = null,
 }: SalesItemPickerModalProps) {
+  const request = useAppointmentRequest();
   const [activeTab, setActiveTab] = useState<SalesItemType>(initialTab);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedPaymentType, setSelectedPaymentType] = useState<'card' | 'cash'>('card');
@@ -133,7 +135,8 @@ export default function SalesItemPickerModal({
     enabled: isOpen && activeTab === 'product',
     shopId,
   });
-  const { templates: prepaidTemplates } = usePrepaidTemplates();
+  const { templates } = usePrepaidTemplates();
+  const prepaidTemplates = request === defaultAppointmentRequest ? templates : [];
   // 선택한 항목 목록 (서비스/제품 탭에서 사용)
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   // 제품 관련 state
@@ -156,7 +159,7 @@ export default function SalesItemPickerModal({
     setDbCategoryOrder(null);
     (async () => {
       try {
-        const res = await fetch('/api/services/categories');
+        const res = await request('/api/services/categories');
         const data = await res.json();
         if (cancelled) return;
         if (res.ok && Array.isArray(data.categories)) {

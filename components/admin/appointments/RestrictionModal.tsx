@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect } from 'react';
 import { GRID_START_HOUR, GRID_END_HOUR } from '@/lib/utils/appointment-utils';
 import Modal from '@/components/ui/Modal';
@@ -26,6 +27,7 @@ export default function RestrictionModal({
   onClose,
   onRestrictionsChanged,
 }: RestrictionModalProps) {
+  const request = useAppointmentRequest();
   const [date, setDate] = useState(initialDate);
   const [type, setType] = useState<'date' | 'time'>(initialType);
   const [startTime, setStartTime] = useState('');
@@ -55,7 +57,7 @@ export default function RestrictionModal({
       const checkExisting = async () => {
         setLoadingExistingRestriction(true);
         try {
-          const res = await fetch(`/api/booking-restrictions?designer_id=${designerId}&date=${encodeURIComponent(date)}`);
+          const res = await request(`/api/booking-restrictions?designer_id=${designerId}&date=${encodeURIComponent(date)}`);
           const data = await res.json();
           if (res.ok && data.restrictions && data.restrictions.length > 0) {
             const matching = data.restrictions.find((r: any) => {
@@ -117,7 +119,7 @@ export default function RestrictionModal({
     try {
       if (existingRestriction) {
         // 수정
-        const res = await fetch(`/api/booking-restrictions?id=${existingRestriction.id}`, {
+        const res = await request(`/api/booking-restrictions?id=${existingRestriction.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -131,7 +133,7 @@ export default function RestrictionModal({
         });
         if (res.ok) {
           alert('예약금지가 수정되었습니다.');
-          const restrictionsRes = await fetch(`/api/booking-restrictions?date=${encodeURIComponent(date)}`);
+          const restrictionsRes = await request(`/api/booking-restrictions?date=${encodeURIComponent(date)}`);
           const restrictionsData = await restrictionsRes.json();
           if (restrictionsRes.ok) {
             onRestrictionsChanged(restrictionsData.restrictions || []);
@@ -143,7 +145,7 @@ export default function RestrictionModal({
         }
       } else {
         // 등록
-        const res = await fetch('/api/booking-restrictions', {
+        const res = await request('/api/booking-restrictions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -157,7 +159,7 @@ export default function RestrictionModal({
         });
         if (res.ok) {
           alert('예약금지가 등록되었습니다.');
-          const restrictionsRes = await fetch(`/api/booking-restrictions?date=${encodeURIComponent(date)}`);
+          const restrictionsRes = await request(`/api/booking-restrictions?date=${encodeURIComponent(date)}`);
           const restrictionsData = await restrictionsRes.json();
           if (restrictionsRes.ok) {
             onRestrictionsChanged(restrictionsData.restrictions || []);
@@ -238,7 +240,7 @@ export default function RestrictionModal({
             if (newDate && designerId) {
               setLoadingExistingRestriction(true);
               try {
-                const res = await fetch(`/api/booking-restrictions?designer_id=${designerId}&date=${encodeURIComponent(newDate)}`);
+                const res = await request(`/api/booking-restrictions?designer_id=${designerId}&date=${encodeURIComponent(newDate)}`);
                 const data = await res.json();
                 if (res.ok && data.restrictions && data.restrictions.length > 0) {
                   const matching = data.restrictions.find((r: any) => {

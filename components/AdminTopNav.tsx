@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { hasAccess } from '@/lib/auth';
@@ -26,9 +25,10 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: '/admin/appointments', icon: 'calendar_month', label: 'Appointments' },
   { href: '/admin/sales', icon: 'monitoring', label: 'Sales Overview' },
-  { href: '/admin/sales-analysis', icon: 'query_stats', label: 'Sales Analysis' },
+  // { href: '/admin/sales-analysis', icon: 'query_stats', label: 'Sales Analysis' },
   { href: '/admin/customers', icon: 'people', label: 'Customers' },
   { href: '/admin/prepaid', icon: 'card_membership', label: 'Prepaid Pass' },
+  /*
   {
     href: '/admin/inventory?view=overview',
     icon: 'inventory_2',
@@ -52,8 +52,9 @@ const navItems: NavItem[] = [
       },
     ],
   },
+  */
   { href: '/admin/staff', icon: 'groups', label: 'Staff' },
-  { href: '/admin/wages', icon: 'payments', label: 'Wages' },
+  // { href: '/admin/wages', icon: 'payments', label: 'Wages' },
   {
     href: '/admin/settings/reservation',
     icon: 'settings',
@@ -116,19 +117,12 @@ export default function AdminTopNav() {
     return hasAccess(userRole, basePath);
   });
 
-  // Comment: Keep admin top nav above other overlays so inventory menu is always visible on hover
   return (
     <header className="h-16 flex items-center px-5.5 md:px-11.5 py-4.5 bg-white border-b border-gray-200 z-[12000] sticky top-0">
       <div className="container mx-auto flex items-center justify-between w-full">
         {/* Logo */}
         <Link href="/admin/appointments" prefetch={false} className="flex items-center hover:opacity-70 transition-opacity">
-          <Image
-            src="/images/image3.png"
-            alt="HAEYOOM Logo"
-            width={105}
-            height={22}
-            className="h-5.5 w-auto object-contain"
-          />
+          <span className="text-[1.85rem] leading-none tracking-[-0.045em] text-[#3c2b23] [font-family:Didot,Baskerville,Georgia,serif]">HOONS</span>
         </Link>
 
         {/* Hamburger - tablet/mobile only */}

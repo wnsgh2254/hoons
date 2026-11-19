@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 const SHOPS = [
   {
     id: 'shop_meadowbank',
-    name: 'HAEYOOM Meadowbank',
+    name: 'HOONS Meadowbank',
     address: 'SHEPHERDS BAY PLAZA, Level LG, SHOP 6.11/11A Bay Dr, Meadowbank NSW 2114',
     phone: '02-555-0123',
     hours: '10:00 - 20:00',
@@ -14,7 +14,7 @@ const SHOPS = [
   },
   {
     id: 'shop_haymarket',
-    name: 'HAEYOOM Haymarket',
+    name: 'HOONS Haymarket',
     address: 'Shop4, 770 George St, Sydney NSW 2000',
     phone: '02-790-0987',
     hours: '10:00 - 19:00',
@@ -80,7 +80,7 @@ export default function DesignersPage() {
           if (shopsData.shops) {
             setShops(shopsData.shops.map((shop: any) => ({
               id: `shop_${shop.id}`,
-              name: shop.name || `HAEYOOM ${shop.location || 'Shop'}`,
+              name: shop.name || `HOONS ${shop.location || 'Shop'}`,
               address: shop.address || '',
               phone: shop.phone || '',
               hours: shop.hours || '',
@@ -134,7 +134,7 @@ export default function DesignersPage() {
                         onClick={() => setSelectedShop(shop.id)}
                         className={`px-4 py-2 text-xs uppercase font-normal tracking-widest border border-black transition-colors ${selectedShop === shop.id ? 'bg-black text-white' : 'text-black hover:bg-black hover:text-white'}`}
                     >
-                        {shop.name.replace('HAEYOOM ', '')}
+                        {shop.name.replace('HOONS ', '')}
                     </button>
                 ))}
             </div>
@@ -163,7 +163,7 @@ export default function DesignersPage() {
                   
                   <div className="p-8">
                       <h3 className="font-display font-normal text-4xl uppercase tracking-tighter mb-3 text-black">{designer.name}</h3>
-                      <p className="text-sm font-mono uppercase text-black mb-8">{shops.find(s => s.id === designer.shopId)?.name.replace('HAEYOOM ', '') || ''}</p>
+                      <p className="text-sm font-mono uppercase text-black mb-8">{shops.find(s => s.id === designer.shopId)?.name.replace('HOONS ', '') || ''}</p>
                       
                       <p className="text-base leading-tight mb-8 min-h-[3em] font-normal text-black">
                         {designer.description}
@@ -187,7 +187,7 @@ export default function DesignersPage() {
                 key={`filler-${i}`} 
                 className="hidden md:flex border-b border-black md:border-r md:[&:nth-child(4n)]:border-r-0 bg-[#EAEAEA] min-h-[400px] items-center justify-center"
              >
-                 <span className="font-display font-normal text-7xl text-gray-300 uppercase tracking-tighter">Haeyoom</span>
+                 <span className="font-display font-normal text-7xl text-gray-300 uppercase tracking-tighter">Hoons</span>
              </div>
           ))}
        </div>

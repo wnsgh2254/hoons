@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useServices } from '@/hooks/useServices';
 import { useStaff } from '@/hooks/useStaff';
@@ -49,6 +50,7 @@ function getStatusLabel(
 }
 
 export default function BookingHistoryTable({ customerId }: BookingHistoryTableProps) {
+  const request = useAppointmentRequest();
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState<BookingHistoryItem[]>([]);
   const [shops, setShops] = useState<Map<number, string>>(new Map());
@@ -72,7 +74,7 @@ export default function BookingHistoryTable({ customerId }: BookingHistoryTableP
       try {
         setLoading(true);
 
-        const bookingsRes = await fetch(`/api/appointment?customer_id=${customerId}&limit=1000`);
+        const bookingsRes = await request(`/api/appointment?customer_id=${customerId}&limit=1000`);
         const bookingsData = await bookingsRes.json();
 
         if (!bookingsRes.ok) {
@@ -83,7 +85,7 @@ export default function BookingHistoryTable({ customerId }: BookingHistoryTableP
         const rawBookings = bookingsData.bookings || [];
 
         // Fetch shops
-        const shopsRes = await fetch('/api/shops');
+        const shopsRes = await request('/api/shops');
         const shopsData = await shopsRes.json();
         const shopsMap = new Map<number, string>();
         if (shopsRes.ok && shopsData.shops) {

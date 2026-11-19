@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import DiscountModal from './DiscountModal';
 import PaymentInputModal from './PaymentInputModal';
@@ -108,6 +109,7 @@ export default function SalesRegistrationModal({
   defaultSalesTime,
   bookingDepositPaid,
 }: SalesRegistrationModalProps) {
+  const request = useAppointmentRequest();
   const getCurrentLocalTime = () => {
     const now = new Date();
     const hours = String(now.getHours()).padStart(2, '0');
@@ -226,7 +228,7 @@ export default function SalesRegistrationModal({
 
       const requestId = ++prepaidBalanceRequestRef.current;
       try {
-        const res = await fetch(`/api/prepaid?customer_id=${customerId}`);
+        const res = await request(`/api/prepaid?customer_id=${customerId}`);
         const data = await res.json();
         const total = res.ok ? resolvePrepaidBalanceFromApi(data) : 0;
         if (requestId !== prepaidBalanceRequestRef.current) {
@@ -468,7 +470,7 @@ export default function SalesRegistrationModal({
   // Fetch shops only when the modal is first opened (avoid calling on mount when closed)
   useEffect(() => {
     if (!isOpen) return;
-    fetch('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
+    request('/api/shops').then(r => r.json()).then(d => setShops(d.shops || [])).catch(() => {});
   }, [isOpen]);
 
   // Comment: Sync shop from parent only when the modal opens — avoid overwriting user selection mid-flow.
@@ -787,7 +789,7 @@ export default function SalesRegistrationModal({
       const url = isEditMode ? `/api/sales/${editSaleId}` : '/api/sales';
       const method = isEditMode ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await request(url, {
         method,
         headers: {
           'Content-Type': 'application/json',

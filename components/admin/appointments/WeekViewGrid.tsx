@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
+
 // Comment: Week view grid - extracted from appointments page for readability and reuse
 
 import React, { useEffect, useRef } from 'react';
@@ -156,6 +158,7 @@ export default function WeekViewGrid({
   setNewBookingTimeSlots,
   setIsNewBookingOpen,
 }: WeekViewGridProps) {
+  const request = useAppointmentRequest();
   // Comment: If designer not selected, nothing to render
   if (!weekViewDesignerId || !weekViewStartDate) return null;
 
@@ -783,7 +786,7 @@ export default function WeekViewGrid({
                                           return;
                                         }
                                         try {
-                                          const res = await fetch(
+                                          const res = await request(
                                             `/api/booking-restrictions?id=${slotRestriction.id}`,
                                             {
                                               method: 'DELETE',
@@ -794,7 +797,7 @@ export default function WeekViewGrid({
                                             const startDateStr = weekViewStartDate;
                                             const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
 
-                                            const restrictionsRes = await fetch(
+                                            const restrictionsRes = await request(
                                               `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`,
                                             );
                                             const restrictionsData =
@@ -880,7 +883,7 @@ export default function WeekViewGrid({
                                         ).padStart(2, '0')}`;
 
                                         try {
-                                          const res = await fetch('/api/booking-restrictions', {
+                                          const res = await request('/api/booking-restrictions', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({
@@ -896,7 +899,7 @@ export default function WeekViewGrid({
                                             const startDateStr = weekViewStartDate;
                                             const endDateStr = addDaysToDateStr(weekViewStartDate, 6);
 
-                                            const restrictionsRes = await fetch(
+                                            const restrictionsRes = await request(
                                               `/api/booking-restrictions?designer_id=${weekViewDesignerId}&start_date=${startDateStr}&end_date=${endDateStr}`,
                                             );
                                             const restrictionsData =

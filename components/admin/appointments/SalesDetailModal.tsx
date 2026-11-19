@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useState, useEffect } from 'react';
 import type { SalesDetailItem, SalesDetailData } from '@/lib/types';
 import Modal from '@/components/ui/Modal';
@@ -30,6 +31,7 @@ export default function SalesDetailModal({
   onEdit,
   onDelete,
 }: SalesDetailModalProps) {
+  const request = useAppointmentRequest();
   const [loading, setLoading] = useState(false);
   const [detailData, setDetailData] = useState<SalesDetailData | null>(null);
 
@@ -46,7 +48,7 @@ export default function SalesDetailModal({
   const fetchSalesDetail = async (salesId: number) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/sales/${salesId}`);
+      const res = await request(`/api/sales/${salesId}`);
       const payload = await res.json();
       if (!res.ok || !payload.sale) {
         throw new Error(payload.error || '판매를 불러오지 못했습니다.');

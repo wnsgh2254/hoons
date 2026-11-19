@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppointmentRequest } from '@/lib/appointment-request';
 import React, { useEffect, useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import Button from '@/components/ui/Button';
@@ -14,6 +15,7 @@ export default function CustomerProfileSection({
   customer,
   onMemoChange,
 }: CustomerProfileSectionProps) {
+  const request = useAppointmentRequest();
   const [memo, setMemo] = useState<string>(customer.memo || '');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draftMemo, setDraftMemo] = useState<string>('');
@@ -41,7 +43,7 @@ export default function CustomerProfileSection({
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await fetch(`/api/customers/${customer.id}`, {
+      const res = await request(`/api/customers/${customer.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memo: draftMemo }),

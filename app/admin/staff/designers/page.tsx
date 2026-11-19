@@ -73,7 +73,7 @@ export default function DesignerManagementPage() {
           <div className="h-20 flex items-center px-5.5 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-black font-bold text-lg">H</div>
-              <span className="text-lg font-semibold tracking-wide hidden lg:block text-white">Haeyoom</span>
+              <span className="text-lg font-semibold tracking-wide hidden lg:block text-white">Hoons</span>
             </div>
           </div>
           <div className="flex flex-col gap-2 p-4">
@@ -295,7 +295,7 @@ export default function DesignerManagementPage() {
                       <input
                         className="bg-transparent border-none w-full p-0 text-text-primary focus:ring-0 placeholder-text-secondary/50 ml-1"
                         type="text"
-                        defaultValue="haeyoom_sarah"
+                        defaultValue="hoons_sarah"
                       />
                     </div>
                   </div>

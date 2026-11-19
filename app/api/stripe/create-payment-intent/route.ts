@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         total_amount: typeof totalAmount === "number" ? String(totalAmount) : "",
         duration_minutes: String(durationMinutes),
         service_name: String(serviceName),
-        shop_name: String(shopName || "HAEYOOM"),
+        shop_name: String(shopName || "HOONS"),
         designer_name: String(designerName || ""),
         formatted_date: String(formattedDateLabel || fullDate || ""),
         time_label: String(timeLabel),
