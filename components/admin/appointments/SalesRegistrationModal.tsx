@@ -54,6 +54,8 @@ type SalesItem = {
   discount: number;
   discountType?: DiscountType;
   discountValue?: number | string; // % 값 또는 금액 값
+  discountType2?: DiscountType;
+  discountValue2?: number | string; // 중복 할인(할인2) % 값 또는 금액 값
   amount: number;
   manager: string;
   designerId?: number | null;
@@ -126,6 +128,7 @@ export default function SalesRegistrationModal({
   const [salesTime, setSalesTime] = useState(getCurrentLocalTime());
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [selectedItemForDiscount, setSelectedItemForDiscount] = useState<SalesItem | null>(null);
+  const [discountModalSlot, setDiscountModalSlot] = useState<1 | 2>(1);
   const [editingQuantityItemId, setEditingQuantityItemId] = useState<string | null>(null);
   const [isPaymentInputModalOpen, setIsPaymentInputModalOpen] = useState(false);
   const [isSalesClassificationModalOpen, setIsSalesClassificationModalOpen] = useState(false);
@@ -506,6 +509,8 @@ export default function SalesRegistrationModal({
           discount: item.discount,
           discountType: (item.discount_type as DiscountType) || undefined,
           discountValue: item.discount_value ?? undefined,
+          discountType2: (item.discount_type_2 as DiscountType) || undefined,
+          discountValue2: item.discount_value_2 ?? undefined,
           amount: item.amount,
           manager: item.manager || '',
           salesClassification: item.sales_classification || '',
@@ -799,6 +804,8 @@ export default function SalesRegistrationModal({
             discount: item.discount,
             discount_type: item.discountType,
             discount_value: item.discountValue,
+            discount_type_2: item.discountType2,
+            discount_value_2: item.discountValue2,
             amount: item.amount,
             manager: item.manager,
             designer_id: item.designerId ?? null,
@@ -1053,7 +1060,8 @@ export default function SalesRegistrationModal({
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">판매 항목</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">단가</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">수량</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">할인</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">할인1</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">할인2</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">금액</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">정액권 차감</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-gray-700">담당자</th>
@@ -1064,7 +1072,7 @@ export default function SalesRegistrationModal({
                 <tbody>
                   {salesItems.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-7.5 text-center text-sm text-gray-500">
+                      <td colSpan={10} className="py-7.5 text-center text-sm text-gray-500">
                         내역이 없습니다
                       </td>
                     </tr>
@@ -1140,11 +1148,12 @@ export default function SalesRegistrationModal({
                             </div>
                           )}
                         </td>
-                        <td 
+                        <td
                           className="py-3 px-4 text-sm text-gray-900 cursor-pointer hover:bg-gray-50"
                           onClick={() => {
-                            // 개별 항목 클릭 시 해당 항목만 선택된 상태로 할인 모달 열기
+                            // 개별 항목 클릭 시 해당 항목만 선택된 상태로 할인1 모달 열기
                             setSelectedItemForDiscount(item);
+                            setDiscountModalSlot(1);
                             setIsDiscountModalOpen(true);
                           }}
                         >
@@ -1154,8 +1163,25 @@ export default function SalesRegistrationModal({
                             ? typeof item.discountValue === 'number'
                               ? formatAudAmount(item.discountValue)
                               : formatAudAmount(Number(item.discountValue))
-                            : item.discount > 0
+                            : item.discount > 0 && !item.discountType2
                             ? formatAudAmount(item.discount)
+                            : ''}
+                        </td>
+                        <td
+                          className="py-3 px-4 text-sm text-gray-900 cursor-pointer hover:bg-gray-50"
+                          onClick={() => {
+                            // 개별 항목 클릭 시 해당 항목만 선택된 상태로 할인2 모달 열기
+                            setSelectedItemForDiscount(item);
+                            setDiscountModalSlot(2);
+                            setIsDiscountModalOpen(true);
+                          }}
+                        >
+                          {item.discountType2 === 'percentage' && item.discountValue2 !== undefined
+                            ? `${item.discountValue2}%`
+                            : item.discountType2 === 'amount' && item.discountValue2 !== undefined
+                            ? typeof item.discountValue2 === 'number'
+                              ? formatAudAmount(item.discountValue2)
+                              : formatAudAmount(Number(item.discountValue2))
                             : ''}
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-900">{formatAudAmount(item.amount)}</td>
@@ -1382,6 +1408,7 @@ export default function SalesRegistrationModal({
                         if (option === 'discount') {
                           // 차감 섹션의 할인 버튼 클릭 시 모든 항목 표시
                           setSelectedItemForDiscount(null);
+                          setDiscountModalSlot(1);
                           setIsDiscountModalOpen(true);
                         } else if (option === 'prepaid') {
                           // 정액권 버튼 클릭 시 정액권 차감 모달 열기
@@ -1510,6 +1537,7 @@ export default function SalesRegistrationModal({
       <DiscountModal
         isOpen={isDiscountModalOpen}
         items={selectedItemForDiscount ? [selectedItemForDiscount] : salesItems}
+        initialSlot={discountModalSlot}
         onClose={() => {
           setIsDiscountModalOpen(false);
           setSelectedItemForDiscount(null);
@@ -1519,13 +1547,13 @@ export default function SalesRegistrationModal({
             const update = updates.find((u) => u.itemId === item.id);
             if (update) {
               const newAmount = roundToCents((item.unitPrice * item.quantity) - update.discount);
-              // discountValue가 null이면 discountType과 discountValue를 undefined로 설정하여 셀을 비움
-              const shouldClearDiscount = update.discountValue === null || update.discountValue === undefined || (update.discount === 0 && !update.discountValue);
               return {
                 ...item,
                 discount: update.discount,
-                discountType: shouldClearDiscount ? undefined : update.discountType,
-                discountValue: shouldClearDiscount ? undefined : (update.discountValue ?? undefined),
+                discountType: update.discountType ?? undefined,
+                discountValue: update.discountValue ?? undefined,
+                discountType2: update.discountType2 ?? undefined,
+                discountValue2: update.discountValue2 ?? undefined,
                 amount: newAmount > 0 ? newAmount : 0,
               };
             }

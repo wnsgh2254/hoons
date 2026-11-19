@@ -166,6 +166,8 @@ export interface SalesDetailItem {
   discount: number;
   discount_type?: string | null;
   discount_value?: number | string | null;
+  discount_type_2?: string | null;
+  discount_value_2?: number | string | null;
   amount: number;
   manager: string | null;
   sales_classification: string | null;

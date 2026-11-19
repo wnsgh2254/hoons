@@ -10,6 +10,7 @@ import { Z } from '@/lib/constants';
 import NumericKeypad from './NumericKeypad';
 
 type DiscountType = 'percentage' | 'amount' | 'category';
+type DiscountSlot = 1 | 2;
 
 type DiscountItem = {
   id: string;
@@ -19,13 +20,28 @@ type DiscountItem = {
   discount: number;
   discountType?: DiscountType;
   discountValue?: number | string;
+  discountType2?: DiscountType;
+  discountValue2?: number | string;
 };
+
+type DiscountInfo = { type: DiscountType; value: number | string };
 
 interface DiscountModalProps {
   isOpen: boolean;
   items: DiscountItem[];
+  /** Which discount slot to focus when the modal opens (1: 할인1, 2: 할인2) */
+  initialSlot?: DiscountSlot;
   onClose: () => void;
-  onConfirm: (updates: Array<{ itemId: string; discount: number; discountType: DiscountType; discountValue: number | string | null }>) => void;
+  onConfirm: (
+    updates: Array<{
+      itemId: string;
+      discount: number;
+      discountType: DiscountType | null;
+      discountValue: number | string | null;
+      discountType2: DiscountType | null;
+      discountValue2: number | string | null;
+    }>,
+  ) => void;
 }
 
 const PERCENTAGE_OPTIONS = [3, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 100];
@@ -33,58 +49,74 @@ const PERCENTAGE_OPTIONS = [3, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 100];
 export default function DiscountModal({
   isOpen,
   items,
+  initialSlot = 1,
   onClose,
   onConfirm,
 }: DiscountModalProps) {
+  const [activeSlot, setActiveSlot] = useState<DiscountSlot>(initialSlot);
   const [activeTab, setActiveTab] = useState<DiscountType>('percentage');
   const [percentageValue, setPercentageValue] = useState<number | null>(null);
   const [customPercentage, setCustomPercentage] = useState<string>('');
   const [amountValue, setAmountValue] = useState<string>('');
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
-  const [itemsToRemoveDiscount, setItemsToRemoveDiscount] = useState<Set<string>>(new Set()); // 할인 제거 예정 항목
-  // 각 항목별 할인 정보 저장 (itemId -> { type: DiscountType, value: number | string })
-  const [itemDiscounts, setItemDiscounts] = useState<Map<string, { type: DiscountType; value: number | string }>>(new Map());
+  // 할인 제거 예정 항목 (슬롯별)
+  const [itemsToRemoveDiscount1, setItemsToRemoveDiscount1] = useState<Set<string>>(new Set());
+  const [itemsToRemoveDiscount2, setItemsToRemoveDiscount2] = useState<Set<string>>(new Set());
+  // 각 항목별 할인 정보 저장 (슬롯별, itemId -> { type, value })
+  const [itemDiscounts1, setItemDiscounts1] = useState<Map<string, DiscountInfo>>(new Map());
+  const [itemDiscounts2, setItemDiscounts2] = useState<Map<string, DiscountInfo>>(new Map());
   // 금액 입력 시 사용할 선택된 항목들 (항목 선택이 변경되면 초기화)
   const [amountInputSelectedItems, setAmountInputSelectedItems] = useState<Set<string>>(new Set());
+
+  const itemDiscounts = activeSlot === 1 ? itemDiscounts1 : itemDiscounts2;
+  const setItemDiscounts = activeSlot === 1 ? setItemDiscounts1 : setItemDiscounts2;
+  const itemsToRemoveDiscount = activeSlot === 1 ? itemsToRemoveDiscount1 : itemsToRemoveDiscount2;
+  const setItemsToRemoveDiscount = activeSlot === 1 ? setItemsToRemoveDiscount1 : setItemsToRemoveDiscount2;
 
   // 모달이 열릴 때 초기화. 할인이 아직 적용되지 않은 항목은 기본적으로 모두 선택된 상태로 시작해서,
   // 직원이 금액/퍼센트를 입력한 후 체크박스를 별도로 다시 체크할 필요가 없도록 한다.
   useEffect(() => {
     if (isOpen && items.length > 0) {
-      const defaultSelectable = new Set(
-        items.filter((item) => !(item.discountType && item.discount > 0)).map((item) => item.id),
-      );
-      setSelectedItemIds(defaultSelectable);
-      setItemsToRemoveDiscount(new Set()); // 할인 제거 예정 항목 초기화
-      setAmountInputSelectedItems(defaultSelectable); // 금액 입력 시 사용할 선택된 항목들 초기화
+      setActiveSlot(initialSlot);
+      setItemsToRemoveDiscount1(new Set());
+      setItemsToRemoveDiscount2(new Set());
       setPercentageValue(null);
       setCustomPercentage('');
       setAmountValue('');
       setActiveTab('percentage');
 
-      // 기존 할인 정보를 itemDiscounts에 저장
-      const initialDiscounts = new Map<string, { type: DiscountType; value: number | string }>();
-      items.forEach(item => {
+      const defaultSelectable = new Set(
+        items
+          .filter((item) => !(initialSlot === 1 ? item.discountType && item.discount > 0 : item.discountType2))
+          .map((item) => item.id),
+      );
+      setSelectedItemIds(defaultSelectable);
+      setAmountInputSelectedItems(defaultSelectable);
+
+      // 기존 할인 정보를 슬롯별로 itemDiscounts에 저장
+      const initialDiscounts1 = new Map<string, DiscountInfo>();
+      const initialDiscounts2 = new Map<string, DiscountInfo>();
+      items.forEach((item) => {
         if (item.discountType) {
           const value = item.discountValue !== undefined ? item.discountValue : (item.discountType === 'category' ? item.discount : undefined);
           if (value !== undefined) {
-            initialDiscounts.set(item.id, {
-              type: item.discountType,
-              value,
-            });
+            initialDiscounts1.set(item.id, { type: item.discountType, value });
           }
         }
+        if (item.discountType2 && item.discountValue2 !== undefined) {
+          initialDiscounts2.set(item.id, { type: item.discountType2, value: item.discountValue2 });
+        }
       });
-      setItemDiscounts(initialDiscounts);
+      setItemDiscounts1(initialDiscounts1);
+      setItemDiscounts2(initialDiscounts2);
     }
-  }, [isOpen, items]);
+  }, [isOpen, items, initialSlot]);
 
   if (!isOpen || items.length === 0) return null;
 
   const handlePercentageSelect = (percentage: number) => {
-    // 선택된 항목들에 할인 정보 저장
-    updateItemDiscounts(percentage, 'percentage');
-    // 버튼 활성화 상태는 유지하지 않음 (즉시 적용)
+    // 선택된 항목들에 할인 정보 저장. 선택은 유지해서 다른 %를 바로 다시 눌러도 즉시 덮어쓸 수 있도록 한다.
+    updateItemDiscounts(percentage, 'percentage', undefined, false);
   };
 
   // 선택된 항목들에 할인 정보 업데이트 (다중 선택 지원)
@@ -130,11 +162,33 @@ export default function DiscountModal({
     }
   };
 
+  // baseAmount: 이 할인이 적용되는 기준 금액. 할인2는 할인1이 적용된 이후의 금액을 기준으로 % 할인한다.
+  const computeAmountForSlot = (item: DiscountItem, info: DiscountInfo | undefined, baseAmount: number): number => {
+    if (!info) return 0;
+    if (info.type === 'percentage') {
+      const percentage = typeof info.value === 'number' ? info.value : Number(info.value);
+      if (!(percentage > 0)) return 0;
+      // 할인 후 금액을 먼저 센트 단위로 반올림한 뒤 그 차이를 할인액으로 삼아,
+      // 할인1 적용 후 금액에 할인2를 적용하는 중복 할인 시 최종 금액이 기대한 값과 일치하도록 한다.
+      const priceAfterDiscount = roundToCents(baseAmount * (1 - percentage / 100));
+      return roundToCents(baseAmount - priceAfterDiscount);
+    }
+    if (info.type === 'amount') {
+      const amount = typeof info.value === 'number' ? info.value : Number(info.value);
+      return roundToCents(amount);
+    }
+    // category
+    return typeof info.value === 'number' ? info.value : Number(info.value) || 0;
+  };
+
   const handleConfirm = () => {
     // 현재 선택된 항목들에 입력된 할인 값을 로컬 맵에 병합한다.
     // (setState는 비동기라 같은 호출 안에서 itemDiscounts를 다시 읽으면 입력값이 누락된다)
-    const effectiveDiscounts = new Map(itemDiscounts);
-    const effectiveRemovals = new Set(itemsToRemoveDiscount);
+    const effectiveDiscounts1 = new Map(itemDiscounts1);
+    const effectiveDiscounts2 = new Map(itemDiscounts2);
+    const effectiveRemovals1 = new Set(itemsToRemoveDiscount1);
+    const effectiveRemovals2 = new Set(itemsToRemoveDiscount2);
+
     if (selectedItemIds.size > 0) {
       let pending: { type: DiscountType; value: number; ids: Set<string> } | null = null;
       if (activeTab === 'percentage') {
@@ -151,53 +205,49 @@ export default function DiscountModal({
       }
       if (pending) {
         const { type, value, ids } = pending;
+        const targetDiscounts = activeSlot === 1 ? effectiveDiscounts1 : effectiveDiscounts2;
+        const targetRemovals = activeSlot === 1 ? effectiveRemovals1 : effectiveRemovals2;
         ids.forEach((itemId) => {
-          effectiveDiscounts.set(itemId, { type, value });
-          effectiveRemovals.delete(itemId);
+          targetDiscounts.set(itemId, { type, value });
+          targetRemovals.delete(itemId);
         });
       }
     }
 
-    const updates: Array<{ itemId: string; discount: number; discountType: DiscountType; discountValue: number | string | null }> = [];
+    const updates: Array<{
+      itemId: string;
+      discount: number;
+      discountType: DiscountType | null;
+      discountValue: number | string | null;
+      discountType2: DiscountType | null;
+      discountValue2: number | string | null;
+    }> = [];
 
-    // 할인을 제거할 항목 처리
-    effectiveRemovals.forEach(itemId => {
-      updates.push({
-        itemId,
-        discount: 0,
-        discountType: 'percentage' as DiscountType,
-        discountValue: null,
-      });
-    });
+    const touchedItemIds = new Set<string>([
+      ...effectiveDiscounts1.keys(),
+      ...effectiveDiscounts2.keys(),
+      ...effectiveRemovals1,
+      ...effectiveRemovals2,
+    ]);
 
-    // itemDiscounts에 저장된 모든 할인 정보를 업데이트에 추가
-    effectiveDiscounts.forEach((discountInfo, itemId) => {
-      // 제거 예정 항목이면 스킵
-      if (effectiveRemovals.has(itemId)) return;
-
-      const item = items.find(i => i.id === itemId);
+    touchedItemIds.forEach((itemId) => {
+      const item = items.find((i) => i.id === itemId);
       if (!item) return;
 
-      let finalDiscount = 0;
-      let discountValue: number | string = discountInfo.value;
+      const info1 = effectiveRemovals1.has(itemId) ? undefined : effectiveDiscounts1.get(itemId);
+      const info2 = effectiveRemovals2.has(itemId) ? undefined : effectiveDiscounts2.get(itemId);
 
-      if (discountInfo.type === 'percentage') {
-        const percentage = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value);
-        if (percentage > 0) {
-          finalDiscount = roundToCents((item.unitPrice * item.quantity * percentage) / 100);
-        }
-      } else if (discountInfo.type === 'amount') {
-        const amount = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value);
-        finalDiscount = roundToCents(amount);
-      } else if (discountInfo.type === 'category') {
-        finalDiscount = typeof discountInfo.value === 'number' ? discountInfo.value : Number(discountInfo.value) || item.discount;
-      }
+      const baseAmount = item.unitPrice * item.quantity;
+      const amount1 = computeAmountForSlot(item, info1, baseAmount);
+      const amount2 = computeAmountForSlot(item, info2, baseAmount - amount1);
 
       updates.push({
         itemId,
-        discount: finalDiscount,
-        discountType: discountInfo.type,
-        discountValue,
+        discount: roundToCents(amount1 + amount2),
+        discountType: info1 ? info1.type : null,
+        discountValue: info1 ? info1.value : null,
+        discountType2: info2 ? info2.type : null,
+        discountValue2: info2 ? info2.value : null,
       });
     });
 
@@ -213,7 +263,8 @@ export default function DiscountModal({
     setCustomPercentage('');
     setAmountValue('');
     setSelectedItemIds(new Set());
-    setItemsToRemoveDiscount(new Set());
+    setItemsToRemoveDiscount1(new Set());
+    setItemsToRemoveDiscount2(new Set());
     setAmountInputSelectedItems(new Set());
     onClose();
   };
@@ -223,9 +274,11 @@ export default function DiscountModal({
     setCustomPercentage('');
     setAmountValue('');
     setSelectedItemIds(new Set());
-    setItemsToRemoveDiscount(new Set());
+    setItemsToRemoveDiscount1(new Set());
+    setItemsToRemoveDiscount2(new Set());
     setAmountInputSelectedItems(new Set());
-    setItemDiscounts(new Map());
+    setItemDiscounts1(new Map());
+    setItemDiscounts2(new Map());
     onClose();
   };
 
@@ -248,12 +301,14 @@ export default function DiscountModal({
     }
 
     // 기존 할인 정보가 있는 경우 (itemDiscounts에 없을 때)
-    if (item.discountType === 'percentage' && item.discountValue !== undefined) {
-      return `${item.discountValue}%`;
-    } else if (item.discountType === 'amount' && item.discountValue !== undefined) {
-      const value = typeof item.discountValue === 'number' ? item.discountValue : Number(item.discountValue);
+    const discountType = activeSlot === 1 ? item.discountType : item.discountType2;
+    const discountValue = activeSlot === 1 ? item.discountValue : item.discountValue2;
+    if (discountType === 'percentage' && discountValue !== undefined) {
+      return `${discountValue}%`;
+    } else if (discountType === 'amount' && discountValue !== undefined) {
+      const value = typeof discountValue === 'number' ? discountValue : Number(discountValue);
       return formatAudNumber(value);
-    } else if (item.discountType === 'category' && item.discount > 0) {
+    } else if (discountType === 'category' && activeSlot === 1 && item.discount > 0) {
       return formatAudNumber(item.discount);
     }
     return '';
@@ -271,7 +326,7 @@ export default function DiscountModal({
       return true;
     }
 
-    return item.discount > 0;
+    return activeSlot === 1 ? item.discount > 0 && !!item.discountType : !!item.discountType2;
   };
 
   // 할인이 적용된 항목인지 확인 (체크박스 비활성화용)
@@ -282,7 +337,7 @@ export default function DiscountModal({
       return true;
     }
 
-    return item.discount > 0;
+    return activeSlot === 1 ? item.discount > 0 && !!item.discountType : !!item.discountType2;
   };
 
   const handleToggleItem = (itemId: string) => {
@@ -366,11 +421,37 @@ export default function DiscountModal({
   // 금액 할인 빠른 버튼 ($10/$20/$30 등): 즉시 선택된 항목에 적용
   const handleAmountPresetSelect = (amount: number) => {
     const itemsToUpdate = amountInputSelectedItems.size > 0 ? amountInputSelectedItems : selectedItemIds;
-    updateItemDiscounts(amount, 'amount', itemsToUpdate);
+    // 선택은 유지해서 다른 금액을 바로 다시 눌러도 즉시 덮어쓸 수 있도록 한다.
+    updateItemDiscounts(amount, 'amount', itemsToUpdate, false);
   };
 
   const handleAmountBackspace = () => {
     setAmountValue((prev) => removeLastDigit(prev, 1));
+  };
+
+  const handleSlotChange = (slot: DiscountSlot) => {
+    if (slot === activeSlot) return;
+    setActiveSlot(slot);
+    setPercentageValue(null);
+    setCustomPercentage('');
+    setAmountValue('');
+    setActiveTab('percentage');
+
+    const nextDiscounts = slot === 1 ? itemDiscounts1 : itemDiscounts2;
+    const nextRemovals = slot === 1 ? itemsToRemoveDiscount1 : itemsToRemoveDiscount2;
+    const defaultSelectable = new Set(
+      items
+        .filter((item) => {
+          if (nextDiscounts.has(item.id) && !nextRemovals.has(item.id)) return false;
+          const existingType = slot === 1 ? item.discountType : item.discountType2;
+          if (slot === 1 && existingType && item.discount > 0 && !nextRemovals.has(item.id)) return false;
+          if (slot === 2 && existingType && !nextRemovals.has(item.id)) return false;
+          return true;
+        })
+        .map((item) => item.id),
+    );
+    setSelectedItemIds(defaultSelectable);
+    setAmountInputSelectedItems(defaultSelectable);
   };
 
   return (
@@ -387,6 +468,24 @@ export default function DiscountModal({
         </div>
       }
     >
+      {/* Slot Toggle: 할인 1 / 할인 2 (중복 할인 적용) */}
+      <div className="flex gap-2 mb-4">
+        {([1, 2] as DiscountSlot[]).map((slot) => (
+          <button
+            key={slot}
+            type="button"
+            onClick={() => handleSlotChange(slot)}
+            className={`flex-1 px-4 py-2 text-sm font-medium border rounded-lg transition-colors ${
+              activeSlot === slot
+                ? 'border-black bg-black text-white'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            할인 {slot}
+          </button>
+        ))}
+      </div>
+
       {/* Main Content */}
       <div className="flex gap-6">
         {/* Left: Item Information */}
@@ -409,7 +508,7 @@ export default function DiscountModal({
                     />
                   </th>
                   <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700">판매 항목</th>
-                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 w-24">할인</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-700 w-24">할인 {activeSlot}</th>
                 </tr>
               </thead>
               <tbody>

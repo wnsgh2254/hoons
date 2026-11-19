@@ -38,6 +38,8 @@ export function mapSaleRecordToDetailData(sale: any, customerNameFallback = ''):
       discount: Number(i.discount) || 0,
       discount_type: i.discount_type || null,
       discount_value: i.discount_value ?? null,
+      discount_type_2: i.discount_type_2 || null,
+      discount_value_2: i.discount_value_2 ?? null,
       amount: Number(i.amount) || 0,
       manager: i.manager || null,
       sales_classification: i.sales_classification || null,

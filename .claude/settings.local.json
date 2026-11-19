@@ -6,7 +6,9 @@
       "Bash(claude *)",
       "mcp__supabase__execute_sql",
       "Bash(node *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(npx --yes tsx --version)",
+      "Bash(grep *)"
     ]
   },
   "enableAllProjectMcpServers": true,

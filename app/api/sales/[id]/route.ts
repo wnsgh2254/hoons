@@ -436,6 +436,8 @@ export async function PUT(
       discount: item.discount || 0,
       discount_type: item.discount_type || null,
       discount_value: item.discount_value || null,
+      discount_type_2: item.discount_type_2 || null,
+      discount_value_2: item.discount_value_2 || null,
       amount: item.amount || 0,
       designer_id: item.designer_id || null,
       manager: item.manager || null,
